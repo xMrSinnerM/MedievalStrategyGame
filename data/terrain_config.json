@@ -1,0 +1,33 @@
+{
+	"seed": 4127,
+	"world_size": 2048,
+	"heightmap_resolution": 1025,
+	"max_height": 300.0,
+	"sea_level": 40.0,
+	"chunks_per_side": 16,
+	"files": {
+		"heightmap": "res://world/heightmap.exr",
+		"biome_mask": "res://world/biome_mask.png",
+		"rivers": "res://world/rivers.json"
+	},
+	"terrain": {
+		"snow_height": 205.0,
+		"rock_slope": 0.38,
+		"beach_height": 4.0
+	},
+	"vegetation": {
+		"cell_size": 4.5,
+		"max_slope": 0.32,
+		"cluster_scale": 0.012,
+		"density": 0.85,
+		"visibility_range": 2600.0
+	},
+	"fog": {
+		"color": "#d9cdb4",
+		"edge_start": 0.0,
+		"edge_end": 260.0,
+		"haze_start": 700.0,
+		"haze_end": 4200.0,
+		"haze_max": 0.5
+	}
+}
