@@ -2,7 +2,7 @@
 
 A medieval strategy game that combines castle building and an economy with a
 campaign world map. This repository holds **phase 1: the world map
-prototype**. It's built in **Godot 4.3+** (GDScript) and targets PC.
+prototype**. It's built in **Godot 4.3+** (GDScript; tested in 4.3 and 4.7.2) and targets PC.
 
 The continent, its names and its factions are original to this game.
 

@@ -1,0 +1,49 @@
+{
+	"factions": [
+		{
+			"id": "aldmere",
+			"name": "Kingdom of Aldmere",
+			"color": "#A8322D",
+			"secondary_color": "#E2B33C",
+			"banner": { "pattern": "per_pale", "charge": "crown" },
+			"capital": "aldmere_town_highford",
+			"region_center": [1010.0, 930.0]
+		},
+		{
+			"id": "varnholt",
+			"name": "Varnholt Jarldom",
+			"color": "#3B5BA5",
+			"secondary_color": "#F2F2EE",
+			"banner": { "pattern": "chevron", "charge": "wolf" },
+			"capital": "varnholt_town_frostgard",
+			"region_center": [960.0, 300.0]
+		},
+		{
+			"id": "ashkar",
+			"name": "Ashkar Dominion",
+			"color": "#D9922E",
+			"secondary_color": "#7A1F1A",
+			"banner": { "pattern": "plain", "charge": "sun" },
+			"capital": "ashkar_town_qasr_umbar",
+			"region_center": [1080.0, 1700.0]
+		},
+		{
+			"id": "thornwald",
+			"name": "Thornwald League",
+			"color": "#3E7B3A",
+			"secondary_color": "#F2F2EE",
+			"banner": { "pattern": "saltire", "charge": "tree" },
+			"capital": "thornwald_town_elderholm",
+			"region_center": [480.0, 980.0]
+		},
+		{
+			"id": "corvane",
+			"name": "Corvane Free Marches",
+			"color": "#6B3FA0",
+			"secondary_color": "#D8D8E0",
+			"banner": { "pattern": "per_bend", "charge": "ship" },
+			"capital": "corvane_town_saltmere",
+			"region_center": [1620.0, 960.0]
+		}
+	]
+}
