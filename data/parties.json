@@ -1,0 +1,15 @@
+{
+	"parties": [
+		{ "id": "player", "name": "Your Warband", "faction": "aldmere", "start": "aldmere_town_highford", "troops": 24, "player": true },
+		{ "id": "aldmere_lord_aldric", "name": "Lord Aldric", "faction": "aldmere", "start": "aldmere_town_wexmoor", "troops": 60 },
+		{ "id": "aldmere_lady_maren", "name": "Lady Maren", "faction": "aldmere", "start": "aldmere_castle_ravenhold", "troops": 45 },
+		{ "id": "varnholt_jarl_eirik", "name": "Jarl Eirik", "faction": "varnholt", "start": "varnholt_town_frostgard", "troops": 55 },
+		{ "id": "varnholt_hrolf", "name": "Hrolf the Grey", "faction": "varnholt", "start": "varnholt_town_kaldvik", "troops": 40 },
+		{ "id": "ashkar_emir_tarik", "name": "Emir Tarik", "faction": "ashkar", "start": "ashkar_town_qasr_umbar", "troops": 65 },
+		{ "id": "ashkar_sayyida_nur", "name": "Sayyida Nur", "faction": "ashkar", "start": "ashkar_town_zahirah", "troops": 42 },
+		{ "id": "thornwald_warden_osric", "name": "Warden Osric", "faction": "thornwald", "start": "thornwald_town_elderholm", "troops": 50 },
+		{ "id": "thornwald_elowen", "name": "Elowen Briar", "faction": "thornwald", "start": "thornwald_town_briarwick", "troops": 38 },
+		{ "id": "corvane_captain_liora", "name": "Captain Liora", "faction": "corvane", "start": "corvane_town_saltmere", "troops": 48 },
+		{ "id": "corvane_admiral_voss", "name": "Admiral Voss", "faction": "corvane", "start": "corvane_town_port_calder", "troops": 52 }
+	]
+}

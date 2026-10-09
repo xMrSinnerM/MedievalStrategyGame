@@ -8,6 +8,8 @@ extends RefCounted
 ##   is_on_road() for movement. Colour is white on roads and black on yards, so
 ##   the parchment map can ink roads only.
 ## clearance_image (2 map units per pixel): where trees must not grow.
+## bridges: where a road crosses a river, with the deck height, so the bridge
+##   meshes and parties crossing them agree.
 
 const MAIN_WIDTH := 5.0
 const TRACK_WIDTH := 3.2
@@ -16,6 +18,7 @@ const YARD_SCALE := 0.85       ## dirt yard radius as a share of the settlement 
 const CLEARANCE_SCALE := 2     ## clearance pixels are this many map units wide
 
 var roads: Array = []
+var bridges: Array[Dictionary] = []   ## {at: Vector2, dir: Vector2, half_length, half_width, deck_y, river_surface, river_width}
 var road_image: Image
 var clearance_image: Image
 var world_size := 2048.0
@@ -23,9 +26,9 @@ var world_size := 2048.0
 var _brushes := {}
 
 
-func build(road_list: Array, settlements: Array, size: float) -> void:
+func build(road_list: Array, settlements: Array, terrain: TerrainData) -> void:
 	roads = road_list
-	world_size = size
+	world_size = terrain.world_size
 	var n := int(world_size)
 	road_image = Image.create(n, n, false, Image.FORMAT_RGBA8)
 	road_image.fill(Color(1, 1, 1, 0))
@@ -54,6 +57,9 @@ func build(road_list: Array, settlements: Array, size: float) -> void:
 					_stamp(clearance_image, p, width * 0.5 + TREE_GAP, 1.0, float(CLEARANCE_SCALE))
 
 
+	_find_bridges(terrain)
+
+
 func is_on_road(x: float, z: float) -> bool:
 	## True on a road or inside a settlement's grounds.
 	return road_amount(x, z) > 0.4
@@ -74,6 +80,18 @@ func is_cleared(x: float, z: float) -> bool:
 	if i < 0 or j < 0 or i >= clearance_image.get_width() or j >= clearance_image.get_height():
 		return false
 	return clearance_image.get_pixel(i, j).a > 0.3
+
+
+func bridge_deck_at(x: float, z: float) -> float:
+	## Deck height of a bridge at this spot, or -INF if there is none.
+	for b in bridges:
+		var dir: Vector2 = b.dir
+		var rel: Vector2 = Vector2(x, z) - b.at
+		var along := rel.dot(dir)
+		var across := absf(rel.dot(dir.orthogonal()))
+		if absf(along) <= b.half_length and across <= b.half_width:
+			return b.deck_y
+	return -INF
 
 
 func make_road_texture() -> ImageTexture:
@@ -108,3 +126,56 @@ func _brush(r_px: float, strength: float, color: Color) -> Image:
 			img.set_pixel(x, y, Color(color, a))
 	_brushes[key] = img
 	return img
+
+
+func _find_bridges(terrain: TerrainData) -> void:
+	# Bucket river segments on a coarse grid so each road segment only checks its neighbours.
+	const BUCKET := 64.0
+	var buckets := {}
+	for river in terrain.rivers:
+		var pts: Array = river.points
+		for k in pts.size() - 1:
+			var a := Vector2(pts[k][0], pts[k][1])
+			var b := Vector2(pts[k + 1][0], pts[k + 1][1])
+			var key := Vector2i((a + b) / 2.0 / BUCKET)
+			if not buckets.has(key):
+				buckets[key] = []
+			buckets[key].append([a, b, pts[k], pts[k + 1]])
+
+	for road in roads:
+		var pts: Array = road.points
+		var width := MAIN_WIDTH if road.kind == "main" else TRACK_WIDTH
+		for k in pts.size() - 1:
+			var a := Vector2(pts[k][0], pts[k][1])
+			var b := Vector2(pts[k + 1][0], pts[k + 1][1])
+			var key := Vector2i((a + b) / 2.0 / BUCKET)
+			for oy in range(-1, 2):
+				for ox in range(-1, 2):
+					for seg in buckets.get(key + Vector2i(ox, oy), []):
+						var hit = Geometry2D.segment_intersects_segment(a, b, seg[0], seg[1])
+						if hit == null:
+							continue
+						var p: Vector2 = hit
+						var near := false
+						for other in bridges:
+							if other.at.distance_to(p) < 12.0:
+								near = true
+								break
+						if near:
+							continue
+						var t: float = p.distance_to(seg[0]) / maxf(seg[0].distance_to(seg[1]), 0.001)
+						var surface: float = lerpf(seg[2][2], seg[3][2], t)
+						var river_width: float = lerpf(seg[2][3], seg[3][3], t)
+						var dir := (b - a).normalized()
+						var half_length := river_width * 0.5 + 5.0
+						var end_a := p - dir * half_length
+						var end_b := p + dir * half_length
+						bridges.append({
+							"at": p,
+							"dir": dir,
+							"half_length": half_length,
+							"half_width": width * 0.5 + 0.8,
+							"deck_y": maxf(surface + 1.6, maxf(terrain.get_height(end_a.x, end_a.y), terrain.get_height(end_b.x, end_b.y)) + 0.3),
+							"river_surface": surface,
+							"river_width": river_width,
+						})

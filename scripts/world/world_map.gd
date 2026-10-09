@@ -7,6 +7,7 @@ extends Node3D
 @onready var rivers: Node3D = $Rivers
 @onready var settlements: Node3D = $Settlements
 @onready var vegetation: Node3D = $Vegetation
+@onready var parties: Node3D = $Parties
 @onready var parchment: Node3D = $ParchmentOverlay
 @onready var camera_rig: CampaignCamera = $CampaignCamera
 
@@ -22,10 +23,12 @@ func _ready() -> void:
 	rivers.build()
 	settlements.build()
 	vegetation.build()
+	parties.camera_rig = camera_rig
+	parties.build()
 	parchment.build()
 	camera_rig.setup()
-	print("World map built in %d ms (%d settlements, %d bridges, %d trees)" % [Time.get_ticks_msec() - started,
-		settlements.settlements.size(), settlements.bridge_count, vegetation.tree_count])
+	print("World map built in %d ms (%d settlements, %d bridges, %d trees, %d parties)" % [Time.get_ticks_msec() - started,
+		settlements.settlements.size(), settlements.bridge_count, vegetation.tree_count, parties.parties.size()])
 
 
 func _build_environment() -> void:
