@@ -19,6 +19,7 @@ func build() -> void:
 	material.set_shader_parameter("heightmap", terrain.make_height_texture())
 	material.set_shader_parameter("biome_mask", terrain.make_biome_texture())
 	material.set_shader_parameter("detail_noise", MapStyle.noise_texture(11, 0.02))
+	material.set_shader_parameter("road_mask", GameData.roads.make_road_texture())
 	material.set_shader_parameter("snow_height", float(look.get("snow_height", 205.0)))
 	material.set_shader_parameter("rock_slope", float(look.get("rock_slope", 0.38)))
 	material.set_shader_parameter("beach_height", float(look.get("beach_height", 4.0)))

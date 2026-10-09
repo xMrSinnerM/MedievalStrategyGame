@@ -8,6 +8,7 @@ shader_type spatial;
 uniform sampler2D heightmap : filter_linear, repeat_disable;
 uniform sampler2D biome_mask : filter_linear_mipmap, repeat_disable;
 uniform sampler2D detail_noise : filter_linear_mipmap, repeat_enable;
+uniform sampler2D road_mask : filter_linear_mipmap, repeat_disable;  // alpha = road or settlement ground
 
 uniform float snow_height = 205.0;
 uniform float rock_slope = 0.38;
@@ -24,6 +25,7 @@ uniform vec3 desert_b : source_color = vec3(0.72, 0.53, 0.34);
 uniform vec3 rock_a : source_color = vec3(0.52, 0.48, 0.43);
 uniform vec3 rock_b : source_color = vec3(0.40, 0.37, 0.35);
 uniform vec3 snow : source_color = vec3(0.93, 0.94, 0.96);
+uniform vec3 road : source_color = vec3(0.60, 0.49, 0.34);
 uniform vec3 seabed : source_color = vec3(0.45, 0.47, 0.38);
 
 varying vec3 v_world;
@@ -77,6 +79,12 @@ void fragment() {
 	float snow_alt = smoothstep(snow_height - 25.0, snow_height + 15.0, h + (n2 - 0.5) * 40.0);
 	float snow_amount = max(snow_alt, smoothstep(0.2, 0.8, biome.b)) * (1.0 - smoothstep(0.5, 0.75, slope));
 	col = mix(col, snow, snow_amount);
+
+	// Roads and settlement grounds: packed dirt with ruts, dusted by snow up north.
+	float road_amount = texture(road_mask, v_world.xz / world_size).a;
+	road_amount = smoothstep(0.15, 0.6, road_amount + (n3 - 0.5) * 0.25);
+	vec3 road_col = road * (0.9 + 0.18 * n2) * mix(vec3(1.0), vec3(1.1, 1.1, 1.06), biome.r);
+	col = mix(col, mix(road_col, snow * 0.92, snow_amount * 0.6), road_amount * 0.9);
 
 	col = mix(col, seabed, smoothstep(0.0, 10.0, sea_level - h));
 	col *= 0.9 + 0.2 * n3;

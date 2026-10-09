@@ -1,7 +1,7 @@
 extends Node3D
 ## Strategic parchment map that fades in as the camera reaches its maximum
-## zoom-out. Territories come from each faction's region_center for now; once
-## settlements exist (next step) they will be drawn from settlement ownership.
+## zoom-out. Territories are drawn from settlement ownership in the shader;
+## call refresh_settlements() after a settlement changes hands.
 ##
 ## Press M to toggle the parchment at any zoom.
 
@@ -9,7 +9,9 @@ const PARCHMENT_SHADER := preload("res://shaders/parchment.gdshader")
 const SHEET_MARGIN := 220.0
 const FADE_START := 0.86     ## zoom_t where the parchment starts to appear
 const FADE_END := 0.97
-const TERRITORY_SIZE := 512
+const TYPE_CODE := {"town": 0.0, "castle": 1.0, "village": 2.0}
+## How much each settlement type pulls its faction's name label towards it.
+const LABEL_WEIGHT := {"town": 3.0, "castle": 2.0, "village": 1.0}
 const RIVER_MASK_SIZE := 1024
 
 var material: ShaderMaterial
@@ -32,7 +34,8 @@ func build() -> void:
 	material.set_shader_parameter("sea_level", terrain.sea_level)
 	material.set_shader_parameter("sheet_margin", SHEET_MARGIN)
 	material.set_shader_parameter("heightmap", terrain.make_height_texture())
-	material.set_shader_parameter("territory", ImageTexture.create_from_image(_territory_image()))
+	material.set_shader_parameter("road_mask", GameData.roads.make_road_texture())
+	refresh_settlements()
 	material.set_shader_parameter("river_mask", ImageTexture.create_from_image(_river_image()))
 	material.set_shader_parameter("faction_palette", ImageTexture.create_from_image(_palette_image()))
 	material.set_shader_parameter("faction_count", GameData.factions.size())
@@ -49,10 +52,10 @@ func build() -> void:
 	add_child(_sheet)
 
 	for faction in GameData.factions:
-		var centre: Array = faction.get("region_center", [0, 0])
+		var centre := _label_centre(faction)
 		var label := Label3D.new()
 		label.text = String(faction.name).to_upper()
-		label.font_size = 160
+		label.font_size = 130
 		label.pixel_size = 0.25
 		label.outline_size = 0
 		label.modulate = Color(0.25, 0.17, 0.1)
@@ -61,7 +64,7 @@ func build() -> void:
 		label.shaded = false
 		label.double_sided = true
 		label.rotation = Vector3(-PI * 0.5, 0.0, 0.0)
-		label.position = Vector3(centre[0], terrain.max_height + 27.0, centre[1])
+		label.position = Vector3(centre.x, terrain.max_height + 27.0, centre.y)
 		add_child(label)
 		_labels.append(label)
 
@@ -103,36 +106,57 @@ func _update() -> void:
 	EventBus.parchment_amount_changed.emit(amount)
 
 
-func _territory_image() -> Image:
-	## Nearest faction region centre (with a noisy boundary) for every land pixel.
-	## Stored as faction index + 1; 0 means sea.
-	var terrain: TerrainData = GameData.terrain
-	var img := Image.create(TERRITORY_SIZE, TERRITORY_SIZE, false, Image.FORMAT_R8)
-	var noise := FastNoiseLite.new()
-	noise.seed = 91
-	noise.frequency = 0.004
-	noise.fractal_octaves = 3
-	var centres: Array[Vector2] = []
-	for faction in GameData.factions:
+func refresh_settlements() -> void:
+	## Uploads every settlement's position, owner and type for the shader.
+	var count := GameData.settlements.size()
+	var img := Image.create(maxi(count, 1), 1, false, Image.FORMAT_RGBAF)
+	for i in count:
+		var s: Dictionary = GameData.settlements[i]
+		var faction := GameData.get_faction(s.faction)
+		img.set_pixel(i, 0, Color(s.position[0], s.position[1], faction.get("index", 0), TYPE_CODE.get(s.type, 2.0)))
+	material.set_shader_parameter("settlement_data", ImageTexture.create_from_image(img))
+	material.set_shader_parameter("settlement_count", count)
+
+
+func _label_centre(faction: Dictionary) -> Vector2:
+	## Weighted middle of the faction's settlements, or its region centre if it has none.
+	var total := Vector2.ZERO
+	var weight := 0.0
+	for s in GameData.settlements:
+		if s.faction == faction.id:
+			var w: float = LABEL_WEIGHT.get(s.type, 1.0)
+			total += Vector2(s.position[0], s.position[1]) * w
+			weight += w
+	var centre: Vector2
+	if weight == 0.0:
 		var c: Array = faction.get("region_center", [0, 0])
-		centres.append(Vector2(c[0], c[1]))
-	var px := terrain.world_size / TERRITORY_SIZE
-	for j in TERRITORY_SIZE:
-		for i in TERRITORY_SIZE:
-			var x := (i + 0.5) * px
-			var z := (j + 0.5) * px
-			if terrain.get_height(x, z) < terrain.sea_level:
+		centre = Vector2(c[0], c[1])
+	else:
+		centre = total / weight
+	# Nudge the label off settlement marks and town names (the only settlement
+	# labels left at this zoom): the nearest clear spot on land. Town names float
+	# above the terrain, below the sheet, so from the steep camera they show a
+	# little south of their mark.
+	var terrain: TerrainData = GameData.terrain
+	var best := centre
+	var best_d := INF
+	for oy in range(-12, 13):
+		for ox in range(-12, 13):
+			var p := centre + Vector2(ox * 20.0, oy * 15.0)
+			var d := p.distance_squared_to(centre)
+			if d >= best_d or terrain.get_height(p.x, p.y) < terrain.sea_level:
 				continue
-			var p := Vector2(x + noise.get_noise_2d(x, z) * 160.0, z + noise.get_noise_2d(z + 500.0, x) * 160.0)
-			var best := 0
-			var best_d := INF
-			for k in centres.size():
-				var d := p.distance_squared_to(centres[k])
-				if d < best_d:
-					best_d = d
-					best = k
-			img.set_pixel(i, j, Color8(best + 1, 0, 0))
-	return img
+			var clear := true
+			for s in GameData.settlements:
+				var q := Vector2(s.position[0], s.position[1]) - p
+				var town: bool = s.type == "town"
+				if absf(q.x) < (170.0 if town else 110.0) and q.y > (-80.0 if town else -18.0) and q.y < 20.0:
+					clear = false
+					break
+			if clear:
+				best = p
+				best_d = d
+	return best
 
 
 func _river_image() -> Image:

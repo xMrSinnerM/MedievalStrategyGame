@@ -7,7 +7,8 @@
 			"secondary_color": "#E2B33C",
 			"banner": { "pattern": "per_pale", "charge": "crown" },
 			"capital": "aldmere_town_highford",
-			"region_center": [1010.0, 930.0]
+			"region_center": [1010.0, 930.0],
+			"style": { "wall": "#A0937D", "roof": "#9E4532", "flat_roofs": false }
 		},
 		{
 			"id": "varnholt",
@@ -16,7 +17,8 @@
 			"secondary_color": "#F2F2EE",
 			"banner": { "pattern": "chevron", "charge": "wolf" },
 			"capital": "varnholt_town_frostgard",
-			"region_center": [960.0, 300.0]
+			"region_center": [960.0, 300.0],
+			"style": { "wall": "#7D7B77", "roof": "#523D2E", "flat_roofs": false }
 		},
 		{
 			"id": "ashkar",
@@ -25,7 +27,8 @@
 			"secondary_color": "#7A1F1A",
 			"banner": { "pattern": "plain", "charge": "sun" },
 			"capital": "ashkar_town_qasr_umbar",
-			"region_center": [1080.0, 1700.0]
+			"region_center": [1080.0, 1700.0],
+			"style": { "wall": "#C2A67C", "roof": "#A8714A", "flat_roofs": true }
 		},
 		{
 			"id": "thornwald",
@@ -34,7 +37,8 @@
 			"secondary_color": "#F2F2EE",
 			"banner": { "pattern": "saltire", "charge": "tree" },
 			"capital": "thornwald_town_elderholm",
-			"region_center": [480.0, 980.0]
+			"region_center": [480.0, 980.0],
+			"style": { "wall": "#8A7C62", "roof": "#7A6A45", "flat_roofs": false }
 		},
 		{
 			"id": "corvane",
@@ -43,7 +47,8 @@
 			"secondary_color": "#D8D8E0",
 			"banner": { "pattern": "per_bend", "charge": "ship" },
 			"capital": "corvane_town_saltmere",
-			"region_center": [1620.0, 960.0]
+			"region_center": [1620.0, 960.0],
+			"style": { "wall": "#A8A296", "roof": "#4E5A70", "flat_roofs": false }
 		}
 	]
 }

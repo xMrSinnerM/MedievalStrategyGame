@@ -24,7 +24,7 @@ The continent, its names and its factions are original to this game.
 | F1 | Hide the help panel |
 
 Zoom all the way out and the map turns into a parchment strategic map with
-faction territories.
+faction territories, roads and settlement marks.
 
 ## Editing the world
 
@@ -37,7 +37,9 @@ The world lives in plain files that you can edit:
 | `world/biome_mask.png` | Painted regions: **red** = desert, **green** = forest, **blue** = snow | Any image editor |
 | `world/rivers.json` | River paths: `[x, z, water height, width]` per point | Text editor |
 | `data/terrain_config.json` | Seed, map size, sea level, snow line, tree density, fog | Text editor |
-| `data/factions.json` | Factions: name, colours, banner, home region | Text editor |
+| `data/factions.json` | Factions: name, colours, banner, home region, building style | Text editor |
+| `data/settlements.json` | Towns, castles and villages: name, type, owner, position, rotation, and the lord a village belongs to | Text editor |
+| `data/roads.json` | Roads between settlements: `main` or `track`, as `[x, z]` point lists | Text editor, or regenerate |
 
 Coordinates are in map units: x runs west to east and z runs north to south,
 both from 0 to 2048. The sea level is at 40 and the highest peaks reach about
@@ -56,20 +58,38 @@ It takes about 15 seconds. **It overwrites the three world files**, so hand
 edits to them are lost. Rivers are carved into the heightmap, so if you
 reshape the land under a river, either repaint around it or regenerate.
 
+### Placing settlements and roads
+
+Two more tools fill in the settlements and plan the roads on the current
+terrain. Run them in this order after generating a continent:
+
+```
+godot --headless --path . --script res://scripts/tools/place_settlements.gd
+godot --headless --path . --script res://scripts/tools/generate_roads.gd
+```
+
+`place_settlements.gd` picks flat spots inside each faction's region (towns
+near the realm's heart and rivers, castles on high ground towards the borders,
+villages around their lord) and **overwrites `data/settlements.json`**.
+`generate_roads.gd` joins towns and castles with main roads and every village
+to its lord with a track, avoiding steep ground and crossing rivers as rarely
+as it can; it **overwrites `data/roads.json`**. To move a settlement by hand,
+edit its position in `settlements.json` and run only the road tool again.
+
 ## Project layout
 
 ```
-data/        JSON: terrain config, factions (settlements and roads come next)
+data/        JSON: terrain config, factions, settlements, roads
 world/       heightmap, biome mask, rivers
 scenes/      main.tscn -> world_map/world_map.tscn
 scripts/
   core/      GameData and EventBus autoloads, shared map style
   terrain/   generator, terrain data and queries, terrain/water/river/tree layers
-  world/     world map root, parchment overlay
+  world/     world map root, settlements, banners, roads, parchment overlay
   camera/    campaign camera
   ui/        debug HUD
-  tools/     command-line tools (world generator)
-shaders/     terrain, water, river, tree, parchment (+ shared fog include)
+  tools/     command-line tools (world generator, settlements, roads)
+shaders/     terrain, water, river, tree, prop, flag, parchment (+ shared fog include)
 ```
 
 How the parts work:
@@ -85,15 +105,28 @@ How the parts work:
   biome mask, drawn with MultiMesh and faded out with distance.
 - **Fog**: every map shader shares `shaders/includes/map_common.gdshaderinc`,
   which fades the map edges and distant ground into a warm haze.
-- **Parchment map** fades in near maximum zoom. For now, territories come from
-  each faction's `region_center`; once settlements exist they will come from
-  settlement ownership.
+- **Settlements** are placeholder models built from boxes, cylinders and roofs
+  (`settlement_models.gd`) in each faction's wall and roof colours, standing on
+  a small earth plinth. Towns have a ring wall and houses, castles a square
+  wall and keep, villages a handful of houses. Each flies its faction's banner,
+  drawn in code from `factions.json` (`banners.gd`), and has a name label that
+  stays the same size on screen. Village names hide when you zoom out, then
+  castle names; town names always show.
+- **Roads** are painted into the terrain as packed dirt from a mask that
+  `RoadNetwork` builds at load time. Bridges go up where a road crosses a
+  river, and trees keep clear of roads and settlements.
+  `GameData.roads.is_on_road(x, z)` is there for faster travel on roads.
+- **Parchment map** fades in near maximum zoom. Each spot belongs to the
+  faction of the nearest settlement (towns reach further than castles, castles
+  further than villages), worked out in the shader, so borders will follow when
+  a settlement changes hands. Roads are dashed, towns are ringed discs, castles
+  squares and villages dots.
 
 ## Status
 
 - [x] Architecture plan
 - [x] Terrain, water, rivers, trees, fog, camera, parchment map
-- [ ] Settlements (towns, castles, villages), banners, labels, roads
+- [x] Settlements (towns, castles, villages), banners, labels, roads
 - [ ] Parties with pathfinding
 
 ## Known limitations
