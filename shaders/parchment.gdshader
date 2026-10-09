@@ -1,6 +1,8 @@
 shader_type spatial;
 // Strategic "parchment map" shown at maximum zoom-out: inked coastline,
-// contour lines, rivers, faction territories as colour washes with borders.
+// contour lines, rivers, roads, settlement marks, and faction territories as
+// colour washes with borders. Territory is worked out here from settlement
+// ownership, so it follows along when a settlement changes hands.
 render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, shadows_disabled;
 
 uniform float world_size = 2048.0;
@@ -11,7 +13,10 @@ uniform float sheet_margin = 220.0;   // paper beyond the map on each side
 uniform float opacity = 0.0;
 
 uniform sampler2D heightmap : filter_linear, repeat_disable;
-uniform sampler2D territory : filter_nearest, repeat_disable;  // r = faction index + 1, 0 = none
+uniform sampler2D settlement_data : filter_nearest, repeat_disable;  // per texel: x, z, faction index, type (0 town, 1 castle, 2 village)
+uniform int settlement_count = 0;
+uniform float claim_range = 420.0;   // land further than this from every settlement belongs to no one
+uniform sampler2D road_mask : filter_linear_mipmap, repeat_disable;  // r = road (1) or yard (0), a = dirt
 uniform sampler2D river_mask : filter_linear, repeat_disable;
 uniform sampler2D faction_palette : source_color, filter_nearest, repeat_disable;
 uniform sampler2D paper_noise : filter_linear_mipmap, repeat_enable;
@@ -37,16 +42,53 @@ float height_at(vec2 xz) {
 	return textureLod(heightmap, uv, 0.0).r * max_height;
 }
 
+float type_reach(float type) {
+	// Towns claim more land than castles, castles more than villages.
+	return type < 0.5 ? 1.35 : (type < 1.5 ? 1.15 : 0.8);
+}
+
+// Owner of a spot: the settlement with the smallest weighted distance, on a
+// noise-warped position so borders wander instead of running straight.
 int faction_at(vec2 xz) {
-	vec2 uv = xz / world_size;
-	if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) {
+	if (xz.x < 0.0 || xz.y < 0.0 || xz.x > world_size || xz.y > world_size) {
 		return -1;
 	}
-	return int(round(texture(territory, uv).r * 255.0)) - 1;
+	vec2 warp = vec2(texture(paper_noise, xz * 0.0019).r, texture(paper_noise, xz.yx * 0.0019 + 0.37).r) - 0.5;
+	vec2 p = xz + warp * 150.0;
+	float best = 1e9;
+	int owner = -1;
+	for (int i = 0; i < settlement_count; i++) {
+		vec4 s = texelFetch(settlement_data, ivec2(i, 0), 0);
+		float d = distance(p, s.xy) / type_reach(s.w);
+		if (d < best) {
+			best = d;
+			owner = int(s.z + 0.5);
+		}
+	}
+	return best < claim_range ? owner : -1;
 }
 
 vec3 faction_color(int idx) {
 	return texelFetch(faction_palette, ivec2(idx, 0), 0).rgb;
+}
+
+// Ink marks for settlements: towns a ringed disc, castles a square, villages a dot.
+// Returns coverage, how much is ink rim (vs faction colour) and the faction index.
+vec3 settlement_mark(vec2 xz) {
+	float aa = fwidth(xz.x);
+	for (int i = 0; i < settlement_count; i++) {
+		vec4 s = texelFetch(settlement_data, ivec2(i, 0), 0);
+		vec2 d = xz - s.xy;
+		bool castle = s.w > 0.5 && s.w < 1.5;
+		float size = s.w < 0.5 ? 13.0 : (castle ? 8.0 : 4.5);
+		float dist = castle ? max(abs(d.x), abs(d.y)) : length(d);
+		float cover = 1.0 - smoothstep(size - aa, size + aa, dist);
+		if (cover > 0.0) {
+			float rim = s.w > 1.5 ? 1.0 : smoothstep(size - 3.0 - aa, size - 3.0 + aa, dist);
+			return vec3(cover, rim, s.z);
+		}
+	}
+	return vec3(0.0);
 }
 
 float line(float value, float spacing, float width_px) {
@@ -99,6 +141,18 @@ void fragment() {
 
 	float river = smoothstep(0.25, 0.6, texture(river_mask, xz / world_size).r) * land;
 	ground = mix(ground, river_ink, river * 0.85);
+
+	// Roads as thin dashed ink.
+	vec4 road_tex = texture(road_mask, xz / world_size);
+	float road = smoothstep(0.3, 0.7, road_tex.a * road_tex.r);
+	float dash = step(0.35, fract((xz.x + xz.y) * 0.06));
+	ground = mix(ground, ink, road * mix(0.35, 0.6, dash) * land);
+
+	vec3 mark = settlement_mark(xz);
+	if (mark.x > 0.0) {
+		vec3 fill = mix(faction_color(int(mark.z + 0.5)), ink, mark.y);
+		ground = mix(ground, fill, mark.x);
+	}
 
 	col = mix(sea, ground, land);
 	float coast = 1.0 - smoothstep(fwidth(h) * 0.6, fwidth(h) * 1.6, abs(h - sea_level));

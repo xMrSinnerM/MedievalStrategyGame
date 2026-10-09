@@ -19,6 +19,7 @@ func build() -> void:
 	var visibility := float(cfg.get("visibility_range", 1100.0))
 	var snow_height := float(GameData.config_section("terrain").get("snow_height", 205.0))
 
+	var roads: RoadNetwork = GameData.roads
 	var rng := RandomNumberGenerator.new()
 	rng.seed = int(GameData.terrain_config.get("seed", 1)) + 77
 	var clusters := FastNoiseLite.new()
@@ -45,6 +46,8 @@ func build() -> void:
 			if h < terrain.sea_level + 2.5 or h > snow_height - 10.0:
 				continue
 			if terrain.get_slope(x, z) > max_slope:
+				continue
+			if roads.is_cleared(x, z):
 				continue
 			var cold := biome.b > 0.15 or h > 140.0
 			var kind := 0 if (cold or rng.randf() < 0.3) else 1   # 0 conifer, 1 broadleaf

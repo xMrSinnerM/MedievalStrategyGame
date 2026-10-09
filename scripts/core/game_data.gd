@@ -3,11 +3,16 @@ extends Node
 
 const TERRAIN_CONFIG_PATH := "res://data/terrain_config.json"
 const FACTIONS_PATH := "res://data/factions.json"
+const SETTLEMENTS_PATH := "res://data/settlements.json"
+const ROADS_PATH := "res://data/roads.json"
 
 var terrain_config: Dictionary = {}
 var factions: Array[Dictionary] = []
 var factions_by_id: Dictionary = {}
+var settlements: Array[Dictionary] = []
+var settlements_by_id: Dictionary = {}
 var terrain: TerrainData
+var roads: RoadNetwork
 
 var _loaded := false
 
@@ -32,12 +37,24 @@ func ensure_loaded() -> bool:
 		factions.append(faction)
 		factions_by_id[faction.id] = faction
 
+	for s in load_json(SETTLEMENTS_PATH).get("settlements", []):
+		var settlement: Dictionary = s
+		settlements.append(settlement)
+		settlements_by_id[settlement.id] = settlement
+
+	roads = RoadNetwork.new()
+	roads.build(load_json(ROADS_PATH).get("roads", []), settlements, terrain.world_size)
+
 	_loaded = true
 	return true
 
 
 func get_faction(id: String) -> Dictionary:
 	return factions_by_id.get(id, {})
+
+
+func get_settlement(id: String) -> Dictionary:
+	return settlements_by_id.get(id, {})
 
 
 func config_section(name: String) -> Dictionary:
