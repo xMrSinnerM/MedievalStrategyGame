@@ -19,6 +19,16 @@ const MOUNTAIN_RANGES := [
 	{"points": [Vector2(0.17, 0.37), Vector2(0.14, 0.49), Vector2(0.18, 0.6)], "width": 0.05, "strength": 0.38},
 ]
 
+## Guaranteed passes through the ranges (normalized position, radius), so every
+## region can be reached by land. Noise adds more, narrower gaps.
+const PASSES := [
+	Vector3(0.355, 0.225, 0.065),
+	Vector3(0.60, 0.22, 0.065),
+	Vector3(0.80, 0.245, 0.055),
+	Vector3(0.705, 0.49, 0.05),
+	Vector3(0.47, 0.705, 0.055),
+]
+
 const ISLANDS := [
 	Vector3(0.935, 0.37, 0.026),
 	Vector3(0.94, 0.60, 0.02),
@@ -215,8 +225,11 @@ func _height_at(x: float, z: float, s: float) -> float:
 	h += north * land * 0.07 * hills
 
 	# Mountain ranges with ridged peaks and passes cut by noise.
-	var m := _range_mask(u, v, 1.0)
-	var foothills := _range_mask(u, v, 2.6)
+	var gap := 1.0
+	for pass_point: Vector3 in PASSES:
+		gap = minf(gap, smoothstep(pass_point.z * 0.45, pass_point.z, Vector2(u - pass_point.x, v - pass_point.y).length()))
+	var m := _range_mask(u, v, 1.0) * gap
+	var foothills := _range_mask(u, v, 2.6) * gap
 	if foothills > 0.01:
 		var pass_cut := smoothstep(-0.6, -0.2, _passes.get_noise_2d(x, z))
 		var ridged := _ridges.get_noise_2d(x, z) * 0.5 + 0.5
@@ -487,6 +500,22 @@ class _RiverTracer:
 		for q in full * full:
 			if nearest[q] < INF:
 				g.heights[q] = target[q]
+		# Soften the valley sides (not the channel) so banks stay walkable.
+		for pass_index in 3:
+			var source := g.heights.duplicate()
+			for q in full * full:
+				var d := nearest[q]
+				if d == INF or d < 3.0:
+					continue
+				var qx := q % full
+				var qy := q / full
+				if qx < 2 or qy < 2 or qx >= full - 2 or qy >= full - 2:
+					continue
+				var sum := 0.0
+				for oy in range(-2, 3):
+					for ox in range(-2, 3):
+						sum += source[q + oy * full + ox]
+				g.heights[q] = sum / 25.0
 
 
 class _Heap:
