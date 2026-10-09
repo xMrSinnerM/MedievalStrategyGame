@@ -5,6 +5,7 @@ const TERRAIN_CONFIG_PATH := "res://data/terrain_config.json"
 const FACTIONS_PATH := "res://data/factions.json"
 const SETTLEMENTS_PATH := "res://data/settlements.json"
 const ROADS_PATH := "res://data/roads.json"
+const PARTIES_PATH := "res://data/parties.json"
 
 var terrain_config: Dictionary = {}
 var factions: Array[Dictionary] = []
@@ -13,6 +14,8 @@ var settlements: Array[Dictionary] = []
 var settlements_by_id: Dictionary = {}
 var terrain: TerrainData
 var roads: RoadNetwork
+var nav: NavGrid
+var parties: Array[Dictionary] = []
 
 var _loaded := false
 
@@ -43,7 +46,13 @@ func ensure_loaded() -> bool:
 		settlements_by_id[settlement.id] = settlement
 
 	roads = RoadNetwork.new()
-	roads.build(load_json(ROADS_PATH).get("roads", []), settlements, terrain.world_size)
+	roads.build(load_json(ROADS_PATH).get("roads", []), settlements, terrain)
+
+	nav = NavGrid.new()
+	nav.build(terrain, roads)
+
+	for p in load_json(PARTIES_PATH).get("parties", []):
+		parties.append(p)
 
 	_loaded = true
 	return true

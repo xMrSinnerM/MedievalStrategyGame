@@ -1,4 +1,4 @@
-[gd_scene load_steps=10 format=3]
+[gd_scene load_steps=11 format=3]
 
 [ext_resource type="Script" path="res://scripts/world/world_map.gd" id="1"]
 [ext_resource type="Script" path="res://scripts/terrain/terrain.gd" id="2"]
@@ -9,6 +9,7 @@
 [ext_resource type="Script" path="res://scripts/camera/campaign_camera.gd" id="7"]
 [ext_resource type="Script" path="res://scripts/ui/hud.gd" id="8"]
 [ext_resource type="Script" path="res://scripts/world/settlements_layer.gd" id="9"]
+[ext_resource type="Script" path="res://scripts/world/parties_layer.gd" id="10"]
 
 [node name="WorldMap" type="Node3D"]
 script = ExtResource("1")
@@ -27,6 +28,9 @@ script = ExtResource("9")
 
 [node name="Vegetation" type="Node3D" parent="."]
 script = ExtResource("5")
+
+[node name="Parties" type="Node3D" parent="."]
+script = ExtResource("10")
 
 [node name="ParchmentOverlay" type="Node3D" parent="."]
 script = ExtResource("6")

@@ -16,12 +16,19 @@ The continent, its names and its factions are original to this game.
 
 | Input | Action |
 | --- | --- |
+| Left click on the ground or a settlement | Send your party there |
+| F | Centre the camera on your party |
 | WASD / arrow keys, or left/middle drag | Pan |
 | Q / E, or right drag | Rotate |
 | Mouse wheel | Zoom (the camera tilts towards top-down as you zoom out) |
 | M | Toggle the parchment map |
 | Home | Recentre |
 | F1 | Hide the help panel |
+
+Your warband starts just outside Highford, with a gold ring around it. Click
+anywhere to march there: a dashed line shows the route, and the help panel says
+what ground you are crossing. The faction lords ride between their own towns
+and castles on their own.
 
 Zoom all the way out and the map turns into a parchment strategic map with
 faction territories, roads and settlement marks.
@@ -39,6 +46,7 @@ The world lives in plain files that you can edit:
 | `data/terrain_config.json` | Seed, map size, sea level, snow line, tree density, fog | Text editor |
 | `data/factions.json` | Factions: name, colours, banner, home region, building style | Text editor |
 | `data/settlements.json` | Towns, castles and villages: name, type, owner, position, rotation, and the lord a village belongs to | Text editor |
+| `data/parties.json` | Parties on the map: name, faction, starting settlement, troops; one is marked `"player": true` | Text editor |
 | `data/roads.json` | Roads between settlements: `main` or `track`, as `[x, z]` point lists | Text editor, or regenerate |
 
 Coordinates are in map units: x runs west to east and z runs north to south,
@@ -115,7 +123,15 @@ How the parts work:
 - **Roads** are painted into the terrain as packed dirt from a mask that
   `RoadNetwork` builds at load time. Bridges go up where a road crosses a
   river, and trees keep clear of roads and settlements.
-  `GameData.roads.is_on_road(x, z)` is there for faster travel on roads.
+  `GameData.roads.is_on_road(x, z)` tells whether a spot is on a road.
+- **Parties** (`party.gd`, `parties_layer.gd`) find their way with
+  `NavGrid`, an A* grid over the whole map in 4-unit cells. Each cell has a
+  travel cost: roads 0.6, plains 1.0, desert and snow 1.4, forest 1.8, more on
+  hills, 3.0 to wade a river without a bridge; water and mountains are
+  impassable. The same cost slows a party down while it walks, so routes
+  prefer roads and bridges. Routes are straightened where that doesn't leave
+  cheaper ground, then rounded off. Parties grow as you zoom out so they stay
+  visible, and disappear inside settlements.
 - **Parchment map** fades in near maximum zoom. Each spot belongs to the
   faction of the nearest settlement (towns reach further than castles, castles
   further than villages), worked out in the shader, so borders will follow when
@@ -127,7 +143,7 @@ How the parts work:
 - [x] Architecture plan
 - [x] Terrain, water, rivers, trees, fog, camera, parchment map
 - [x] Settlements (towns, castles, villages), banners, labels, roads
-- [ ] Parties with pathfinding
+- [x] Parties with pathfinding
 
 ## Known limitations
 

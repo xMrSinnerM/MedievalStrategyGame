@@ -1,8 +1,10 @@
 extends CanvasLayer
-## Minimal debug HUD: controls, zoom level and frame rate. F1 hides it.
+## Minimal HUD: controls, what your party is doing, zoom level and frame rate.
+## F1 hides it.
 
 var _info: Label
 var _zoom_t := 0.0
+var _party_status := ""
 
 
 func _ready() -> void:
@@ -19,6 +21,7 @@ func _ready() -> void:
 	panel.add_child(_info)
 	add_child(panel)
 	EventBus.camera_zoom_changed.connect(func(t: float) -> void: _zoom_t = t)
+	EventBus.party_status_changed.connect(func(text: String) -> void: _party_status = text)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -29,4 +32,4 @@ func _unhandled_input(event: InputEvent) -> void:
 func _process(_delta: float) -> void:
 	if not visible:
 		return
-	_info.text = "WASD / drag: pan    Q E / right-drag: rotate    wheel: zoom\nM: parchment map    Home: recentre    F1: hide\nzoom %d%%    %d fps" % [int(_zoom_t * 100.0), Engine.get_frames_per_second()]
+	_info.text = "Click: travel there    F: find your party\nWASD / drag: pan    Q E / right-drag: rotate    wheel: zoom\nM: parchment map    Home: recentre    F1: hide\nYour party: %s\nzoom %d%%    %d fps" % [_party_status, int(_zoom_t * 100.0), Engine.get_frames_per_second()]

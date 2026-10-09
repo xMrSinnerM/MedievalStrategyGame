@@ -5,3 +5,5 @@ extends Node
 signal camera_zoom_changed(zoom_t: float)
 ## How strongly the parchment map is showing, 0 .. 1.
 signal parchment_amount_changed(amount: float)
+## One-line description of what the player's party is doing, for the HUD.
+signal party_status_changed(text: String)
