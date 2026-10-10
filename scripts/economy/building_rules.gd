@@ -174,3 +174,8 @@ func unit_stat(unit: String, stat: String) -> float:
 func unit_barracks_level(unit: String) -> int:
 	## The barracks level that unlocks this unit.
 	return int(units[unit].get("barracks_level", 1))
+
+
+func unit_bonus(unit: String, against: String) -> float:
+	## How much harder this unit hits soldiers of the other type (1 = normal).
+	return float(units[unit].get("bonus", {}).get(against, 1.0))

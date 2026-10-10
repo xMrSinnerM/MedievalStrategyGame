@@ -12,18 +12,20 @@
 			"time": 20,
 			"upkeep": 1.0,
 			"attack": 8,
-			"defense": 12
+			"defense": 12,
+			"bonus": { "horseman": 1.6 }
 		},
 		"archer": {
 			"name": "Archer",
 			"plural": "Archers",
-			"description": "Strikes from behind walls and shield lines.",
+			"description": "Shoots down slow spearmen from behind the line.",
 			"barracks_level": 2,
 			"cost": { "gold": 15, "wood": 14 },
 			"time": 28,
 			"upkeep": 1.0,
 			"attack": 12,
-			"defense": 6
+			"defense": 6,
+			"bonus": { "spearman": 1.4 }
 		},
 		"swordsman": {
 			"name": "Swordsman",
@@ -39,13 +41,14 @@
 		"horseman": {
 			"name": "Horseman",
 			"plural": "Horsemen",
-			"description": "Fast and hard-hitting, and hungry.",
+			"description": "Rides down archers. Fast, hard-hitting and hungry.",
 			"barracks_level": 4,
 			"cost": { "gold": 45, "food": 25 },
 			"time": 70,
 			"upkeep": 3.0,
 			"attack": 24,
-			"defense": 12
+			"defense": 12,
+			"bonus": { "archer": 1.6 }
 		}
 	}
 }

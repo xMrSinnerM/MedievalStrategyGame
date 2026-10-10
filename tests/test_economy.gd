@@ -23,6 +23,7 @@ func _initialize() -> void:
 	test_recruitment()
 	test_upkeep_and_desertion()
 	test_warband()
+	test_battle()
 	print("%d checks, %d failed" % [checks, failures])
 	quit(1 if failures > 0 else 0)
 
@@ -262,6 +263,36 @@ func test_warband() -> void:
 	check(joined == 60, "a lord takes up to 60 soldiers at keep level 1 (%d)" % joined)
 	check(npc.field.get("swordsman", 0) == 20, "the best soldiers go first")
 	check(npc.troop_count() == 60, "and half the garrison stays")
+
+
+func test_battle() -> void:
+	var even := 0
+	for k in 40:
+		if Battle.fight(rules, {"spearman": 50}, {"spearman": 50}, k).winner == "a":
+			even += 1
+	check(even > 8 and even < 32, "equal armies win about half the time (%d of 40)" % even)
+	var r: Dictionary = Battle.fight(rules, {"spearman": 80}, {"spearman": 40}, 3)
+	check(r.winner == "a", "twice the soldiers win")
+	check(r.a.spearman.lost < r.b.spearman.lost, "and lose fewer")
+	check(r.b.spearman.start - r.b.spearman.lost <= int(40 * Battle.ROUT) + 1, "the loser flees at %d%% strength" % int(Battle.ROUT * 100))
+	var again: Dictionary = Battle.fight(rules, {"spearman": 80}, {"spearman": 40}, 3)
+	check(JSON.stringify(again) == JSON.stringify(r), "the same seed gives the same battle")
+	# Spearmen beat horsemen that would beat the same number of archers.
+	near(Battle.odds(rules, {"spearman": 40}, {"horseman": 20}), 1.0, "spearmen hold against half as many horsemen", 0.15)
+	near(Battle.odds(rules, {"archer": 40}, {"horseman": 20}), 0.0, "horsemen ride down twice as many archers", 0.15)
+	check(Battle.odds(rules, {}, {"spearman": 1}) == 0.0, "no soldiers, no chance")
+	# Resolving moves the survivors back into each warband and pays the plunder.
+	var a := fresh()
+	var b := fresh()
+	a.field = {"spearman": 60, "archer": 20}
+	b.field = {"spearman": 30}
+	var gold: float = a.resources.gold
+	var res: Dictionary = Battle.resolve(a, b, 11)
+	check(res.winner == "a", "the bigger warband wins")
+	check(a.field_count() == 80 - Battle.lost_count(res.a), "the winner keeps its survivors")
+	check(b.field_count() == 30 - Battle.lost_count(res.b), "the loser keeps the soldiers who fled")
+	near(a.resources.gold, gold + Battle.lost_count(res.b) * Battle.LOOT_PER_KILL, "plunder for every fallen enemy")
+	check(res.loot == int(Battle.lost_count(res.b) * Battle.LOOT_PER_KILL), "the report shows the plunder")
 
 
 func _first(c: CastleState, type: String) -> int:

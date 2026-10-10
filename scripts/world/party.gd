@@ -28,6 +28,8 @@ var path := PackedVector2Array()     ## remaining route, map units
 var destination_settlement := ""     ## settlement id the party is heading for, if any
 var inside_settlement := ""          ## settlement id the party is waiting in, if any
 var moving := false
+var chasing: Party = null            ## party this one is marching on, if any
+var truce_until := 0.0               ## no fighting before this time (seconds since start)
 
 var _figures: Node3D
 var _label: Label3D
@@ -100,6 +102,12 @@ func _within_settlement(p: Vector2) -> bool:
 	return false
 
 
+func can_fight() -> bool:
+	## Out in the open, with soldiers, and not just out of a battle.
+	return inside_settlement.is_empty() and _figures.visible and troops > 0 \
+			and Time.get_ticks_msec() * 0.001 >= truce_until
+
+
 func map_position() -> Vector2:
 	return Vector2(position.x, position.z)
 
@@ -118,6 +126,7 @@ func travel_to(target: Vector2, settlement_id := "") -> bool:
 
 
 func stop() -> void:
+	chasing = null
 	path.clear()
 	moving = false
 	destination_settlement = ""

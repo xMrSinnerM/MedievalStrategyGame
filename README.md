@@ -18,6 +18,7 @@ The continent, its names and its factions are original to this game.
 | Input | Action |
 | --- | --- |
 | Left click on the ground or a settlement | Send your party there |
+| Left click on a castle or a lord's party | Open its panel (travel, look inside, attack) |
 | F | Centre the camera on your party |
 | WASD / arrow keys, or left/middle drag | Pan |
 | Q / E, or right drag | Rotate |
@@ -29,7 +30,7 @@ The continent, its names and its factions are original to this game.
 Your warband starts just outside Highford, with a gold ring around it. Click
 anywhere to march there: a dashed line shows the route, and the help panel says
 what ground you are crossing. The faction lords ride between their own towns
-and castles on their own.
+and castles on their own, and lords at war fight when they meet (see Battles).
 
 Zoom all the way out and the map turns into a parchment strategic map with
 faction territories, roads and settlement marks.
@@ -188,6 +189,26 @@ Every lord's party is likewise the warband of one of their faction's castles
 40 + 20 per keep level from the garrison, best soldiers first, always leaving
 half the garrison behind; a lord whose warband falls below 20 heads home.
 
+### Battles
+
+Click a lord's party on the map to see their warband, which faction they serve
+and your chances against them, then press **Attack** to march on them. When two
+warbands meet, `Battle` (`scripts/economy/battle.gd`) fights it out in rounds:
+each soldier deals their attack, an enemy soldier falls for every point of
+damage equal to their defence, and a side flees once it is down to 35% of its
+soldiers. Spearmen hit horsemen hard, archers hit spearmen, and horsemen ride
+down archers (`"bonus"` in `data/units.json`). The winner's castle plunders 3
+gold for every enemy that fell. Your own battles end with a report; battles
+between lords show up as a line of news at the bottom of the screen.
+
+Which factions are at war is listed under `"wars"` in `data/factions.json`
+(Aldmere and Varnholt to start with). Lords of warring factions fight when they
+meet, sometimes raid each other's towns, and a lord at war with you who spots
+your warband comes after it if they think they will win. Your warband is safe
+while it stands at your castle, and slipping into a town or village shakes off
+a pursuer. A beaten lord goes home to recover. Diplomacy comes later; for now
+you can attack any lord who isn't from your own faction.
+
 ## Project layout
 
 ```
@@ -196,12 +217,12 @@ world/       heightmap, biome mask, rivers
 scenes/      main.tscn -> world_map/world_map.tscn and castle/castle_view.tscn
 scripts/
   core/      main (switches map and castle), GameData, EventBus and Economy autoloads, map style
-  economy/   castle economy: building rules, castle state, NPC brain
+  economy/   castle economy: building rules, castle state, NPC brain, battles
   castle/    castle screen: view, camera, placeholder building models
   terrain/   generator, terrain data and queries, terrain/water/river/tree layers
   world/     world map root, settlements, banners, roads, parchment overlay
   camera/    campaign camera
-  ui/        world map HUD, castle HUD
+  ui/        world map HUD and panels (castle, party, battle report), castle HUD
   tools/     command-line tools (world generator, settlements, roads)
 shaders/     terrain, water, river, tree, prop, flag, route, parchment, castle ground (+ shared fog include)
 tests/       headless tests (economy)
@@ -256,7 +277,8 @@ How the parts work:
 - [x] Your castle and NPC castles on the world map
 - [x] Barracks, training queue, food upkeep and desertion
 - [x] Moving troops between your castle and your warband
-- [ ] Battles between warbands
+- [x] Battles between warbands, with battle reports
+- [ ] Sieges
 
 ## Known limitations
 
