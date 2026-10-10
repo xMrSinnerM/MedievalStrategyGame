@@ -225,6 +225,15 @@ moves with their warband to their faction's nearest castle, or leaves the map
 if there is none. Your main castle can never be captured; storming it sacks
 30% of its stock instead.
 
+Lords besiege too. Now and then a lord with at least 40 soldiers marches on
+the nearest castle of a faction they are at war with (within 650 map units)
+if they are at least 70% sure of storming it; that includes your castles. A
+red warning at the top of the screen counts down to the assault on any castle
+of yours, and attacking the besieger lifts the siege. A castle that has just
+been stormed is left alone for 10 minutes. Your main castle is safe from
+sieges until its keep reaches level 2 (newcomer's protection), so train a
+garrison before you upgrade it.
+
 ## Project layout
 
 ```
@@ -296,7 +305,7 @@ How the parts work:
 - [x] Battles between warbands, with battle reports
 - [x] Siege rules and capturing castles
 - [x] Besieging castles from the map
-- [ ] Lords besiege castles, including yours
+- [x] Lords besiege castles, including yours
 
 ## Known limitations
 

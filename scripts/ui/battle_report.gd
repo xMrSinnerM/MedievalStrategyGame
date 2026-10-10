@@ -64,10 +64,15 @@ func show_report(report: Dictionary) -> void:
 	var siege: bool = report.get("siege", false)
 	_title.text = "Victory!" if won else "Defeat"
 	if siege:
-		_title.text = {"captured": "Castle captured!", "sacked": "Castle sacked!"}.get(report.outcome, "The walls held")
+		if me == "a":
+			_title.text = {"captured": "Castle captured!", "sacked": "Castle sacked!"}.get(report.outcome, "The walls held")
+		else:
+			_title.text = {"captured": "Castle lost!", "sacked": "Castle sacked!"}.get(report.outcome, "The walls held!")
 	_title.add_theme_color_override("font_color", WIN if won else LOSS)
 	if siege and me == "a":
 		_place.text = "You stormed the walls of %s" % enemy
+	elif siege:
+		_place.text = "%s stormed %s" % [enemy, report.defender]
 	elif me == "a":
 		_place.text = "You attacked %s near %s" % [enemy, report.place]
 	else:
@@ -75,7 +80,8 @@ func show_report(report: Dictionary) -> void:
 	for child in _grid.get_children():
 		_grid.remove_child(child)
 		child.queue_free()
-	for text in ["", "Yours", "Fell", "Garrison" if siege else enemy, "Fell"]:
+	var their_side := "Garrison" if siege and me == "a" else enemy
+	for text in ["", "Garrison" if siege and me == "b" else "Yours", "Fell", their_side, "Fell"]:
 		_grid.add_child(_label(14, MUTED, text))
 	var units: Array = []
 	for side in [report[me], report[them]]:
@@ -102,11 +108,20 @@ func show_report(report: Dictionary) -> void:
 			_footer.text = "Your surviving soldiers fell back from the walls."
 		if won and report.loot > 0:
 			_footer.text += " Plunder: %d gold." % report.loot
+	elif siege:
+		if report.outcome == "captured":
+			_footer.text = "%s now belongs to %s." % [report.defender, enemy]
+		elif report.outcome == "sacked":
+			_footer.text = "%s carried off %s. Train more soldiers to hold the walls." % [enemy, _spoils(report.spoils)]
+		else:
+			_footer.text = "Your garrison held. %s fell back." % enemy
 	elif won:
 		var fate := "%s fled home." % enemy if totals[3] < totals[2] else "None of %s's soldiers survived." % enemy
 		_footer.text = "Your warband plundered %d gold. %s" % [report.loot, fate] if report.loot > 0 else fate
 	else:
 		_footer.text = "Your surviving soldiers fell back. %s took %d gold in plunder." % [enemy, report.loot]
+	if report.get("lifted", "") != "":
+		_footer.text += "\nThe siege of %s is lifted." % report.lifted
 	visible = true
 
 

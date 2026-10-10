@@ -13,6 +13,9 @@ extends Node3D
 ## Sieges: from an enemy castle's panel your warband marches to its walls,
 ## camps there for Battle.siege_time() and then storms it (Battle.assault).
 ## Walking away lifts the siege, and so does losing a battle while camped.
+## Lords besiege castles of factions they are at war with, yours included,
+## when they are confident of taking them; any battle the besieger fights
+## lifts the siege, so you can ride to the rescue.
 ##
 ## Controls: left click on the ground, a town or a village to travel there
 ## (clicking a castle or a party opens its panel instead), F to centre the
@@ -32,6 +35,11 @@ const CHASE_ODDS := 0.65         ## a lord chases you only when this likely to w
 const CHASE_REPATH := 0.5        ## seconds between route updates while chasing
 const TRUCE := 20.0              ## seconds after a battle before either side fights again
 const PICK_RADIUS := 26.0        ## pixels around a party that count as clicking it
+const SIEGE_CHANCE := 0.05       ## chance a lord's next move is a siege, when one is worth it
+const SIEGE_ODDS := 0.7          ## a lord besieges only when this likely to win the assault
+const SIEGE_RANGE := 650.0       ## lords besiege castles within this distance
+const SIEGE_MIN_WARBAND := 40    ## lords with fewer soldiers don't besiege
+const CASTLE_TRUCE := 600.0      ## seconds after an assault before lords besiege that castle again
 
 var parties: Array[Party] = []
 var player: Party
@@ -55,6 +63,8 @@ var _siege_target := ""          ## castle your warband is marching on to besieg
 var _siege_castle := ""          ## castle your warband is besieging now
 var _siege_until := 0.0          ## when the assault comes (seconds since start)
 var _siege_label: Label3D
+var _lord_sieges := {}           ## lord Party -> {"castle", "until" (0 while marching), "label"}
+var _castle_truce := {}          ## castle id -> no lord sieges before this time
 
 
 func build() -> void:
@@ -119,21 +129,7 @@ func _build_markers() -> void:
 	_marker.visible = false
 	add_child(_marker)
 
-	_siege_label = Label3D.new()
-	_siege_label.name = "SiegeLabel"
-	_siege_label.font_size = 34
-	_siege_label.outline_size = 10
-	_siege_label.modulate = Color(1.0, 0.55, 0.4)
-	_siege_label.outline_modulate = Color(0.16, 0.08, 0.05, 0.9)
-	_siege_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	_siege_label.fixed_size = true
-	_siege_label.pixel_size = 0.0005
-	_siege_label.no_depth_test = true
-	_siege_label.render_priority = 13
-	_siege_label.outline_render_priority = 12
-	_siege_label.shaded = false
-	_siege_label.visible = false
-	add_child(_siege_label)
+	_siege_label = _make_siege_label()
 
 	# A ring under the player's party so it is easy to spot.
 	var ring_mesh := TorusMesh.new()
@@ -259,15 +255,39 @@ func _siege_reach(settlement: Dictionary) -> float:
 	return SettlementModels.RADIUS.get(settlement.type, 20.0) + 30.0
 
 
+func _make_siege_label() -> Label3D:
+	var label := Label3D.new()
+	label.name = "SiegeLabel"
+	label.font_size = 34
+	label.outline_size = 10
+	label.modulate = Color(1.0, 0.55, 0.4)
+	label.outline_modulate = Color(0.16, 0.08, 0.05, 0.9)
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.fixed_size = true
+	label.pixel_size = 0.0005
+	label.no_depth_test = true
+	label.render_priority = 13
+	label.outline_render_priority = 12
+	label.shaded = false
+	label.visible = false
+	add_child(label)
+	return label
+
+
+func _place_siege_label(label: Label3D, castle_id: String) -> void:
+	var settlement := GameData.get_settlement(castle_id)
+	var x: float = settlement.position[0]
+	var z: float = settlement.position[1]
+	label.position = Vector3(x, Party.ground_height(x, z) + SettlementModels.TOP.castle + 14.0, z)
+	label.visible = true
+
+
 func _start_siege(castle_id: String) -> void:
 	var castle := Economy.get_castle(castle_id)
-	var settlement := GameData.get_settlement(castle_id)
 	_siege_target = ""
 	_siege_castle = castle_id
 	_siege_until = Time.get_ticks_msec() * 0.001 + Battle.siege_time(castle)
-	_siege_label.position = Vector3(settlement.position[0], 0, settlement.position[1])
-	_siege_label.position.y = Party.ground_height(settlement.position[0], settlement.position[1]) + SettlementModels.TOP.castle + 14.0
-	_siege_label.visible = true
+	_place_siege_label(_siege_label, castle_id)
 	_update_siege()
 
 
@@ -320,11 +340,18 @@ func _storm(castle_id: String) -> void:
 
 func on_castle_captured(castle_id: String) -> void:
 	## Lords whose castle fell move to their new home, or leave the map.
+	## Sieges of a castle that is no longer an enemy's are called off.
+	if _siege_castle == castle_id and Economy.get_castle(castle_id).owner == "player":
+		_lift_siege()
+	for lord: Party in _lord_sieges.keys():
+		if _lord_sieges[lord].castle == castle_id and not _hostile_castle(lord, GameData.get_settlement(castle_id)):
+			_lift_lord_siege(lord)
 	for p: Party in parties.duplicate():
 		if p.is_player:
 			continue
 		var home := Economy.home_of(p.id, p.home)
 		if home == "":
+			_lift_lord_siege(p)
 			parties.erase(p)
 			_lord_timers.erase(p)
 			for hunter in parties:
@@ -371,6 +398,9 @@ func _update_warband_home() -> void:
 func _on_arrived(party: Party) -> void:
 	if party.chasing != null:
 		return   # reached where the prey was; the next route update follows it
+	if _lord_sieges.has(party) and _lord_sieges[party].until == 0.0:
+		_start_lord_siege(party)
+		return
 	if party == player and _siege_target != "":
 		var castle := GameData.get_settlement(_siege_target)
 		if party.map_position().distance_to(Vector2(castle.position[0], castle.position[1])) <= _siege_reach(castle):
@@ -411,6 +441,7 @@ func _process(delta: float) -> void:
 	if _encounter_timer <= 0.0:
 		_encounter_timer = 0.2
 		_check_encounters()
+	_update_lord_sieges()
 	if player == null:
 		return
 	if _siege_castle != "":
@@ -434,10 +465,14 @@ func _process(delta: float) -> void:
 
 func _update_lords(delta: float) -> void:
 	for party: Party in _lord_timers.keys():
-		if party.moving or party.chasing != null:
+		if party.moving or party.chasing != null or _lord_sieges.has(party):
 			continue
 		_lord_timers[party] -= delta
 		if _lord_timers[party] > 0.0:
+			continue
+		var siege := _pick_siege_target(party) if _rng.randf() < SIEGE_CHANCE else {}
+		if not siege.is_empty() and party.travel_to(_outside(siege, party.map_position())):
+			_lord_sieges[party] = {"castle": siege.id, "until": 0.0, "label": null}
 			continue
 		var target := _pick_lord_destination(party)
 		if target.is_empty() or not party.travel_to(Vector2(target.position[0], target.position[1]), target.id):
@@ -468,6 +503,111 @@ func _pick_lord_destination(party: Party) -> Dictionary:
 			near.append(s)
 	var pool := near if not near.is_empty() else all
 	return pool[_rng.randi() % pool.size()] if not pool.is_empty() else {}
+
+
+func _hostile_castle(lord: Party, settlement: Dictionary) -> bool:
+	return settlement.get("type", "") == "castle" and GameData.at_war(lord.faction_id, settlement.faction)
+
+
+func _besieged(castle_id: String) -> bool:
+	if _siege_castle == castle_id or _siege_target == castle_id:
+		return true
+	for lord: Party in _lord_sieges:
+		if _lord_sieges[lord].castle == castle_id:
+			return true
+	return false
+
+
+func _pick_siege_target(lord: Party) -> Dictionary:
+	## The nearest enemy castle this lord is confident of storming, or {}.
+	var home := Economy.get_castle(lord.home)
+	if home == null or home.field_count() < SIEGE_MIN_WARBAND:
+		return {}
+	var now := Time.get_ticks_msec() * 0.001
+	var here := lord.map_position()
+	var best := {}
+	var best_d := SIEGE_RANGE
+	for s in GameData.settlements:
+		if not _hostile_castle(lord, s) or _castle_truce.get(s.id, 0.0) > now or _besieged(s.id):
+			continue
+		if s.id == Economy.MAIN_CASTLE and Economy.newcomer_protected():
+			continue
+		var d := here.distance_to(Vector2(s.position[0], s.position[1]))
+		var castle := Economy.get_castle(s.id)
+		if d >= best_d or castle == null:
+			continue
+		if Battle.odds(Economy.rules, home.field, castle.troops, 1, Battle.wall_bonus(castle)) >= SIEGE_ODDS:
+			best = s
+			best_d = d
+	return best
+
+
+func _start_lord_siege(lord: Party) -> void:
+	var siege: Dictionary = _lord_sieges[lord]
+	var settlement := GameData.get_settlement(siege.castle)
+	var castle := Economy.get_castle(siege.castle)
+	if castle == null or lord.map_position().distance_to(Vector2(settlement.position[0], settlement.position[1])) > _siege_reach(settlement):
+		_lift_lord_siege(lord)   # couldn't get to the walls
+		return
+	siege.until = Time.get_ticks_msec() * 0.001 + Battle.siege_time(castle)
+	siege.label = _make_siege_label()
+	_place_siege_label(siege.label, siege.castle)
+	EventBus.siege_started.emit(siege.castle, lord.party_name, siege.until)
+
+
+func _lift_lord_siege(lord: Party) -> void:
+	if not _lord_sieges.has(lord):
+		return
+	var siege: Dictionary = _lord_sieges[lord]
+	_lord_sieges.erase(lord)
+	_lord_timers[lord] = 1.0
+	if siege.label != null:
+		siege.label.queue_free()
+		EventBus.siege_ended.emit(siege.castle)
+
+
+func _update_lord_sieges() -> void:
+	var now := Time.get_ticks_msec() * 0.001
+	for lord: Party in _lord_sieges.keys():
+		var siege: Dictionary = _lord_sieges[lord]
+		if siege.until == 0.0:
+			if not lord.moving:
+				_lift_lord_siege(lord)   # stopped short of the walls
+			continue
+		if now < siege.until:
+			siege.label.text = "Siege: %d s" % ceili(siege.until - now)
+		else:
+			var castle_id: String = siege.castle
+			_lift_lord_siege(lord)
+			_lord_storm(lord, castle_id)
+
+
+func _lord_storm(lord: Party, castle_id: String) -> void:
+	var castle := Economy.get_castle(castle_id)
+	var mine := Economy.get_castle(lord.home)
+	if castle == null or mine == null:
+		return
+	var yours := castle.owner == "player"
+	var result := Battle.assault(mine, castle, hash(lord.id + castle_id) + Time.get_ticks_msec(), Economy.MAIN_CASTLE)
+	var report := {
+		"attacker": lord.party_name, "defender": castle.castle_name,
+		"attacker_faction": lord.faction_id, "defender_faction": castle.owner,
+		"place": castle.castle_name, "winner": result.winner, "a": result.a, "b": result.b,
+		"loot": result.loot, "player": "b" if yours else "", "siege": true,
+		"outcome": result.outcome, "spoils": result.get("spoils", {}),
+	}
+	var now := Time.get_ticks_msec() * 0.001
+	_castle_truce[castle_id] = now + CASTLE_TRUCE
+	lord.truce_until = now + TRUCE
+	if result.outcome == "captured":
+		Economy.capture(castle, lord.faction_id, GameData.parties, GameData.settlements)
+	if result.outcome == "held":
+		_send_home(lord)
+	else:
+		_lord_timers[lord] = 2.0
+	Economy.save_game()
+	Economy.changed.emit()
+	EventBus.battle_fought.emit(report)
 
 
 func _pick_raid_target(party: Party) -> Dictionary:
@@ -538,7 +678,7 @@ func _check_encounters() -> void:
 	if player == null or not player.can_fight() or Economy.warband_home:
 		return
 	for lord in parties:
-		if lord == player or lord.chasing != null or not lord.can_fight() \
+		if lord == player or lord.chasing != null or _lord_sieges.has(lord) or not lord.can_fight() \
 				or not GameData.at_war(lord.faction_id, player.faction_id):
 			continue
 		_sized_up[lord] = _sized_up.get(lord, 0.0) - 0.2
@@ -563,9 +703,13 @@ func _fight(attacker: Party, defender: Party) -> void:
 		return
 	var result := Battle.resolve(castle_a, castle_d, hash(attacker.id + defender.id) + Time.get_ticks_msec())
 	var truce := Time.get_ticks_msec() * 0.001 + TRUCE
+	var lifted := ""
 	for p in [attacker, defender]:
+		if _lord_sieges.has(p) and _lord_sieges[p].until > 0.0:
+			lifted = GameData.get_settlement(_lord_sieges[p].castle).name
 		p.stop()
 		p.truce_until = truce
+		_lift_lord_siege(p)
 	var loser := defender if result.winner == "a" else attacker
 	var report := {
 		"attacker": attacker.party_name, "defender": defender.party_name,
@@ -573,6 +717,7 @@ func _fight(attacker: Party, defender: Party) -> void:
 		"place": _nearest_settlement_name(defender.map_position()),
 		"winner": result.winner, "a": result.a, "b": result.b, "loot": result.loot,
 		"player": "a" if attacker == player else ("b" if defender == player else ""),
+		"lifted": lifted,
 	}
 	for p in [attacker, defender]:
 		if p != player:

@@ -370,6 +370,11 @@ func test_capture() -> void:
 	eco.capture(north, "aldmere", parties, settlements)
 	check(eco.home_of("jarl", "north") == "", "with no castle left the jarl is gone")
 	check(eco.exiled.has("jarl"), "and counted as exiled")
+	check(eco.newcomer_protected(), "a new main castle is safe from sieges")
+	for b in eco.player_castle.buildings:
+		if b.type == "keep":
+			b.level = Economy.PROTECTED_BELOW_KEEP
+	check(not eco.newcomer_protected(), "until its keep reaches level %d" % Economy.PROTECTED_BELOW_KEEP)
 	# With several castles of your own, the main one is still found on loading.
 	eco.castles = [north, eco.player_castle, south] as Array[CastleState]
 	north.owner = "player"

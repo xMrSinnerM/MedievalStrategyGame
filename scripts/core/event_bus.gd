@@ -24,3 +24,7 @@ signal siege_requested(castle_id: String)
 signal attack_requested(party_id: String)
 ## Two warbands fought. The report is described in parties_layer._fight().
 signal battle_fought(report: Dictionary)
+## A lord laid siege to a castle; the assault comes at `until` (seconds since start).
+signal siege_started(castle_id: String, besieger: String, until: float)
+## A lord's siege ended: stormed, lifted or abandoned.
+signal siege_ended(castle_id: String)
