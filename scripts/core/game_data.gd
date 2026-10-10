@@ -11,7 +11,7 @@ const PLAYER_PATH := "res://data/player.json"
 var terrain_config: Dictionary = {}
 var factions: Array[Dictionary] = []
 var factions_by_id: Dictionary = {}
-var wars: Array = []                   ## [faction id, faction id] pairs at war
+var wars: Array = []                   ## [faction id, faction id] pairs at war when a game starts
 var settlements: Array[Dictionary] = []
 var settlements_by_id: Dictionary = {}
 var terrain: TerrainData
@@ -87,6 +87,9 @@ func get_faction(id: String) -> Dictionary:
 
 
 func at_war(a: String, b: String) -> bool:
+	## Wars change during a game (Economy.diplomacy); "wars" is how it starts.
+	if Economy.diplomacy != null:
+		return Economy.diplomacy.at_war(Economy.faction_of(a), Economy.faction_of(b))
 	for pair in wars:
 		if (pair[0] == a and pair[1] == b) or (pair[0] == b and pair[1] == a):
 			return true
