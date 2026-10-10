@@ -307,15 +307,18 @@ Each shows a palisade, tents and a black banner, with its name and level, and
 a countdown while it rebuilds.
 
 Click a camp to see its level and wins towards the next, its garrison,
-palisade and loot, the march time and your chances, then press **Attack with
-your garrison**. As in Empire: Four Kingdoms, the soldiers leave your main
+palisade and loot, the march time and your chances, then press **Prepare
+attack**. The attack screen lets you pick how many of each soldier to send
+(or All, Half, None) and shows, as you change it, your chances and the losses
+to expect (from a dozen simulated battles), how much of the loot they can carry
+and the march time. As in Empire: Four Kingdoms, the soldiers leave your main
 castle's garrison and march on a timer (6 map units a second, at least 10
 seconds each way), fight on arrival, and march home with the loot, which goes
 into your storage. You see your armies on the map with their time left, a
 battle report when they fight, and "Armies away" at the top of the screen.
 Marches carry on while the game is closed and are settled when you load it.
 Your warband's soldiers can join the garrison when it is home (the warband
-panel); choosing exactly which soldiers to send comes next.
+panel).
 
 ## Project layout
 
@@ -395,7 +398,7 @@ How the parts work:
 - [x] Diplomacy screen
 - [x] Robber baron rules: levels, garrisons, loot, rebuilding
 - [x] Robber baron camps on the map and sent attacks
-- [ ] Attack screen: choose your soldiers
+- [x] Attack screen: choose your soldiers
 
 ## Known limitations
 
