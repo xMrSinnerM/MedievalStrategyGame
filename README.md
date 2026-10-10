@@ -108,7 +108,26 @@ switching is instant and the map keeps its camera and your party's route.
 - **Under construction** (top left) lists every job with a countdown, and a
   timer floats over each building site.
 - Camera: WASD or drag to pan, Q/E or right-drag to rotate, wheel to zoom.
-- NPC castles open in the same screen read-only, ready for step 3.
+- NPC castles open in the same screen read-only.
+
+### Castles on the world map
+
+**Your Castle** stands just south-east of Highford, with its name in gold.
+Every castle on the map now has an economy. Click one to see who holds it,
+its keep level, defence and income, then **Enter castle** (yours),
+**Look inside** (an NPC lord's) or **Travel here**. Clicking towns, villages
+and open ground still sends your party straight there.
+
+- Your castle's map position is in `data/player.json`, so regenerating
+  `settlements.json` doesn't lose it.
+- NPC castles are run by `NpcBrain` under exactly the same rules as yours:
+  same costs, build times, builders and storage. Whenever a builder is free it
+  starts the most useful thing it can afford (the keep once nothing else can
+  grow, a storehouse when the keep needs more room, the producer of its
+  slowest resource, the wall, then the keep anyway).
+- On a new game each NPC castle starts with 12 to 72 hours of building behind
+  it, so lords are a little ahead of you. NPC castles keep building while the
+  game is closed (up to a week is simulated decision by decision).
 
 - **Buildings** are defined in `data/buildings.json`: keep, castle wall,
   woodcutter, quarry, farm, house (taxes in gold) and storehouse. Each has a
@@ -134,12 +153,12 @@ godot --headless --path . --script res://tests/test_economy.gd
 ## Project layout
 
 ```
-data/        JSON: terrain config, factions, settlements, roads, parties, buildings
+data/        JSON: terrain config, factions, settlements, roads, parties, buildings, player
 world/       heightmap, biome mask, rivers
 scenes/      main.tscn -> world_map/world_map.tscn and castle/castle_view.tscn
 scripts/
   core/      main (switches map and castle), GameData, EventBus and Economy autoloads, map style
-  economy/   castle economy: building rules, castle state
+  economy/   castle economy: building rules, castle state, NPC brain
   castle/    castle screen: view, camera, placeholder building models
   terrain/   generator, terrain data and queries, terrain/water/river/tree layers
   world/     world map root, settlements, banners, roads, parchment overlay
@@ -196,7 +215,7 @@ How the parts work:
 - [x] Parties with pathfinding
 - [x] Castle economy: resources, buildings, build timers, offline progress, saving
 - [x] Castle screen: place and upgrade buildings
-- [ ] Your castle and NPC castles on the world map
+- [x] Your castle and NPC castles on the world map
 
 ## Known limitations
 

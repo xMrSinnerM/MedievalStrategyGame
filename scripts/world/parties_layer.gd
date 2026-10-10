@@ -2,7 +2,8 @@ extends Node3D
 ## Spawns the parties from data/parties.json, moves the lords around their
 ## realms and lets the player send their own party anywhere with a click.
 ##
-## Controls: left click on the ground or a settlement to travel there,
+## Controls: left click on the ground, a town or a village to travel there
+## (clicking a castle opens its panel instead, which has a Travel button),
 ## F to centre the camera on your party.
 
 const ROUTE_SHADER := preload("res://shaders/route.gdshader")
@@ -52,6 +53,7 @@ func build() -> void:
 
 	_build_markers()
 	EventBus.camera_zoom_changed.connect(_on_zoom_changed)
+	EventBus.travel_requested.connect(_travel_to_settlement)
 	_set_status("Camped outside %s" % _nearest_settlement_name(player.map_position()) if player else "")
 
 
@@ -118,8 +120,22 @@ func _on_click(screen_pos: Vector2) -> void:
 		return
 	var target := Vector2(hit.x, hit.z)
 	var settlement := _settlement_at(target)
+	if settlement.get("type", "") == "castle":
+		EventBus.settlement_selected.emit(settlement.id)
+		return
+	EventBus.settlement_selected.emit("")
 	if not settlement.is_empty():
 		target = Vector2(settlement.position[0], settlement.position[1])
+	_travel(target, settlement)
+
+
+func _travel_to_settlement(settlement_id: String) -> void:
+	var settlement := GameData.get_settlement(settlement_id)
+	if player != null and not settlement.is_empty():
+		_travel(Vector2(settlement.position[0], settlement.position[1]), settlement)
+
+
+func _travel(target: Vector2, settlement: Dictionary) -> void:
 	if player.travel_to(target, settlement.get("id", "")):
 		_set_status("Travelling to %s" % settlement.name if not settlement.is_empty() else "Travelling")
 		_route_timer = 0.0
@@ -188,7 +204,7 @@ func _pick_lord_destination(party: Party) -> Dictionary:
 	var near: Array[Dictionary] = []
 	var all: Array[Dictionary] = []
 	for s in GameData.settlements:
-		if s.faction != party.faction_id or s.id == party.inside_settlement:
+		if s.faction != party.faction_id or s.id == party.inside_settlement or s.get("player", false):
 			continue
 		all.append(s)
 		if here.distance_to(Vector2(s.position[0], s.position[1])) < LORD_RANGE:

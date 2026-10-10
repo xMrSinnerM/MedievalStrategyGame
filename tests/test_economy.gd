@@ -19,6 +19,7 @@ func _initialize() -> void:
 	test_placement()
 	test_offline_catch_up_in_order()
 	test_save_round_trip()
+	test_npc_brain()
 	print("%d checks, %d failed" % [checks, failures])
 	quit(1 if failures > 0 else 0)
 
@@ -148,6 +149,33 @@ func test_save_round_trip() -> void:
 	c.advance_to(T0 + 4000.0)
 	near(copy.resources.stone, c.resources.stone, "loaded castle keeps running the same way")
 	check(copy.place("house", Vector2i(18, 18), T0 + 4000.0) > 0 and copy.get_building(copy.buildings[-1].id).type == "house", "new ids keep working after loading")
+
+
+func test_npc_brain() -> void:
+	var c := CastleState.create_new(rules, "npc", "NPC", "aldmere", T0)
+	c.resources = {"wood": 0.0, "stone": 0.0, "food": 0.0, "gold": 0.0}
+	check(NpcBrain.think(c, T0) == 0, "an NPC with no resources builds nothing")
+	c = CastleState.create_new(rules, "npc", "NPC", "aldmere", T0)
+	check(NpcBrain.think(c, T0) == 1, "an NPC puts its one builder to work")
+	check(c.free_builders() == 0, "and the builder is busy")
+	NpcBrain.catch_up(c, T0 + 3.0 * 86400.0)
+	check(c.keep_level() >= 2, "three days in, the NPC has upgraded its keep (level %d)" % c.keep_level())
+	check(c.buildings.size() > 6, "and put up more buildings (%d)" % c.buildings.size())
+	var overlaps := false
+	var negative := false
+	for b in c.buildings:
+		if b.cell.x >= 0 and not c.fits(b.type, b.cell, b.id):
+			overlaps = true
+	for r: String in c.resources:
+		if c.resources[r] < -0.001:
+			negative = true
+	print("NPC after 3 days: keep %d, %s" % [c.keep_level(), ", ".join(c.buildings.map(func(b): return "%s %d" % [b.type, b.level]))])
+	check(not overlaps, "NPC buildings don't overlap")
+	check(not negative, "NPC never spends more than it has")
+	var twin := CastleState.create_new(rules, "npc", "NPC", "aldmere", T0)
+	NpcBrain.think(twin, T0)
+	NpcBrain.catch_up(twin, T0 + 3.0 * 86400.0)
+	check(var_to_str(twin.to_dict()) == var_to_str(c.to_dict()), "NPC decisions are repeatable")
 
 
 func _first(c: CastleState, type: String) -> int:

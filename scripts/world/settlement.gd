@@ -69,7 +69,7 @@ func setup(data: Dictionary) -> void:
 	_label.text = settlement_name
 	_label.font_size = LABEL_SIZE[type]
 	_label.outline_size = 10
-	_label.modulate = Color(1.0, 0.96, 0.86)
+	_label.modulate = Color(1.0, 0.84, 0.4) if data.get("player", false) else Color(1.0, 0.96, 0.86)
 	_label.outline_modulate = Color(0.16, 0.11, 0.07, 0.9)
 	_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	_label.fixed_size = true
