@@ -65,11 +65,13 @@ func _build_environment() -> void:
 	env.adjustment_saturation = 1.08
 	env.adjustment_contrast = 1.04
 	var world_env := WorldEnvironment.new()
+	world_env.add_to_group("environment")
 	world_env.environment = env
 	add_child(world_env)
 
 	# Warm late-afternoon sun from the south-west.
 	var sun := DirectionalLight3D.new()
+	sun.add_to_group("sun")
 	sun.name = "Sun"
 	sun.light_color = Color(1.0, 0.9, 0.76)
 	sun.light_energy = 1.25

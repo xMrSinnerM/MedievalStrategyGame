@@ -349,11 +349,12 @@ func test_capture() -> void:
 		{"id": "far", "type": "castle", "faction": "varnholt", "position": [0, 900], "name": "Far"},
 	]
 	var parties: Array = [
-		{"id": "you", "faction": "aldmere", "home": "player_castle", "player": true},
+		{"id": "you", "faction": "aldmere", "home": "player_castle", "player": true, "troops": 24},
 		{"id": "jarl", "faction": "varnholt", "home": "north", "troops": 30},
 	]
 	eco.sync_castles(settlements, parties)
 	check(north.field.get("spearman", 0) == 30, "the jarl's warband starts at North")
+	check(eco.player_castle.field.get("spearman", 0) == 24, "your warband starts with its spearmen too")
 	north.troops = {"spearman": 5}
 	eco.capture(north, "player", parties, settlements)
 	check(north.owner == "player" and not north.is_npc(), "North is now yours")

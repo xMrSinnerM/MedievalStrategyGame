@@ -26,6 +26,7 @@ The continent, its names and its factions are original to this game.
 | M | Toggle the parchment map |
 | Home | Recentre |
 | F1 | Hide the help panel |
+| Esc | Pause menu: save, settings, main menu, quit |
 
 Your warband starts just outside Highford, with a gold ring around it. Click
 anywhere to march there: a dashed line shows the route, and the help panel says
@@ -85,6 +86,18 @@ villages around their lord) and **overwrites `data/settlements.json`**.
 to its lord with a track, avoiding steep ground and crossing rivers as rarely
 as it can; it **overwrites `data/roads.json`**. To move a settlement by hand,
 edit its position in `settlements.json` and run only the road tool again.
+
+## Menus and settings
+
+The game opens on a title screen: **Continue** your saved game, start a **New
+game** (it asks before replacing the save), change the **Settings** or quit.
+Esc during play pauses and opens the pause menu (resume, save, settings, back
+to the title screen, quit). Castles keep growing on the clock while paused,
+just as when the game is closed.
+
+Settings (fullscreen, vertical sync, shadows, ambient occlusion, 3D
+resolution and interface size) apply at once and are kept in
+`user://settings.cfg` by the `Settings` autoload.
 
 ## Castle economy
 
@@ -306,6 +319,9 @@ How the parts work:
 - [x] Siege rules and capturing castles
 - [x] Besieging castles from the map
 - [x] Lords besiege castles, including yours
+- [x] Main menu, pause menu and settings
+- [ ] Save slots
+- [ ] Diplomacy
 
 ## Known limitations
 

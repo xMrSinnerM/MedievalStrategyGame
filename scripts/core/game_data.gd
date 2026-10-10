@@ -45,6 +45,7 @@ func ensure_loaded() -> bool:
 
 	for s in load_json(SETTLEMENTS_PATH).get("settlements", []):
 		var settlement: Dictionary = s
+		settlement.first_faction = settlement.faction
 		settlements.append(settlement)
 		settlements_by_id[settlement.id] = settlement
 	# The player's own castle lives in player.json so the settlement generator
@@ -55,6 +56,7 @@ func ensure_loaded() -> bool:
 		own.type = "castle"
 		own.player = true
 		own.bound_to = null
+		own.first_faction = own.faction
 		settlements.append(own)
 		settlements_by_id[own.id] = own
 
@@ -69,6 +71,15 @@ func ensure_loaded() -> bool:
 
 	_loaded = true
 	return true
+
+
+func reset_settlements() -> void:
+	## Hands every settlement back to its first owner, ready for a game to
+	## mark the castles that changed hands (Economy.sync_castles).
+	for s in settlements:
+		s.faction = s.first_faction
+		if s.id != Economy.MAIN_CASTLE:
+			s.erase("player")
 
 
 func get_faction(id: String) -> Dictionary:
