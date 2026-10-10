@@ -2,6 +2,7 @@ extends Node
 ## Autoload that owns every castle's economy and the save file. It keeps the
 ## castles running in real time while the game is open, and when the game
 ## starts it catches them up on the time that passed while it was closed.
+## NPC castles are run by NpcBrain under the same rules as the player's.
 
 signal changed   ## something in a castle changed (resources tick, build finished, order given)
 
@@ -9,6 +10,8 @@ const SAVE_PATH := "user://savegame.json"
 const SAVE_VERSION := 1
 const TICK := 1.0              ## seconds between economy updates
 const AUTOSAVE := 30.0         ## seconds between autosaves
+## A new NPC castle starts with this many hours of building behind it (by seed).
+const NPC_HEAD_START_HOURS := Vector2(12.0, 72.0)
 
 var rules: BuildingRules
 var player_castle: CastleState
@@ -26,6 +29,35 @@ func ensure_loaded() -> void:
 	rules = BuildingRules.load_default()
 	if not load_game():
 		new_game()
+
+
+func sync_castles(settlements: Array) -> void:
+	## Gives every castle on the map an economy: the player's settlement uses
+	## the player's castle, every other castle gets an NPC economy (created
+	## with a head start the first time it appears, then saved like any other).
+	var added := false
+	for s in settlements:
+		if s.get("type", "") != "castle":
+			continue
+		if s.get("player", false):
+			player_castle.castle_name = s.get("name", player_castle.castle_name)
+			continue
+		if get_castle(s.id) != null:
+			continue
+		castles.append(new_npc_castle(rules, s.id, s.name, s.faction, now()))
+		added = true
+	if added:
+		save_game()
+		changed.emit()
+
+
+static func new_npc_castle(p_rules: BuildingRules, id: String, castle_name: String, faction: String, at: float) -> CastleState:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash(id)
+	var head_start := rng.randf_range(NPC_HEAD_START_HOURS.x, NPC_HEAD_START_HOURS.y) * 3600.0
+	var castle := CastleState.create_new(p_rules, id, castle_name, faction, at - head_start)
+	NpcBrain.catch_up(castle, at)
+	return castle
 
 
 func get_castle(castle_id: String) -> CastleState:
@@ -66,7 +98,10 @@ func load_game() -> bool:
 	# Catch up on everything that happened while the game was closed.
 	var t := now()
 	for c in castles:
-		c.advance_to(t)
+		if c.is_npc():
+			NpcBrain.catch_up(c, t)
+		else:
+			c.advance_to(t)
 	changed.emit()
 	return true
 
@@ -92,6 +127,8 @@ func _process(delta: float) -> void:
 		var t := now()
 		for c in castles:
 			c.advance_to(t)
+			if c.is_npc():
+				NpcBrain.think(c, t)
 		changed.emit()
 	_save_timer += delta
 	if _save_timer >= AUTOSAVE:

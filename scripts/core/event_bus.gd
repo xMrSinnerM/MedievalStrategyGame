@@ -12,3 +12,7 @@ signal party_status_changed(text: String)
 signal castle_requested(castle_id: String)
 ## Asks the game to go back to the world map.
 signal world_map_requested
+## A castle on the world map was clicked ("" when the selection is cleared).
+signal settlement_selected(settlement_id: String)
+## Asks the player's party to travel to a settlement.
+signal travel_requested(settlement_id: String)

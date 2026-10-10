@@ -6,6 +6,7 @@ const FACTIONS_PATH := "res://data/factions.json"
 const SETTLEMENTS_PATH := "res://data/settlements.json"
 const ROADS_PATH := "res://data/roads.json"
 const PARTIES_PATH := "res://data/parties.json"
+const PLAYER_PATH := "res://data/player.json"
 
 var terrain_config: Dictionary = {}
 var factions: Array[Dictionary] = []
@@ -44,6 +45,16 @@ func ensure_loaded() -> bool:
 		var settlement: Dictionary = s
 		settlements.append(settlement)
 		settlements_by_id[settlement.id] = settlement
+	# The player's own castle lives in player.json so the settlement generator
+	# can rewrite settlements.json without losing it. It is a castle like any
+	# other on the map, marked "player".
+	var own: Dictionary = load_json(PLAYER_PATH).get("castle", {})
+	if not own.is_empty():
+		own.type = "castle"
+		own.player = true
+		own.bound_to = null
+		settlements.append(own)
+		settlements_by_id[own.id] = own
 
 	roads = RoadNetwork.new()
 	roads.build(load_json(ROADS_PATH).get("roads", []), settlements, terrain)

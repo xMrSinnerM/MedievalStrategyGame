@@ -1,0 +1,9 @@
+{
+	"castle": {
+		"id": "player_castle",
+		"name": "Your Castle",
+		"faction": "aldmere",
+		"position": [1068.0, 916.0],
+		"rotation_deg": 200
+	}
+}
