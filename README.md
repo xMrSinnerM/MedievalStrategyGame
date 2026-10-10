@@ -286,6 +286,21 @@ gold they ask, and impossible while they are clearly winning) and send gifts of
 100 or 500 gold, each button showing the goodwill it would buy. Below are the
 other factions' wars and the latest news.
 
+## Robber barons
+
+Robber baron camps are the game's main source of loot, as in Empire: Four
+Kingdoms. Each camp starts at level 1, and every win against it counts towards
+its next level: one win per level at first, two from level 10 and three from
+level 20. A higher camp has a bigger garrison (14 soldiers at level 1, growing
+16% a level, with swordsmen from level 4 and horsemen from level 8), a stronger
+palisade and richer loot (15% more a level). Winners carry off up to 12
+resources per surviving soldier. A beaten camp rebuilds for 5 minutes plus 30
+seconds per level before it can be attacked again; a camp that holds keeps its
+level. All of these numbers live in `data/barons.json` (`BaronRules`), and each
+camp's level is saved with your game (`BaronCamp`, `Economy.barons`).
+
+Camps on the map and sending armies to them come next.
+
 ## Project layout
 
 ```
@@ -362,6 +377,8 @@ How the parts work:
 - [x] Save slots
 - [x] Diplomacy rules: relations, wars and peace between the factions
 - [x] Diplomacy screen
+- [x] Robber baron rules: levels, garrisons, loot, rebuilding
+- [ ] Robber baron camps on the map and sent attacks
 
 ## Known limitations
 

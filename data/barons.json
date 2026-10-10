@@ -1,0 +1,23 @@
+{
+	"_comment": "Robber baron camps. Values for level N grow from the level-1 value: base * growth^(N - 1).",
+	"max_level": 40,
+	"garrison_base": 14,
+	"garrison_growth": 1.16,
+	"armies": [
+		{ "from_level": 1, "mix": { "spearman": 0.7, "archer": 0.3 } },
+		{ "from_level": 4, "mix": { "spearman": 0.45, "archer": 0.35, "swordsman": 0.2 } },
+		{ "from_level": 8, "mix": { "spearman": 0.3, "archer": 0.3, "swordsman": 0.25, "horseman": 0.15 } }
+	],
+	"palisade_base": 20,
+	"palisade_per_level": 15,
+	"loot_base": { "wood": 140, "stone": 90, "food": 140, "gold": 70 },
+	"loot_growth": 1.15,
+	"carry_per_soldier": 12,
+	"defeats_per_level": [
+		{ "from_level": 1, "defeats": 1 },
+		{ "from_level": 10, "defeats": 2 },
+		{ "from_level": 20, "defeats": 3 }
+	],
+	"rebuild_base": 300,
+	"rebuild_per_level": 30
+}

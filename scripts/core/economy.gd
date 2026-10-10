@@ -29,6 +29,9 @@ var player_castle: CastleState
 var castles: Array[CastleState] = []   ## the player's first, then NPC castles
 ## Wars, truces and relations between the factions.
 var diplomacy: Diplomacy
+## Robber baron camps and how far you have levelled each of them.
+var baron_rules: BaronRules
+var barons: Array[BaronCamp] = []
 
 ## Lords whose home castle changed since data/parties.json: party id -> castle id.
 var homes := {}
@@ -67,6 +70,7 @@ func ensure_loaded() -> void:
 		return
 	_loaded = true
 	rules = BuildingRules.load_default()
+	baron_rules = BaronRules.load_default()
 	if not load_game():
 		new_game()
 
@@ -129,6 +133,7 @@ func delete_slot(n: int) -> void:
 func begin_new(n := 1) -> void:
 	## Starts a fresh game in slot n from the title screen (replacing what was there).
 	rules = BuildingRules.load_default()
+	baron_rules = BaronRules.load_default()
 	slot = n
 	_loaded = true
 	new_game()
@@ -137,6 +142,7 @@ func begin_new(n := 1) -> void:
 func begin_load(n := 1) -> void:
 	## Continues the game in slot n from the title screen.
 	rules = BuildingRules.load_default()
+	baron_rules = BaronRules.load_default()
 	slot = n
 	_loaded = true
 	if not load_game():
@@ -285,6 +291,26 @@ static func new_npc_castle(p_rules: BuildingRules, id: String, castle_name: Stri
 	return castle
 
 
+func sync_barons(camps: Array) -> void:
+	## Makes sure every camp listed (id, name, position, optional level) has a
+	## state in this game; camps keep the level you raised them to.
+	var added := false
+	for c: Dictionary in camps:
+		if get_baron(c.id) == null:
+			barons.append(BaronCamp.create(c.id, c.get("name", c.id),
+					Vector2(c.position[0], c.position[1]), int(c.get("level", 1))))
+			added = true
+	if added:
+		save_game()
+
+
+func get_baron(camp_id: String) -> BaronCamp:
+	for b in barons:
+		if b.id == camp_id:
+			return b
+	return null
+
+
 func faction_of(owner: String) -> String:
 	## The faction a castle owner belongs to ("player" is the player's faction).
 	return player_faction if owner == "player" else owner
@@ -372,6 +398,7 @@ func new_game() -> void:
 	player_castle = CastleState.create_new(rules, MAIN_CASTLE, "Your Castle", "player", now())
 	castles.append(player_castle)
 	diplomacy = Diplomacy.from_data_files(now())
+	barons.clear()
 	save_game()
 	changed.emit()
 
@@ -392,6 +419,9 @@ func load_game() -> bool:
 	for c in data.get("castles", []):
 		castles.append(CastleState.from_dict(rules, c))
 	diplomacy = Diplomacy.from_dict(data.get("diplomacy", {}), now())
+	barons.clear()
+	for b in data.get("barons", []):
+		barons.append(BaronCamp.from_dict(b))
 	player_castle = find_main_castle()
 	if player_castle == null:
 		return false
@@ -417,7 +447,8 @@ func save_game() -> void:
 		return
 	f.store_string(JSON.stringify({"version": SAVE_VERSION, "saved_at": now(), "castles": list,
 			"homes": homes, "exiled": exiled.keys(),
-			"diplomacy": diplomacy.to_dict() if diplomacy != null else {}}, "\t", true, true))
+			"diplomacy": diplomacy.to_dict() if diplomacy != null else {},
+			"barons": barons.map(func(b: BaronCamp) -> Dictionary: return b.to_dict())}, "\t", true, true))
 	f.close()
 
 
