@@ -10,8 +10,10 @@ config_version=5
 
 [application]
 
-config/name="Medieval Strategy - World Map"
-config/description="Phase 1 prototype: campaign world map."
+config/name="Medieval Strategy"
+config/description="Medieval strategy game prototype: campaign world map and castle economy."
+config/use_custom_user_dir=true
+config/custom_user_dir_name="MedievalStrategy"
 run/main_scene="res://scenes/main.tscn"
 config/features=PackedStringArray("4.3", "Forward Plus")
 
@@ -19,6 +21,7 @@ config/features=PackedStringArray("4.3", "Forward Plus")
 
 EventBus="*res://scripts/core/event_bus.gd"
 GameData="*res://scripts/core/game_data.gd"
+Economy="*res://scripts/core/economy.gd"
 
 [display]
 

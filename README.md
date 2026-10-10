@@ -1,8 +1,9 @@
-# Medieval Strategy: World Map Prototype
+# Medieval Strategy
 
 A medieval strategy game that combines castle building and an economy with a
-campaign world map. This repository holds **phase 1: the world map
-prototype**. It's built in **Godot 4.3+** (GDScript; tested in 4.3 and 4.7.2) and targets PC.
+campaign world map. **Phase 1, the world map, is done; phase 2, the castle
+and its economy, is under way.** It is free of pay-to-win: nothing that could
+ever be bought gives a gameplay advantage. It's built in **Godot 4.3+** (GDScript; tested in 4.3 and 4.7.2) and targets PC.
 
 The continent, its names and its factions are original to this game.
 
@@ -84,20 +85,51 @@ to its lord with a track, avoiding steep ground and crossing rivers as rarely
 as it can; it **overwrites `data/roads.json`**. To move a settlement by hand,
 edit its position in `settlements.json` and run only the road tool again.
 
+## Castle economy
+
+Your castle produces **wood, stone, food and gold** in real time, including
+while the game is closed: when you start it again, the castle catches up on the
+time that passed. The help panel on the world map shows your stock, storage
+limit and production per hour. (The castle screen, where you place and upgrade
+buildings, is the next step.)
+
+- **Buildings** are defined in `data/buildings.json`: keep, castle wall,
+  woodcutter, quarry, farm, house (taxes in gold) and storehouse. Each has a
+  level-1 cost, build time and output, and a growth factor per level
+  (`value x growth^(level - 1)`), so balancing means changing a few numbers.
+- **The keep sets the limits**: other buildings can go up to twice its level,
+  it decides how many of each you may build, and it adds builders (one at
+  first, more at keep levels 3 and 5). Builders are the only way to build
+  faster; there is no premium currency and nothing to buy.
+- **Storage** comes from the keep and storehouses and caps every resource.
+- **Saving** is automatic every 30 seconds and on quit, to `savegame.json` in
+  the game's user folder (`%APPDATA%\MedievalStrategy` on Windows). Delete it
+  to start over.
+- `CastleState` runs one castle and is written so NPC castles can use exactly
+  the same code later.
+
+Run the economy tests with:
+
+```
+godot --headless --path . --script res://tests/test_economy.gd
+```
+
 ## Project layout
 
 ```
-data/        JSON: terrain config, factions, settlements, roads
+data/        JSON: terrain config, factions, settlements, roads, parties, buildings
 world/       heightmap, biome mask, rivers
 scenes/      main.tscn -> world_map/world_map.tscn
 scripts/
-  core/      GameData and EventBus autoloads, shared map style
+  core/      GameData, EventBus and Economy autoloads, shared map style
+  economy/   castle economy: building rules, castle state
   terrain/   generator, terrain data and queries, terrain/water/river/tree layers
   world/     world map root, settlements, banners, roads, parchment overlay
   camera/    campaign camera
   ui/        debug HUD
   tools/     command-line tools (world generator, settlements, roads)
-shaders/     terrain, water, river, tree, prop, flag, parchment (+ shared fog include)
+shaders/     terrain, water, river, tree, prop, flag, route, parchment (+ shared fog include)
+tests/       headless tests (economy)
 ```
 
 How the parts work:
@@ -144,6 +176,9 @@ How the parts work:
 - [x] Terrain, water, rivers, trees, fog, camera, parchment map
 - [x] Settlements (towns, castles, villages), banners, labels, roads
 - [x] Parties with pathfinding
+- [x] Castle economy: resources, buildings, build timers, offline progress, saving
+- [ ] Castle screen: place and upgrade buildings
+- [ ] Your castle and NPC castles on the world map
 
 ## Known limitations
 

@@ -1,0 +1,107 @@
+{
+	"resources": ["wood", "stone", "food", "gold"],
+	"grid_size": 24,
+	"start": {
+		"resources": { "wood": 400, "stone": 400, "food": 300, "gold": 200 },
+		"buildings": [
+			{ "type": "keep", "level": 1, "cell": [10, 10] },
+			{ "type": "wall", "level": 1 },
+			{ "type": "woodcutter", "level": 1, "cell": [4, 5] },
+			{ "type": "farm", "level": 1, "cell": [15, 4] }
+		]
+	},
+	"buildings": {
+		"keep": {
+			"name": "Keep",
+			"description": "The heart of the castle. Its level caps every other building and adds builders.",
+			"size": [4, 4],
+			"unique": true,
+			"max_level": 5,
+			"cost": { "wood": 300, "stone": 400, "gold": 100 },
+			"cost_growth": 2.4,
+			"time": 60,
+			"time_growth": 2.5,
+			"storage": 1000,
+			"storage_growth": 1.6,
+			"builders": [1, 1, 2, 2, 3]
+		},
+		"wall": {
+			"name": "Castle Wall",
+			"description": "Rings the castle grounds. Defence against sieges in a later phase.",
+			"placement": "perimeter",
+			"unique": true,
+			"max_level": 5,
+			"cost": { "wood": 100, "stone": 300 },
+			"cost_growth": 2.0,
+			"time": 45,
+			"time_growth": 2.2,
+			"defense": 100,
+			"defense_growth": 1.8
+		},
+		"woodcutter": {
+			"name": "Woodcutter",
+			"description": "Fells timber.",
+			"size": [2, 2],
+			"max_level": 10,
+			"max_count": [2, 3, 4, 5, 6],
+			"cost": { "wood": 60, "stone": 30 },
+			"cost_growth": 1.55,
+			"time": 20,
+			"time_growth": 1.6,
+			"produces": { "wood": 40 },
+			"production_growth": 1.35
+		},
+		"quarry": {
+			"name": "Quarry",
+			"description": "Cuts stone.",
+			"size": [2, 2],
+			"max_level": 10,
+			"max_count": [2, 3, 4, 5, 6],
+			"cost": { "wood": 70, "stone": 20 },
+			"cost_growth": 1.55,
+			"time": 25,
+			"time_growth": 1.6,
+			"produces": { "stone": 32 },
+			"production_growth": 1.35
+		},
+		"farm": {
+			"name": "Farm",
+			"description": "Grows food. Troops will eat it once recruitment arrives.",
+			"size": [3, 3],
+			"max_level": 10,
+			"max_count": [2, 3, 4, 5, 6],
+			"cost": { "wood": 50, "stone": 20 },
+			"cost_growth": 1.5,
+			"time": 20,
+			"time_growth": 1.6,
+			"produces": { "food": 45 },
+			"production_growth": 1.35
+		},
+		"house": {
+			"name": "House",
+			"description": "Townsfolk who pay taxes in gold.",
+			"size": [2, 2],
+			"max_level": 10,
+			"max_count": [2, 4, 6, 8, 10],
+			"cost": { "wood": 80, "stone": 40 },
+			"cost_growth": 1.55,
+			"time": 30,
+			"time_growth": 1.6,
+			"produces": { "gold": 15 },
+			"production_growth": 1.35
+		},
+		"storehouse": {
+			"name": "Storehouse",
+			"description": "Raises how much of every resource the castle can hold.",
+			"size": [3, 3],
+			"max_level": 10,
+			"max_count": [1, 1, 2, 2, 3],
+			"cost": { "wood": 120, "stone": 80 },
+			"cost_growth": 1.6,
+			"time": 40,
+			"time_growth": 1.7,
+			"storage": 800,
+			"storage_growth": 1.5
+		}
+	}
+}

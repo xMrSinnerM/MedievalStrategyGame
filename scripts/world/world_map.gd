@@ -16,6 +16,7 @@ func _ready() -> void:
 	if not GameData.ensure_loaded():
 		push_error("World data failed to load; see errors above.")
 		return
+	Economy.ensure_loaded()
 	var started := Time.get_ticks_msec()
 	_build_environment()
 	terrain.build()
