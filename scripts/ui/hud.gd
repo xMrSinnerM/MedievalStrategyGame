@@ -32,4 +32,11 @@ func _unhandled_input(event: InputEvent) -> void:
 func _process(_delta: float) -> void:
 	if not visible:
 		return
-	_info.text = "Click: travel there    F: find your party\nWASD / drag: pan    Q E / right-drag: rotate    wheel: zoom\nM: parchment map    Home: recentre    F1: hide\nYour party: %s\nzoom %d%%    %d fps" % [_party_status, int(_zoom_t * 100.0), Engine.get_frames_per_second()]
+	var castle: CastleState = Economy.player_castle
+	var stock := ""
+	if castle:
+		var cap := castle.storage_capacity()
+		var rates := castle.production_per_hour()
+		for r in Economy.rules.resources:
+			stock += "%s %d/%d (+%d/h)   " % [r.capitalize(), int(castle.resources[r]), int(cap), int(rates[r])]
+	_info.text = stock + "\n" + "Click: travel there    F: find your party\nWASD / drag: pan    Q E / right-drag: rotate    wheel: zoom\nM: parchment map    Home: recentre    F1: hide\nYour party: %s\nzoom %d%%    %d fps" % [_party_status, int(_zoom_t * 100.0), Engine.get_frames_per_second()]
