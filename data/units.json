@@ -1,0 +1,51 @@
+{
+	"queue_size": 5,
+	"max_batch": 50,
+	"time_per_barracks_level": 0.92,
+	"units": {
+		"spearman": {
+			"name": "Spearman",
+			"plural": "Spearmen",
+			"description": "Cheap and sturdy. Holds a line against horsemen.",
+			"barracks_level": 1,
+			"cost": { "gold": 12, "food": 10 },
+			"time": 20,
+			"upkeep": 1.0,
+			"attack": 8,
+			"defense": 12
+		},
+		"archer": {
+			"name": "Archer",
+			"plural": "Archers",
+			"description": "Strikes from behind walls and shield lines.",
+			"barracks_level": 2,
+			"cost": { "gold": 15, "wood": 14 },
+			"time": 28,
+			"upkeep": 1.0,
+			"attack": 12,
+			"defense": 6
+		},
+		"swordsman": {
+			"name": "Swordsman",
+			"plural": "Swordsmen",
+			"description": "Armoured foot soldier, good at everything.",
+			"barracks_level": 3,
+			"cost": { "gold": 28, "stone": 8, "food": 10 },
+			"time": 45,
+			"upkeep": 1.5,
+			"attack": 16,
+			"defense": 15
+		},
+		"horseman": {
+			"name": "Horseman",
+			"plural": "Horsemen",
+			"description": "Fast and hard-hitting, and hungry.",
+			"barracks_level": 4,
+			"cost": { "gold": 45, "food": 25 },
+			"time": 70,
+			"upkeep": 3.0,
+			"attack": 24,
+			"defense": 12
+		}
+	}
+}

@@ -43,6 +43,8 @@ static func build(type: String, level: int, size: Vector2i, constructing: bool) 
 				_house(kit, level)
 			"storehouse":
 				_storehouse(kit, level)
+			"barracks":
+				_barracks(kit, level)
 			_:
 				kit.box(STONE, Transform3D(), Vector3(w * 0.8, 2.0, d * 0.8))
 		if constructing:
@@ -189,6 +191,32 @@ static func _storehouse(kit: MeshKit, level: int) -> void:
 			kit.box(WOOD, Transform3D(Basis(Vector3.UP, 0.3 * i), at), Vector3(0.5, 0.5, 0.5))
 		else:
 			kit.cylinder(WOOD_LIGHT, Transform3D(Basis(), at), 0.25, 0.6, 7)
+
+
+static func _barracks(kit: MeshKit, level: int) -> void:
+	# A long hall along the north side and a training yard in front of it.
+	var hall := Transform3D(Basis(), Vector3(0, 0, -1.6))
+	var h := 1.8 + 0.15 * level
+	kit.box(STONE_DARK, hall, Vector3(5.2, 0.4, 2.2))
+	kit.box(PLASTER, hall.translated(Vector3(0, 0.4, 0)), Vector3(5.0, h, 2.0))
+	kit.box(WOOD, hall.translated(Vector3(0, 0.4 + h * 0.5, 0)), Vector3(5.05, 0.12, 2.05))
+	kit.gable_roof(ROOF, hall.translated(Vector3(0, h + 0.4, 0)), 5.0, 2.0, 1.1)
+	kit.box(WOOD, Transform3D(Basis(), Vector3(0, 0.4, -0.59)), Vector3(0.9, 1.3, 0.05))
+	kit.box(SOIL.lightened(0.15), Transform3D(Basis(), Vector3(0, 0, 1.2)), Vector3(5.4, 0.05, 3.0))
+	# Training dummies: a post with a crossbar and a straw sack.
+	var dummies := mini(2 + level / 3, 4)
+	for i in dummies:
+		var at := Vector3(-1.8 + 1.2 * i, 0.05, 1.5)
+		kit.box(WOOD, Transform3D(Basis(), at), Vector3(0.12, 1.5, 0.12))
+		kit.box(WOOD, Transform3D(Basis(), at + Vector3(0, 1.1, 0)), Vector3(0.7, 0.1, 0.1))
+		kit.cylinder(THATCH, Transform3D(Basis(), at + Vector3(0, 0.75, 0)), 0.22, 0.45, 6)
+	# A rack of spears.
+	var rack := Vector3(2.3, 0.05, 1.0)
+	kit.box(WOOD, Transform3D(Basis(), rack), Vector3(0.12, 0.9, 1.4))
+	for i in 4:
+		kit.box(WOOD_LIGHT, Transform3D(Basis(Vector3.RIGHT, 0.15), rack + Vector3(0.1, 0, -0.5 + 0.33 * i)), Vector3(0.05, 1.8, 0.05))
+	kit.cylinder(WOOD, Transform3D(Basis(), Vector3(-2.5, 0.05, 2.5)), 0.06, 3.0, 5)
+	kit.box(BANNER, Transform3D(Basis(), Vector3(-2.1, 2.3, 2.5)), Vector3(0.8, 0.6, 0.05))
 
 
 # --- Construction ---------------------------------------------------------------

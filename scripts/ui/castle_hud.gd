@@ -15,9 +15,13 @@ var _title: Label
 var _resource_labels := {}
 var _builders_label: Label
 var _defense_label: Label
+var _troops_label: Label
+var _recruit: VBoxContainer
 var _build_menu: PanelContainer
 var _build_buttons := {}       ## type -> Button
 var _side_panel: PanelContainer
+var _side_scroll: ScrollContainer
+var _side_box: VBoxContainer
 var _side_title: Label
 var _side_level: Label
 var _side_text: RichTextLabel
@@ -87,7 +91,7 @@ func _build_top_bar() -> void:
 	bar.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
 	add_child(bar)
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 20)
+	row.add_theme_constant_override("separation", 14)
 	bar.add_child(row)
 	_title = _label("", 18, Color(1.0, 0.9, 0.65))
 	row.add_child(_title)
@@ -99,6 +103,8 @@ func _build_top_bar() -> void:
 	row.add_child(_builders_label)
 	_defense_label = _label("", 15, TEXT)
 	row.add_child(_defense_label)
+	_troops_label = _label("", 15, TEXT)
+	row.add_child(_troops_label)
 	var spacer := Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(spacer)
@@ -121,7 +127,7 @@ func _build_build_menu() -> void:
 	var title := _label("Build", 16, Color(1.0, 0.9, 0.65))
 	row.add_child(title)
 	for type: String in Economy.rules.types:
-		if Economy.rules.is_perimeter(type) or Economy.rules.is_unique(type):
+		if Economy.rules.is_perimeter(type) or type == "keep":
 			continue
 		var b := _button("")
 		b.custom_minimum_size = Vector2(138, 64)
@@ -140,9 +146,16 @@ func _build_side_panel() -> void:
 	_side_panel.custom_minimum_size = Vector2(330, 0)
 	_side_panel.visible = false
 	add_child(_side_panel)
+	# The panel scrolls when its content (the barracks) is taller than the
+	# space between the top bar and the build menu.
+	_side_scroll = ScrollContainer.new()
+	_side_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_side_panel.add_child(_side_scroll)
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 8)
-	_side_panel.add_child(box)
+	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_side_scroll.add_child(box)
+	_side_box = box
 	var head := HBoxContainer.new()
 	box.add_child(head)
 	_side_title = _label("", 20, Color(1.0, 0.9, 0.65))
@@ -179,6 +192,10 @@ func _build_side_panel() -> void:
 	_cancel_button = _button("Cancel construction")
 	_cancel_button.pressed.connect(func() -> void: view.cancel_selected())
 	buttons.add_child(_cancel_button)
+	_recruit = preload("res://scripts/ui/recruit_panel.gd").new()
+	_recruit.hud = self
+	_recruit.visible = false
+	box.add_child(_recruit)
 
 
 func _build_queue_panel() -> void:
@@ -216,6 +233,8 @@ func _process(delta: float) -> void:
 			_progress.value = 100.0 * (1.0 - castle.time_left(sel.id, t) / maxf(total, 1.0))
 			var left: String = view.format_time(castle.time_left(sel.id, t))
 			_side_level.text = ("Being built, %s left" % left) if sel.level == 0 else ("Level %d → %d, %s left" % [sel.level, sel.target, left])
+	if _recruit.visible:
+		_recruit.update_progress(t)
 	if _toast_time > 0.0:
 		_toast_time -= delta
 		_toast.modulate.a = clampf(_toast_time, 0.0, 1.0)
@@ -228,12 +247,15 @@ func _refresh() -> void:
 	var rules := castle.rules
 	_title.text = castle.castle_name
 	var cap := castle.storage_capacity()
-	var rates := castle.production_per_hour()
+	var rates := castle.net_per_hour()
 	for r: String in _resource_labels:
-		_resource_labels[r].text = "%s %d/%d  +%d/h" % [r.capitalize(), int(castle.resources.get(r, 0.0)), int(cap), int(rates.get(r, 0.0))]
+		_resource_labels[r].text = "%s %d/%d  %+d/h" % [r.capitalize(), int(castle.resources.get(r, 0.0)), int(cap), int(rates.get(r, 0.0))]
 	var total_builders := rules.builders(castle.keep_level())
 	_builders_label.text = "Builders %d / %d" % [castle.free_builders(), total_builders]
 	_defense_label.text = "Defence %d" % int(castle.defense())
+	_troops_label.text = "Troops %d" % castle.troop_count()
+	_troops_label.tooltip_text = "Soldiers eat %d food an hour" % int(castle.upkeep_per_hour())
+	_troops_label.mouse_filter = Control.MOUSE_FILTER_PASS
 
 	for type: String in _build_buttons:
 		var b: Button = _build_buttons[type]
@@ -322,6 +344,17 @@ func _refresh_side_panel() -> void:
 	_upgrade_button.text = "Upgrade to level %d" % next
 	_move_button.visible = view.editable and b.cell.x >= 0
 	_cancel_button.visible = view.editable and building
+	_recruit.visible = type == "barracks" and b.level > 0
+	if _recruit.visible:
+		_recruit.refresh()
+	_fit_side_panel.call_deferred()
+
+
+func _fit_side_panel() -> void:
+	var room := get_viewport().get_visible_rect().size.y - 58.0 - (150.0 if _build_menu.visible else 40.0)
+	var want := _side_box.get_combined_minimum_size()
+	_side_scroll.custom_minimum_size = Vector2(want.x + 10.0, minf(want.y, room))
+	_side_panel.reset_size()
 
 
 func _stats(type: String, level: int) -> String:

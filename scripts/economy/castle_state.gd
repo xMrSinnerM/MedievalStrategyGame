@@ -1,8 +1,9 @@
 class_name CastleState
 extends RefCounted
 ## One castle's economy: its stock of resources, its buildings on the castle
-## grid and the constructions under way. The same class runs the player's
-## castle and NPC castles; only who gives the orders differs.
+## grid, the constructions under way, its garrison of soldiers and the
+## barracks' training queue. The same class runs the player's castle and NPC
+## castles; only who gives the orders differs.
 ##
 ## Time is passed in explicitly (Unix seconds) so the castle can catch up on
 ## hours spent offline in one call, and so tests can fast-forward.
@@ -17,6 +18,9 @@ var rules: BuildingRules
 var resources := {}            ## resource -> float amount
 var buildings: Array[Dictionary] = []   ## {id, type, level, cell: Vector2i, target: int, finish: float}
 var last_update := 0.0
+var troops := {}               ## unit -> soldiers in the garrison
+var training: Array[Dictionary] = []    ## batches {unit, remaining: int, unit_time: float, next: float}
+var hunger := 0.0              ## food owed to soldiers while the stores are empty
 
 var _next_id := 1
 
@@ -91,6 +95,62 @@ func production_per_hour() -> Dictionary:
 		for r: String in p:
 			out[r] = out.get(r, 0.0) + p[r]
 	return out
+
+
+func upkeep_per_hour() -> float:
+	## Food the garrison eats per hour.
+	var total := 0.0
+	for unit: String in troops:
+		total += troops[unit] * rules.unit_upkeep(unit)
+	return total
+
+
+func net_per_hour() -> Dictionary:
+	## Production minus what the soldiers eat; food can go below zero.
+	var out := production_per_hour()
+	out["food"] = out.get("food", 0.0) - upkeep_per_hour()
+	return out
+
+
+func troop_count() -> int:
+	var n := 0
+	for unit: String in troops:
+		n += troops[unit]
+	return n
+
+
+func barracks_level() -> int:
+	for b in buildings:
+		if b.type == "barracks":
+			return b.level
+	return 0
+
+
+func check_recruit(unit: String, amount: int) -> String:
+	## Why `amount` soldiers of this unit can't be queued, or "" if they can.
+	if not rules.has_unit(unit):
+		return "Unknown unit"
+	if barracks_level() <= 0:
+		return "Build a barracks first"
+	if barracks_level() < rules.unit_barracks_level(unit):
+		return "Needs barracks level %d" % rules.unit_barracks_level(unit)
+	if amount < 1 or amount > rules.max_batch:
+		return "Train between 1 and %d at a time" % rules.max_batch
+	if training.size() >= rules.queue_size:
+		return "The training queue is full"
+	if not can_afford(rules.unit_cost(unit, amount)):
+		return "Not enough resources"
+	return ""
+
+
+func affordable(unit: String) -> int:
+	## How many of this unit the castle could pay for right now (capped at a batch).
+	var cost := rules.unit_cost(unit)
+	var n := rules.max_batch
+	for r: String in cost:
+		if cost[r] > 0.0:
+			n = mini(n, int(floor((resources.get(r, 0.0) + 0.0001) / cost[r])))
+	return maxi(n, 0)
 
 
 func storage_capacity() -> float:
@@ -212,6 +272,44 @@ func cancel(building_id: int, now: float) -> bool:
 	return true
 
 
+func recruit(unit: String, amount: int, now: float) -> bool:
+	## Pays for `amount` soldiers and queues them; they train one after another.
+	advance_to(now)
+	if check_recruit(unit, amount) != "":
+		return false
+	_pay(rules.unit_cost(unit, amount))
+	var unit_time := rules.unit_time(unit, barracks_level())
+	training.append({"unit": unit, "remaining": amount, "unit_time": unit_time,
+		"next": now + unit_time if training.is_empty() else 0.0})
+	return true
+
+
+func cancel_training(index: int, now: float) -> bool:
+	## Drops a queued batch and refunds part of what its untrained soldiers cost.
+	advance_to(now)
+	if index < 0 or index >= training.size():
+		return false
+	var batch: Dictionary = training[index]
+	var cost := rules.unit_cost(batch.unit, batch.remaining)
+	var cap := storage_capacity()
+	for r: String in cost:
+		resources[r] = maxf(resources.get(r, 0.0), minf(resources.get(r, 0.0) + cost[r] * CANCEL_REFUND, cap))
+	training.remove_at(index)
+	if index == 0 and not training.is_empty():
+		training[0].next = now + training[0].unit_time
+	return true
+
+
+func training_left(now: float) -> float:
+	## Seconds until the whole queue is trained.
+	if training.is_empty():
+		return 0.0
+	var total: float = maxf(training[0].next - now, 0.0) + training[0].unit_time * (training[0].remaining - 1)
+	for i in range(1, training.size()):
+		total += training[i].unit_time * training[i].remaining
+	return total
+
+
 func move(building_id: int, cell: Vector2i) -> bool:
 	## Moves a building to another free spot, at no cost.
 	var b := get_building(building_id)
@@ -225,32 +323,85 @@ func move(building_id: int, cell: Vector2i) -> bool:
 
 func advance_to(now: float) -> void:
 	## Runs the economy forward to `now`: produces resources up to the storage
-	## cap and finishes constructions in the order they complete, so a finished
-	## upgrade starts producing from the moment it was done.
+	## cap, finishes constructions and trains soldiers in the order they
+	## complete, so a finished upgrade produces (and a new soldier eats) from
+	## the moment it is done.
 	while true:
 		var next: Dictionary = {}
 		for b in buildings:
 			if b.target > 0 and b.finish <= now and (next.is_empty() or b.finish < next.finish):
 				next = b
-		var until: float = next.finish if not next.is_empty() else now
+		var soldier_due: bool = not training.is_empty() and training[0].next <= now \
+			and (next.is_empty() or training[0].next < next.finish)
+		var until: float = now
+		if soldier_due:
+			until = training[0].next
+		elif not next.is_empty():
+			until = next.finish
 		_produce(until - last_update)
 		last_update = maxf(last_update, until)
-		if next.is_empty():
+		if soldier_due:
+			_finish_soldier()
+		elif not next.is_empty():
+			next.level = next.target
+			next.target = 0
+			next.finish = 0.0
+		else:
 			break
-		next.level = next.target
-		next.target = 0
-		next.finish = 0.0
+
+
+func _finish_soldier() -> void:
+	var batch: Dictionary = training[0]
+	troops[batch.unit] = troops.get(batch.unit, 0) + 1
+	batch.remaining -= 1
+	var done_at: float = batch.next
+	if batch.remaining > 0:
+		batch.next = done_at + batch.unit_time
+		return
+	training.pop_front()
+	if not training.is_empty():
+		training[0].next = done_at + training[0].unit_time
 
 
 func _produce(seconds: float) -> void:
 	if seconds <= 0.0:
 		return
-	var rates := production_per_hour()
+	var rates := net_per_hour()
 	var cap := storage_capacity()
 	for r: String in rates:
 		var have: float = resources.get(r, 0.0)
-		# Production stops at the cap but never takes away what is already above it.
-		resources[r] = maxf(have, minf(have + rates[r] * seconds / 3600.0, cap))
+		var after: float = have + rates[r] * seconds / 3600.0
+		if rates[r] >= 0.0:
+			# Production stops at the cap but never takes away what is already above it.
+			resources[r] = maxf(have, minf(after, cap))
+		elif after >= 0.0:
+			resources[r] = after
+		else:
+			# The soldiers ate everything: what they couldn't eat becomes hunger.
+			resources[r] = 0.0
+			hunger += -after
+	if resources.get("food", 0.0) > 0.0:
+		hunger = 0.0
+	_desert()
+
+
+func _desert() -> void:
+	## Each hour of food a soldier goes without makes one soldier leave. The
+	## hungriest units (most upkeep in total) desert first.
+	while hunger > 0.0:
+		var worst := ""
+		for unit: String in troops:
+			if troops[unit] > 0 and (worst == "" or troops[unit] * rules.unit_upkeep(unit) > troops[worst] * rules.unit_upkeep(worst)):
+				worst = unit
+		if worst == "":
+			hunger = 0.0
+			return
+		var upkeep := rules.unit_upkeep(worst)
+		var leaving := mini(int(hunger / upkeep), troops[worst])
+		if leaving <= 0:
+			return
+		troops[worst] -= leaving
+		hunger -= leaving * upkeep
 
 
 # --- Saving ------------------------------------------------------------------
@@ -266,6 +417,7 @@ func to_dict() -> Dictionary:
 		"id": id, "name": castle_name, "owner": owner,
 		"resources": resources.duplicate(), "buildings": list,
 		"last_update": last_update, "next_id": _next_id,
+		"troops": troops.duplicate(), "training": training.duplicate(true), "hunger": hunger,
 	}
 
 
@@ -286,6 +438,17 @@ static func from_dict(p_rules: BuildingRules, data: Dictionary) -> CastleState:
 			"cell": Vector2i(int(b.cell[0]), int(b.cell[1])),
 			"target": int(b.get("target", 0)), "finish": float(b.get("finish", 0.0)),
 		})
+	# Saves from before recruitment have no troops; units removed from the data are dropped.
+	for unit: String in data.get("troops", {}):
+		if p_rules.has_unit(unit):
+			castle.troops[unit] = int(data.troops[unit])
+	for t in data.get("training", []):
+		if p_rules.has_unit(t.get("unit", "")):
+			castle.training.append({"unit": String(t.unit), "remaining": int(t.remaining),
+				"unit_time": float(t.unit_time), "next": float(t.get("next", 0.0))})
+	if not castle.training.is_empty() and castle.training[0].next <= 0.0:
+		castle.training[0].next = castle.last_update + castle.training[0].unit_time
+	castle.hunger = float(data.get("hunger", 0.0))
 	return castle
 
 

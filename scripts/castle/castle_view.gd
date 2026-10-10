@@ -131,6 +131,22 @@ func cancel_selected() -> void:
 		_after_order()
 
 
+func recruit(unit: String, amount: int) -> void:
+	if not editable:
+		return
+	var reason := castle.check_recruit(unit, amount)
+	if reason != "" or not castle.recruit(unit, amount, Economy.now()):
+		message.emit(reason if reason != "" else "Can't train them now")
+		return
+	Economy.changed.emit()
+
+
+func cancel_training(index: int) -> void:
+	if editable and castle.cancel_training(index, Economy.now()):
+		message.emit("Training cancelled, %d%% of the cost refunded" % int(CastleState.CANCEL_REFUND * 100.0))
+		Economy.changed.emit()
+
+
 func stop_mode() -> void:
 	_set_mode(Mode.SELECT)
 

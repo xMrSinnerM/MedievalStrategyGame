@@ -150,10 +150,34 @@ Run the economy tests with:
 godot --headless --path . --script res://tests/test_economy.gd
 ```
 
+## Recruitment
+
+Build a **Barracks** (from the build menu) and click it to train soldiers.
+Each unit costs gold and some food, wood or stone, takes real time to train and
+then eats food every hour. Higher barracks levels unlock stronger units and
+train a little faster.
+
+| Unit | Barracks level | Cost | Time | Food/h | Attack | Defence |
+|---|---|---|---|---|---|---|
+| Spearman | 1 | 12 gold, 10 food | 20 s | 1 | 8 | 12 |
+| Archer | 2 | 15 gold, 14 wood | 28 s | 1 | 12 | 6 |
+| Swordsman | 3 | 28 gold, 8 stone, 10 food | 45 s | 1.5 | 16 | 15 |
+| Horseman | 4 | 45 gold, 25 food | 70 s | 3 | 24 | 12 |
+
+- Up to 5 batches of up to 50 soldiers queue up and train one after another,
+  also while the game is closed. Cancelling a batch refunds 75% of what its
+  untrained soldiers cost.
+- The resource bar shows food **after** upkeep, so it can go negative. When
+  the stores run dry, soldiers desert: each hour of food a soldier goes
+  without costs you one soldier, until the farms can feed the rest.
+- NPC lords build a barracks from keep level 2 and recruit from what they
+  have to spare, up to 60 soldiers per keep level, never starving them.
+- All unit numbers are in `data/units.json`.
+
 ## Project layout
 
 ```
-data/        JSON: terrain config, factions, settlements, roads, parties, buildings, player
+data/        JSON: terrain config, factions, settlements, roads, parties, buildings, units, player
 world/       heightmap, biome mask, rivers
 scenes/      main.tscn -> world_map/world_map.tscn and castle/castle_view.tscn
 scripts/
@@ -216,6 +240,9 @@ How the parts work:
 - [x] Castle economy: resources, buildings, build timers, offline progress, saving
 - [x] Castle screen: place and upgrade buildings
 - [x] Your castle and NPC castles on the world map
+- [x] Barracks, training queue, food upkeep and desertion
+- [ ] Moving troops between your castle and your warband
+- [ ] Battles between warbands
 
 ## Known limitations
 
