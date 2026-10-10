@@ -45,8 +45,14 @@ func _ready() -> void:
 	_attack.text = "Attack"
 	_attack.focus_mode = Control.FOCUS_NONE
 	_attack.pressed.connect(func() -> void:
-		EventBus.attack_requested.emit(party_id)
-		show_party(""))
+		var target := party_id
+		var faction: String = _data().get("faction", "")
+		show_party("")
+		if GameData.at_war(faction, _player_faction()):
+			EventBus.attack_requested.emit(target)
+		else:
+			EventBus.war_declaration_requested.emit(faction,
+					func() -> void: EventBus.attack_requested.emit(target)))
 	box.add_child(_attack)
 	EventBus.party_selected.connect(show_party)
 	EventBus.settlement_selected.connect(func(id: String) -> void:
@@ -89,6 +95,8 @@ func _refresh() -> void:
 		relation = ", your ally"
 	elif GameData.at_war(data.faction, player_faction):
 		relation = ", at war with you"
+	else:
+		relation = ", at peace with you"
 	_owner.text = "%s%s" % [faction.get("name", data.faction), relation]
 	_owner.add_theme_color_override("font_color", faction.get("color", MUTED).lerp(Color.WHITE, 0.35))
 	var lines: PackedStringArray = ["Warband of %s: %d soldiers" % [castle.castle_name, castle.field_count()]]
@@ -109,6 +117,8 @@ func _refresh() -> void:
 	_odds.text = "Your %d soldiers: %s (%d%%)" % [mine.field_count(), Battle.odds_text(chance), roundi(chance * 100.0)]
 	_odds.add_theme_color_override("font_color", Color(0.95, 0.4, 0.3).lerp(Color(0.55, 0.9, 0.45), chance))
 	_attack.disabled = castle.field_count() <= 0
+	MenuStyle.war_button_text(_attack, "Attack", data.faction)
+
 
 
 func _player_faction() -> String:

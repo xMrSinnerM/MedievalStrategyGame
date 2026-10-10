@@ -62,8 +62,14 @@ func _ready() -> void:
 	_besiege.text = "Besiege"
 	_besiege.focus_mode = Control.FOCUS_NONE
 	_besiege.pressed.connect(func() -> void:
-		EventBus.siege_requested.emit(settlement_id)
-		show_settlement(""))
+		var target := settlement_id
+		var faction: String = GameData.get_settlement(target).get("faction", "")
+		show_settlement("")
+		if GameData.at_war(faction, Economy.player_faction):
+			EventBus.siege_requested.emit(target)
+		else:
+			EventBus.war_declaration_requested.emit(faction,
+					func() -> void: EventBus.siege_requested.emit(target)))
 	box.add_child(_besiege)
 	EventBus.settlement_selected.connect(show_settlement)
 	Economy.changed.connect(_refresh)
@@ -123,6 +129,7 @@ func _refresh() -> void:
 			_siege_info.add_theme_color_override("font_color", TEXT)
 		_siege_info.text = "\n".join(siege)
 		_besiege.disabled = mine.field_count() <= 0
+		MenuStyle.war_button_text(_besiege, "Besiege", settlement.get("faction", ""))
 
 
 func _label(size: int, color: Color) -> Label:

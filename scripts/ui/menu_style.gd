@@ -41,3 +41,18 @@ static func button(text: String, action: Callable, width := 260.0) -> Button:
 	b.add_theme_font_size_override("font_size", 18)
 	b.pressed.connect(action)
 	return b
+
+
+static func war_button_text(button: Button, action: String, faction: String) -> void:
+	## Attacking a faction you are at peace with means declaring war first,
+	## which a truce forbids.
+	var d := Economy.diplomacy
+	if d == null or d.at_war(d.player_faction, faction):
+		button.text = action
+		return
+	var truce := d.truce_left(d.player_faction, faction, Economy.now())
+	if truce > 0.0:
+		button.text = "Truce: %d min left" % ceili(truce / 60.0)
+		button.disabled = true
+	else:
+		button.text = "%s (declares war)" % action
