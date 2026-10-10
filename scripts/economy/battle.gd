@@ -83,7 +83,10 @@ static func _plunder(castle: CastleState, gold: float) -> int:
 
 static func wall_bonus(castle: CastleState) -> float:
 	## Multiplier on the garrison's defence while it holds the walls.
-	var d := castle.defense()
+	return wall_from_defense(castle.defense())
+
+
+static func wall_from_defense(d: float) -> float:
 	return 1.0 + WALL_MAX * d / (d + WALL_HALF)
 
 

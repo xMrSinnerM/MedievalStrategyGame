@@ -29,6 +29,8 @@ func _initialize() -> void:
 	test_save_slots()
 	test_diplomacy()
 	test_diplomacy_ai()
+	test_baron_rules()
+	test_baron_camp()
 	print("%d checks, %d failed" % [checks, failures])
 	quit(1 if failures > 0 else 0)
 
@@ -519,6 +521,76 @@ func test_diplomacy_ai() -> void:
 	check(e.enemies_of("aldmere").size() == 1, "newcomer protection keeps new wars off you")
 	var terms: Dictionary = e.peace_terms("aldmere", "varnholt", t)
 	check(not e.offers.has("varnholt") or terms.price == 0, "an offer of peace costs nothing to accept")
+
+
+func test_baron_rules() -> void:
+	var br := BaronRules.load_default()
+	var g1 := br.garrison(1)
+	var g10 := br.garrison(10)
+	var n1 := 0
+	var n10 := 0
+	for u in g1:
+		n1 += g1[u]
+	for u in g10:
+		n10 += g10[u]
+	check(n1 == 14, "a level 1 camp holds 14 soldiers (%s)" % g1)
+	check(n10 > 3 * n1, "a level 10 camp holds far more (%d)" % n10)
+	check(g1.keys().all(func(u: String) -> bool: return rules.units.has(u)), "garrisons use real units")
+	check(not g1.has("horseman") and g10.has("horseman"), "horsemen join the garrison at higher levels")
+	check(br.loot(5).gold > br.loot(1).gold and br.palisade(5) > br.palisade(1), "loot and palisade grow with level")
+	check(br.defeats_needed(1) == 1 and br.defeats_needed(12) == 2 and br.defeats_needed(25) == 3, "higher levels need more wins")
+	check(br.rebuild_time(10) > br.rebuild_time(1), "big camps take longer to rebuild")
+	near(br.carry({"spearman": 10, "archer": 5}), 15 * br.carry_per_soldier, "every soldier carries loot")
+
+
+func test_baron_camp() -> void:
+	var br := BaronRules.load_default()
+	var camp := BaronCamp.create("camp_1", "Black Hollow", Vector2(100, 200))
+	check(camp.is_ready(T0), "a new camp can be attacked")
+	var weak := {"spearman": 4}
+	var r := camp.attack(br, rules, weak, 1, T0)
+	check(r.winner == "b" and r.loot.is_empty(), "too few soldiers are beaten off")
+	check(camp.level == 1 and camp.is_ready(T0), "a camp that holds keeps its level and stays open")
+	var army := {"spearman": 24, "archer": 10}
+	r = camp.attack(br, rules, army, 2, T0)
+	check(r.winner == "a", "a decent army beats a level 1 camp")
+	check(r.leveled and camp.level == 2, "and the camp rises to level 2")
+	var carried := 0
+	for res in r.loot:
+		carried += r.loot[res]
+	check(carried > 0 and carried <= br.carry(r.survivors), "the winners carry off what they can (%d)" % carried)
+	check(not camp.is_ready(T0 + 10.0), "a beaten camp needs time to rebuild")
+	check(camp.is_ready(T0 + br.rebuild_time(1)), "and can be attacked again once rebuilt")
+	# Levelling up all the way, the camp grows tougher and richer.
+	var big := {"swordsman": 400, "archer": 200, "horseman": 100}
+	var t := T0
+	var loot_at := {}
+	while camp.level < 12:
+		t += 10000.0
+		var before := camp.level
+		r = camp.attack(br, rules, big, camp.level, t)
+		check(r.winner == "a", "a big army wins at level %d" % before)
+		if r.leveled:
+			loot_at[before] = r.loot.gold
+	check(loot_at.get(11, 0) > loot_at.get(2, 0), "higher camps pay more (%s)" % loot_at)
+	camp.defeats = 1
+	var copy := BaronCamp.from_dict(JSON.parse_string(JSON.stringify(camp.to_dict())))
+	check(copy.level == camp.level and copy.defeats == 1 and copy.position == camp.position, "a camp saves and loads")
+	near(copy.rebuilt_at, camp.rebuilt_at, "including its rebuild time")
+	# Economy keeps each camp's level in the save slot.
+	var eco = load("res://scripts/core/economy.gd").new()
+	eco.save_dir = "user://test_saves"
+	eco.begin_new(1)
+	eco.sync_barons([{"id": "camp_1", "name": "Black Hollow", "position": [100, 200]}])
+	eco.get_baron("camp_1").level = 7
+	eco.save_game()
+	eco.begin_load(1)
+	check(eco.get_baron("camp_1") != null and eco.get_baron("camp_1").level == 7, "camp levels are saved with the game")
+	eco.sync_barons([{"id": "camp_1", "name": "Black Hollow", "position": [100, 200]}])
+	check(eco.barons.size() == 1 and eco.get_baron("camp_1").level == 7, "syncing again keeps the level")
+	eco.delete_slot(1)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://test_saves"))
+	eco.free()
 
 
 func _first(c: CastleState, type: String) -> int:
