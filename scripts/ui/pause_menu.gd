@@ -56,7 +56,7 @@ func open() -> void:
 	visible = true
 	_panel.visible = true
 	_settings.visible = false
-	_note.text = "Esc to resume"
+	_note.text = "Playing slot %d. Esc to resume." % Economy.slot
 	get_tree().paused = true
 
 
@@ -78,4 +78,4 @@ func toggle() -> void:
 
 func _save() -> void:
 	Economy.save_game()
-	_note.text = "Game saved at %s" % Time.get_time_string_from_system().substr(0, 5)
+	_note.text = "Saved to slot %d at %s" % [Economy.slot, Time.get_time_string_from_system().substr(0, 5)]

@@ -89,8 +89,10 @@ edit its position in `settlements.json` and run only the road tool again.
 
 ## Menus and settings
 
-The game opens on a title screen: **Continue** your saved game, start a **New
-game** (it asks before replacing the save), change the **Settings** or quit.
+The game opens on a title screen: **Continue** the game you played last, start
+a **New game** in one of three save slots (it asks before replacing a slot),
+**Load** or delete a game from the slot list (each slot shows its keep level,
+castles, soldiers and when it was saved), change the **Settings** or quit.
 Esc during play pauses and opens the pause menu (resume, save, settings, back
 to the title screen, quit). Castles keep growing on the clock while paused,
 just as when the game is closed.
@@ -152,9 +154,10 @@ and open ground still sends your party straight there.
   first, more at keep levels 3 and 5). Builders are the only way to build
   faster; there is no premium currency and nothing to buy.
 - **Storage** comes from the keep and storehouses and caps every resource.
-- **Saving** is automatic every 30 seconds and on quit, to `savegame.json` in
-  the game's user folder (`%APPDATA%\MedievalStrategy` on Windows). Delete it
-  to start over.
+- **Saving** is automatic every 30 seconds and on quit, to the slot you are
+  playing (`saves/slot_N.json` in the game's user folder,
+  `%APPDATA%\MedievalStrategy` on Windows). An old `savegame.json` from before
+  save slots is moved into slot 1.
 - `CastleState` runs one castle and is written so NPC castles can use exactly
   the same code later.
 
@@ -320,7 +323,7 @@ How the parts work:
 - [x] Besieging castles from the map
 - [x] Lords besiege castles, including yours
 - [x] Main menu, pause menu and settings
-- [ ] Save slots
+- [x] Save slots
 - [ ] Diplomacy
 
 ## Known limitations

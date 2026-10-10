@@ -8,7 +8,10 @@ signal changed   ## something in a castle changed (resources tick, build finishe
 ## A castle changed hands. Owners are faction ids, or "player".
 signal castle_captured(castle_id: String, old_owner: String, new_owner: String)
 
-const SAVE_PATH := "user://savegame.json"
+## Games are kept in SLOTS save slots under save_dir (slot_1.json ...).
+const SLOTS := 3
+## Where single-save versions of the game kept their save; moved to slot 1.
+const OLD_SAVE_PATH := "user://savegame.json"
 const SAVE_VERSION := 1
 const TICK := 1.0              ## seconds between economy updates
 const AUTOSAVE := 30.0           ## seconds between autosaves
@@ -36,6 +39,11 @@ var player_faction := ""
 ## Set by the world map; not saved (the warband starts at the castle).
 var warband_home := false
 
+## Folder holding the slot files (tests point it elsewhere).
+var save_dir := "user://saves"
+## The slot being played (1 .. SLOTS).
+var slot := 1
+
 var _tick_timer := 0.0
 var _save_timer := 0.0
 var _loaded := false
@@ -50,23 +58,83 @@ func ensure_loaded() -> void:
 		new_game()
 
 
-func has_save() -> bool:
-	return FileAccess.file_exists(SAVE_PATH)
+func save_path(n := -1) -> String:
+	return "%s/slot_%d.json" % [save_dir, slot if n < 0 else n]
 
 
-func begin_new() -> void:
-	## Starts a fresh game from the title screen (replacing the saved one).
+func has_save(n := -1) -> bool:
+	## Whether slot n (any slot if n is -1) holds a game.
+	_move_old_save()
+	if n > 0:
+		return FileAccess.file_exists(save_path(n))
+	for k in range(1, SLOTS + 1):
+		if FileAccess.file_exists(save_path(k)):
+			return true
+	return false
+
+
+func last_played_slot() -> int:
+	## The slot saved most recently, for Continue (0 if there is none).
+	var best := 0
+	var best_time := -1.0
+	for k in range(1, SLOTS + 1):
+		var info := slot_info(k)
+		if not info.is_empty() and info.saved_at > best_time:
+			best_time = info.saved_at
+			best = k
+	return best
+
+
+func slot_info(n: int) -> Dictionary:
+	## A summary of the game in slot n for the menus, or {} if it is empty:
+	## saved_at, keep (main castle's keep level), castles (yours), soldiers.
+	if not has_save(n):
+		return {}
+	var data = JSON.parse_string(FileAccess.get_file_as_string(save_path(n)))
+	if not data is Dictionary:
+		return {}
+	var info := {"saved_at": float(data.get("saved_at", 0.0)), "keep": 1, "castles": 0, "soldiers": 0}
+	for c in data.get("castles", []):
+		if c.get("owner", "") != "player":
+			continue
+		info.castles += 1
+		for group in [c.get("troops", {}), c.get("field", {})]:
+			for unit in group:
+				info.soldiers += int(group[unit])
+		if c.get("id", "") == MAIN_CASTLE:
+			for b in c.get("buildings", []):
+				if b.get("type", "") == "keep":
+					info.keep = int(b.get("level", 1))
+	return info
+
+
+func delete_slot(n: int) -> void:
+	if has_save(n):
+		DirAccess.remove_absolute(save_path(n))
+
+
+func begin_new(n := 1) -> void:
+	## Starts a fresh game in slot n from the title screen (replacing what was there).
 	rules = BuildingRules.load_default()
+	slot = n
 	_loaded = true
 	new_game()
 
 
-func begin_load() -> void:
-	## Continues the saved game from the title screen.
+func begin_load(n := 1) -> void:
+	## Continues the game in slot n from the title screen.
 	rules = BuildingRules.load_default()
+	slot = n
 	_loaded = true
 	if not load_game():
 		new_game()
+
+
+func _move_old_save() -> void:
+	## Saves from before save slots become slot 1.
+	if save_dir == "user://saves" and FileAccess.file_exists(OLD_SAVE_PATH) and not FileAccess.file_exists(save_path(1)):
+		DirAccess.make_dir_recursive_absolute(save_dir)
+		DirAccess.rename_absolute(OLD_SAVE_PATH, save_path(1))
 
 
 func sync_castles(settlements: Array, parties: Array = []) -> void:
@@ -226,9 +294,10 @@ func new_game() -> void:
 
 
 func load_game() -> bool:
-	if not FileAccess.file_exists(SAVE_PATH):
+	_move_old_save()
+	if not FileAccess.file_exists(save_path()):
 		return false
-	var data = JSON.parse_string(FileAccess.get_file_as_string(SAVE_PATH))
+	var data = JSON.parse_string(FileAccess.get_file_as_string(save_path()))
 	if not data is Dictionary or int(data.get("version", 0)) != SAVE_VERSION:
 		push_warning("Save file is unreadable or from another version; starting a new game.")
 		return false
@@ -257,9 +326,10 @@ func save_game() -> void:
 	var list: Array = []
 	for c in castles:
 		list.append(c.to_dict())
-	var f := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
+	DirAccess.make_dir_recursive_absolute(save_dir)
+	var f := FileAccess.open(save_path(), FileAccess.WRITE)
 	if f == null:
-		push_error("Could not write %s" % SAVE_PATH)
+		push_error("Could not write %s" % save_path())
 		return
 	f.store_string(JSON.stringify({"version": SAVE_VERSION, "saved_at": now(), "castles": list,
 			"homes": homes, "exiled": exiled.keys()}, "\t", true, true))
