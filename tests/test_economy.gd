@@ -24,6 +24,8 @@ func _initialize() -> void:
 	test_upkeep_and_desertion()
 	test_warband()
 	test_battle()
+	test_siege()
+	test_capture()
 	print("%d checks, %d failed" % [checks, failures])
 	quit(1 if failures > 0 else 0)
 
@@ -293,6 +295,86 @@ func test_battle() -> void:
 	check(b.field_count() == 30 - Battle.lost_count(res.b), "the loser keeps the soldiers who fled")
 	near(a.resources.gold, gold + Battle.lost_count(res.b) * Battle.LOOT_PER_KILL, "plunder for every fallen enemy")
 	check(res.loot == int(Battle.lost_count(res.b) * Battle.LOOT_PER_KILL), "the report shows the plunder")
+
+
+func test_siege() -> void:
+	var castle := fresh()
+	near(Battle.wall_bonus(castle), 1.0 + 1.5 * 100.0 / 300.0, "a level 1 wall adds half its defence again")
+	near(Battle.siege_time(castle), 45.0, "a siege of a level 1 wall takes 45 s")
+	var even := Battle.odds(rules, {"spearman": 50}, {"spearman": 50})
+	var walled := Battle.odds(rules, {"spearman": 50}, {"spearman": 50}, 1, Battle.wall_bonus(castle))
+	check(walled < even - 0.2, "walls help the defenders (%.2f in the open, %.2f against walls)" % [even, walled])
+	# A strong warband takes an NPC castle...
+	var lord := fresh()
+	lord.field = {"swordsman": 80}
+	castle.id = "npc_castle"
+	castle.owner = "varnholt"
+	castle.troops = {"spearman": 30}
+	var r: Dictionary = Battle.assault(lord, castle, 5)
+	check(r.outcome == "captured", "a castle that falls is captured (%s)" % r.outcome)
+	check(castle.troop_count() == 30 - Battle.lost_count(r.b), "the garrison keeps whoever survived")
+	check(lord.field_count() == 80 - Battle.lost_count(r.a), "the warband keeps its survivors")
+	# ...but the player's main castle can only be sacked.
+	var home := fresh()
+	home.id = "player_castle"
+	home.troops = {"spearman": 10}
+	var stone: float = home.resources.stone
+	lord.resources.stone = 0.0
+	var s: Dictionary = Battle.assault(lord, home, 6)
+	check(s.outcome == "sacked", "your main castle is sacked, not captured")
+	near(home.resources.stone, stone * (1.0 - Battle.SACK_SHARE), "sacking carries off part of the stock")
+	near(lord.resources.stone, stone * Battle.SACK_SHARE, "into the attacker's castle")
+	check(s.spoils.stone == int(stone * Battle.SACK_SHARE), "the report lists the spoils")
+	# A weak warband breaks on the walls.
+	var raider := fresh()
+	raider.field = {"spearman": 20}
+	var keep := fresh()
+	keep.id = "npc_castle"
+	keep.troops = {"spearman": 20}
+	check(Battle.assault(raider, keep, 7).outcome == "held", "an even fight against walls is lost")
+
+
+func test_capture() -> void:
+	var eco = load("res://scripts/core/economy.gd").new()
+	eco.rules = rules
+	eco.player_castle = CastleState.create_new(rules, "player_castle", "Mine", "player", T0)
+	var north := CastleState.create_new(rules, "north", "North", "varnholt", T0)
+	var south := CastleState.create_new(rules, "south", "South", "varnholt", T0)
+	var far := CastleState.create_new(rules, "far", "Far", "varnholt", T0)
+	eco.castles = [eco.player_castle, north, south, far] as Array[CastleState]
+	var settlements: Array = [
+		{"id": "player_castle", "type": "castle", "faction": "aldmere", "player": true, "position": [0, 0], "name": "Mine"},
+		{"id": "north", "type": "castle", "faction": "varnholt", "position": [0, 100], "name": "North"},
+		{"id": "south", "type": "castle", "faction": "varnholt", "position": [0, 200], "name": "South"},
+		{"id": "far", "type": "castle", "faction": "varnholt", "position": [0, 900], "name": "Far"},
+	]
+	var parties: Array = [
+		{"id": "you", "faction": "aldmere", "home": "player_castle", "player": true},
+		{"id": "jarl", "faction": "varnholt", "home": "north", "troops": 30},
+	]
+	eco.sync_castles(settlements, parties)
+	check(north.field.get("spearman", 0) == 30, "the jarl's warband starts at North")
+	north.troops = {"spearman": 5}
+	eco.capture(north, "player", parties, settlements)
+	check(north.owner == "player" and not north.is_npc(), "North is now yours")
+	check(north.troop_count() == 0 and north.field_count() == 0, "its garrison and warband are gone")
+	check(eco.home_of("jarl", "north") == "south", "the jarl falls back to the nearest castle")
+	check(south.field.get("spearman", 0) == 30, "and brings the warband along")
+	check(settlements[1].faction == "aldmere" and settlements[1].get("player", false), "the map shows North as yours")
+	eco.capture(south, "aldmere", parties, settlements)
+	check(eco.home_of("jarl", "north") == "far", "next the jarl goes to Far")
+	eco.capture(north, "varnholt", parties, settlements)
+	check(settlements[1].faction == "varnholt" and not settlements[1].has("player"), "North can be lost again")
+	check(eco.home_of("jarl", "north") == "far", "retaking North doesn't move the jarl")
+	eco.capture(far, "aldmere", parties, settlements)
+	eco.capture(north, "aldmere", parties, settlements)
+	check(eco.home_of("jarl", "north") == "", "with no castle left the jarl is gone")
+	check(eco.exiled.has("jarl"), "and counted as exiled")
+	# With several castles of your own, the main one is still found on loading.
+	eco.castles = [north, eco.player_castle, south] as Array[CastleState]
+	north.owner = "player"
+	check(eco.find_main_castle() == eco.player_castle, "your main castle is the one you started with")
+	eco.free()
 
 
 func _first(c: CastleState, type: String) -> int:

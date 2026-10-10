@@ -56,9 +56,13 @@ func build() -> void:
 		if start.is_empty():
 			push_warning("Party %s has no valid start settlement" % data.id)
 			continue
+		if not data.get("player", false) and Economy.home_of(data.id, data.get("home", "")) == "":
+			continue   # exiled: their faction has no castle left
 		var party := Party.new()
 		add_child(party)
 		party.setup(data)
+		if not party.is_player:
+			party.home = Economy.home_of(party.id, party.home)
 		var home := Vector2(start.position[0], start.position[1])
 		if party.is_player:
 			player = party
