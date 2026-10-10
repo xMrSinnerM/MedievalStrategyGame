@@ -20,6 +20,16 @@ func _ready() -> void:
 	_info.add_theme_font_size_override("font_size", 14)
 	panel.add_child(_info)
 	add_child(panel)
+	var castle_button := Button.new()
+	castle_button.text = "Your castle (C)"
+	castle_button.focus_mode = Control.FOCUS_NONE
+	castle_button.add_theme_font_size_override("font_size", 15)
+	castle_button.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
+	castle_button.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	castle_button.offset_top = 12
+	castle_button.offset_right = -12
+	castle_button.pressed.connect(func() -> void: EventBus.castle_requested.emit(Economy.player_castle.id))
+	add_child(castle_button)
 	EventBus.camera_zoom_changed.connect(func(t: float) -> void: _zoom_t = t)
 	EventBus.party_status_changed.connect(func(text: String) -> void: _party_status = text)
 
@@ -39,4 +49,4 @@ func _process(_delta: float) -> void:
 		var rates := castle.production_per_hour()
 		for r in Economy.rules.resources:
 			stock += "%s %d/%d (+%d/h)   " % [r.capitalize(), int(castle.resources[r]), int(cap), int(rates[r])]
-	_info.text = stock + "\n" + "Click: travel there    F: find your party\nWASD / drag: pan    Q E / right-drag: rotate    wheel: zoom\nM: parchment map    Home: recentre    F1: hide\nYour party: %s\nzoom %d%%    %d fps" % [_party_status, int(_zoom_t * 100.0), Engine.get_frames_per_second()]
+	_info.text = stock + "\n" + "Click: travel there    F: find your party    C: your castle\nWASD / drag: pan    Q E / right-drag: rotate    wheel: zoom\nM: parchment map    Home: recentre    F1: hide\nYour party: %s\nzoom %d%%    %d fps" % [_party_status, int(_zoom_t * 100.0), Engine.get_frames_per_second()]

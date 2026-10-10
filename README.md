@@ -90,8 +90,25 @@ edit its position in `settlements.json` and run only the road tool again.
 Your castle produces **wood, stone, food and gold** in real time, including
 while the game is closed: when you start it again, the castle catches up on the
 time that passed. The help panel on the world map shows your stock, storage
-limit and production per hour. (The castle screen, where you place and upgrade
-buildings, is the next step.)
+limit and production per hour.
+
+### Castle screen
+
+Press **C** or click **Your castle** on the world map to walk into your castle;
+press C again or click **World map** to go back. Both screens stay loaded, so
+switching is instant and the map keeps its camera and your party's route.
+
+- **Build menu** (bottom): pick a building, then click a free spot on the grid.
+  The building follows the mouse in green where it fits and red where it
+  doesn't. Right-click or Esc stops placing. Greyed-out buttons tell you why
+  in their tooltip (not enough resources, all builders busy, keep too low).
+- **Click a building** to see what it does now and at the next level, upgrade
+  it, move it (free) or cancel its construction (75% refunded). Click the wall
+  to upgrade the castle's defence.
+- **Under construction** (top left) lists every job with a countdown, and a
+  timer floats over each building site.
+- Camera: WASD or drag to pan, Q/E or right-drag to rotate, wheel to zoom.
+- NPC castles open in the same screen read-only, ready for step 3.
 
 - **Buildings** are defined in `data/buildings.json`: keep, castle wall,
   woodcutter, quarry, farm, house (taxes in gold) and storehouse. Each has a
@@ -119,16 +136,17 @@ godot --headless --path . --script res://tests/test_economy.gd
 ```
 data/        JSON: terrain config, factions, settlements, roads, parties, buildings
 world/       heightmap, biome mask, rivers
-scenes/      main.tscn -> world_map/world_map.tscn
+scenes/      main.tscn -> world_map/world_map.tscn and castle/castle_view.tscn
 scripts/
-  core/      GameData, EventBus and Economy autoloads, shared map style
+  core/      main (switches map and castle), GameData, EventBus and Economy autoloads, map style
   economy/   castle economy: building rules, castle state
+  castle/    castle screen: view, camera, placeholder building models
   terrain/   generator, terrain data and queries, terrain/water/river/tree layers
   world/     world map root, settlements, banners, roads, parchment overlay
   camera/    campaign camera
-  ui/        debug HUD
+  ui/        world map HUD, castle HUD
   tools/     command-line tools (world generator, settlements, roads)
-shaders/     terrain, water, river, tree, prop, flag, route, parchment (+ shared fog include)
+shaders/     terrain, water, river, tree, prop, flag, route, parchment, castle ground (+ shared fog include)
 tests/       headless tests (economy)
 ```
 
@@ -177,7 +195,7 @@ How the parts work:
 - [x] Settlements (towns, castles, villages), banners, labels, roads
 - [x] Parties with pathfinding
 - [x] Castle economy: resources, buildings, build timers, offline progress, saving
-- [ ] Castle screen: place and upgrade buildings
+- [x] Castle screen: place and upgrade buildings
 - [ ] Your castle and NPC castles on the world map
 
 ## Known limitations
