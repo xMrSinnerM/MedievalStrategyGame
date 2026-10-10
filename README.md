@@ -209,6 +209,16 @@ while it stands at your castle, and slipping into a town or village shakes off
 a pursuer. A beaten lord goes home to recover. Diplomacy comes later; for now
 you can attack any lord who isn't from your own faction.
 
+### Sieges (in progress)
+
+The rules are in place; the map side comes next. A siege camps outside the
+walls for 30 s plus 15 s per wall level, then storms them: a `Battle` against
+the garrison, whose defence the wall raises by up to 150% (half of that at
+wall defence 200). A castle that falls changes hands with its buildings and
+stock (`Economy.capture`), and its lord moves with their warband to their
+faction's nearest castle, or leaves the map if there is none. Your main castle
+can never be captured; storming it sacks 30% of its stock instead.
+
 ## Project layout
 
 ```
