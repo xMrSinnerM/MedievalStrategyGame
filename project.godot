@@ -22,6 +22,7 @@ config/features=PackedStringArray("4.3", "Forward Plus")
 EventBus="*res://scripts/core/event_bus.gd"
 GameData="*res://scripts/core/game_data.gd"
 Economy="*res://scripts/core/economy.gd"
+Settings="*res://scripts/core/settings.gd"
 
 [display]
 

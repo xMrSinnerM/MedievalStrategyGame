@@ -50,6 +50,25 @@ func ensure_loaded() -> void:
 		new_game()
 
 
+func has_save() -> bool:
+	return FileAccess.file_exists(SAVE_PATH)
+
+
+func begin_new() -> void:
+	## Starts a fresh game from the title screen (replacing the saved one).
+	rules = BuildingRules.load_default()
+	_loaded = true
+	new_game()
+
+
+func begin_load() -> void:
+	## Continues the saved game from the title screen.
+	rules = BuildingRules.load_default()
+	_loaded = true
+	if not load_game():
+		new_game()
+
+
 func sync_castles(settlements: Array, parties: Array = []) -> void:
 	## Gives every castle on the map an economy: the player's settlement uses
 	## the player's castle, every other castle gets an NPC economy (created
@@ -78,8 +97,6 @@ func sync_castles(settlements: Array, parties: Array = []) -> void:
 		else:
 			_mark_holder(s, castle.owner)
 	for p in parties:
-		if p.get("player", false):
-			continue
 		var home := get_castle(home_of(p.id, p.get("home", "")))
 		if home != null and not home.field_ready:
 			home.field = {"spearman": int(p.get("troops", 20))}

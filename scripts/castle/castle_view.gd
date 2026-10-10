@@ -180,10 +180,14 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif event.button_index == MOUSE_BUTTON_RIGHT and event.pressed and mode != Mode.SELECT:
 			_set_mode(Mode.SELECT)
 	elif event is InputEventKey and event.pressed and not event.echo and event.physical_keycode == KEY_ESCAPE:
+		# Esc backs out of placing or a selection; with nothing to undo it
+		# falls through to the pause menu.
 		if mode != Mode.SELECT:
 			_set_mode(Mode.SELECT)
-		else:
+			get_viewport().set_input_as_handled()
+		elif selected >= 0:
 			select(-1)
+			get_viewport().set_input_as_handled()
 
 
 func _click(screen_pos: Vector2) -> void:
@@ -433,8 +437,10 @@ func _build_environment() -> void:
 	env.fog_sky_affect = 0.0
 	var world_env := WorldEnvironment.new()
 	world_env.environment = env
+	world_env.add_to_group("environment")
 	add_child(world_env)
 	var sun := DirectionalLight3D.new()
+	sun.add_to_group("sun")
 	sun.light_color = Color(1.0, 0.92, 0.8)
 	sun.light_energy = 1.2
 	sun.rotation = Vector3(deg_to_rad(-48.0), deg_to_rad(-140.0), 0.0)
