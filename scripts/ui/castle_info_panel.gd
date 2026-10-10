@@ -1,6 +1,7 @@
 extends PanelContainer
 ## Shown on the world map when you click a castle: who holds it, how far its
-## lord has built it up, and buttons to go inside or travel there.
+## lord has built it up, and buttons to go inside or travel there. Castles of
+## other factions also show your chances of storming them and a Besiege button.
 
 const TEXT := Color(0.95, 0.9, 0.8)
 const MUTED := Color(0.78, 0.72, 0.62)
@@ -12,6 +13,8 @@ var _owner: Label
 var _details: Label
 var _enter: Button
 var _travel: Button
+var _siege_info: Label
+var _besiege: Button
 
 
 func _ready() -> void:
@@ -53,6 +56,15 @@ func _ready() -> void:
 		EventBus.travel_requested.emit(settlement_id)
 		show_settlement(""))
 	buttons.add_child(_travel)
+	_siege_info = _label(14, TEXT)
+	box.add_child(_siege_info)
+	_besiege = Button.new()
+	_besiege.text = "Besiege"
+	_besiege.focus_mode = Control.FOCUS_NONE
+	_besiege.pressed.connect(func() -> void:
+		EventBus.siege_requested.emit(settlement_id)
+		show_settlement(""))
+	box.add_child(_besiege)
 	EventBus.settlement_selected.connect(show_settlement)
 	Economy.changed.connect(_refresh)
 
@@ -80,7 +92,7 @@ func _refresh() -> void:
 	else:
 		_owner.text = "Your castle"
 		_owner.add_theme_color_override("font_color", Color(1.0, 0.84, 0.4))
-		_enter.text = "Enter castle (C)"
+		_enter.text = "Enter castle (C)" if castle == Economy.player_castle else "Enter castle"
 	var lines: PackedStringArray = []
 	lines.append("Keep level %d    Defence %d" % [castle.keep_level(), int(castle.defense())])
 	lines.append("%d buildings, %d under construction" % [castle.buildings.size(), castle.constructions().size()])
@@ -91,6 +103,24 @@ func _refresh() -> void:
 		income.append("%s %+d" % [r.capitalize(), int(rates.get(r, 0.0))])
 	lines.append("Per hour: " + "  ".join(income))
 	_details.text = "\n".join(lines)
+	var settlement := GameData.get_settlement(settlement_id)
+	var hostile: bool = castle.is_npc() and settlement.get("faction", "") != Economy.player_faction
+	_siege_info.visible = hostile
+	_besiege.visible = hostile
+	if hostile:
+		var mine := Economy.player_castle
+		var wall := Battle.wall_bonus(castle)
+		var siege: PackedStringArray = ["Walls: defenders +%d%% defence" % roundi((wall - 1.0) * 100.0),
+				"A siege takes %d s before the assault" % int(Battle.siege_time(castle))]
+		if mine.field_count() > 0:
+			var chance := Battle.odds(castle.rules, mine.field, castle.troops, 1, wall)
+			siege.append("Your %d soldiers: %s (%d%%)" % [mine.field_count(), Battle.odds_text(chance), roundi(chance * 100.0)])
+			_siege_info.add_theme_color_override("font_color", Color(0.95, 0.4, 0.3).lerp(Color(0.55, 0.9, 0.45), chance))
+		else:
+			siege.append("Your warband has no soldiers.")
+			_siege_info.add_theme_color_override("font_color", TEXT)
+		_siege_info.text = "\n".join(siege)
+		_besiege.disabled = mine.field_count() <= 0
 
 
 func _label(size: int, color: Color) -> Label:

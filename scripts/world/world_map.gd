@@ -29,8 +29,15 @@ func _ready() -> void:
 	parties.build()
 	parchment.build()
 	camera_rig.setup()
+	Economy.castle_captured.connect(_on_castle_captured)
 	print("World map built in %d ms (%d settlements, %d bridges, %d trees, %d parties)" % [Time.get_ticks_msec() - started,
 		settlements.settlements.size(), settlements.bridge_count, vegetation.tree_count, parties.parties.size()])
+
+
+func _on_castle_captured(castle_id: String, _old_owner: String, _new_owner: String) -> void:
+	settlements.rebuild(castle_id)
+	parchment.refresh_settlements()
+	parties.on_castle_captured(castle_id)
 
 
 func _build_environment() -> void:
