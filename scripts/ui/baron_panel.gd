@@ -1,7 +1,7 @@
 extends PanelContainer
 ## Shown on the world map when you click a robber baron camp: its level and
 ## progress to the next, its garrison, palisade and loot, whether it is
-## rebuilding, the march time and a button to send your garrison against it.
+## rebuilding, the march time and a button to open the attack screen.
 
 const TEXT := Color(0.95, 0.9, 0.8)
 const MUTED := Color(0.78, 0.72, 0.62)
@@ -13,7 +13,6 @@ var _level: Label
 var _details: Label
 var _odds: Label
 var _attack: Button
-var _note: Label
 
 
 func _ready() -> void:
@@ -48,9 +47,6 @@ func _ready() -> void:
 	_attack.focus_mode = Control.FOCUS_NONE
 	_attack.pressed.connect(_send)
 	box.add_child(_attack)
-	_note = _label(14, Color(1.0, 0.86, 0.55))
-	_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	box.add_child(_note)
 	EventBus.baron_selected.connect(show_camp)
 	EventBus.party_selected.connect(func(id: String) -> void:
 		if id != "":
@@ -64,7 +60,6 @@ func _ready() -> void:
 func show_camp(id: String) -> void:
 	camp_id = id
 	visible = Economy.get_baron(id) != null
-	_note.text = ""
 	_refresh()
 
 
@@ -109,14 +104,12 @@ func _refresh() -> void:
 		var chance := Battle.odds(Economy.rules, army, garrison, 1, wall)
 		_odds.text = "Your garrison of %d: %s (%d%%)" % [mine, Battle.odds_text(chance), roundi(chance * 100.0)]
 		_odds.add_theme_color_override("font_color", Color(0.95, 0.4, 0.3).lerp(Color(0.55, 0.9, 0.45), chance))
-	_attack.text = "Attack with your garrison" if camp.is_ready(now) else "Rebuilding"
+	_attack.text = "Prepare attack" if camp.is_ready(now) else "Rebuilding"
 	_attack.disabled = mine <= 0 or not camp.is_ready(now)
 
 
 func _send() -> void:
-	var why := Economy.send_attack(camp_id, Economy.player_castle.troops.duplicate())
-	_note.text = why if why != "" else "Your army is on its way."
-	_refresh()
+	EventBus.attack_screen_requested.emit(camp_id)
 
 
 static func _clock(seconds: float) -> String:

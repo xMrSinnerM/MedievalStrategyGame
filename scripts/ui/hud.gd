@@ -75,6 +75,11 @@ func _ready() -> void:
 	diplomacy.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	diplomacy.grow_vertical = Control.GROW_DIRECTION_BOTH
 	add_child(diplomacy)
+	var attack := preload("res://scripts/ui/attack_panel.gd").new()
+	attack.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	attack.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	attack.grow_vertical = Control.GROW_DIRECTION_BOTH
+	add_child(attack)
 	_news = Label.new()
 	_news.add_theme_color_override("font_color", Color(1.0, 0.92, 0.7))
 	_news.add_theme_color_override("font_outline_color", Color(0.1, 0.07, 0.04))
