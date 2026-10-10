@@ -1,6 +1,8 @@
 extends Node3D
 ## Spawns the parties from data/parties.json, moves the lords around their
 ## realms and lets the player send their own party anywhere with a click.
+## Each party is the warband of its home castle: its troop count comes from
+## that castle's economy, and lords pick up reinforcements when they visit it.
 ##
 ## Controls: left click on the ground, a town or a village to travel there
 ## (clicking a castle opens its panel instead, which has a Travel button),
@@ -52,6 +54,9 @@ func build() -> void:
 		parties.append(party)
 
 	_build_markers()
+	_sync_troops()
+	_update_warband_home()
+	Economy.changed.connect(_sync_troops)
 	EventBus.camera_zoom_changed.connect(_on_zoom_changed)
 	EventBus.travel_requested.connect(_travel_to_settlement)
 	_set_status("Camped outside %s" % _nearest_settlement_name(player.map_position()) if player else "")
@@ -137,14 +142,34 @@ func _travel_to_settlement(settlement_id: String) -> void:
 
 func _travel(target: Vector2, settlement: Dictionary) -> void:
 	if player.travel_to(target, settlement.get("id", "")):
+		Economy.warband_home = false
 		_set_status("Travelling to %s" % settlement.name if not settlement.is_empty() else "Travelling")
 		_route_timer = 0.0
 	else:
 		_set_status("No way to get there")
 
 
+func _sync_troops() -> void:
+	for p in parties:
+		var castle := Economy.get_castle(p.home)
+		if castle != null:
+			p.set_troops(castle.field_count())
+
+
+func _update_warband_home() -> void:
+	## Troops can change hands while your warband stands at (or in) your castle.
+	var at_home := false
+	var castle := GameData.get_settlement(player.home) if player else {}
+	if not castle.is_empty() and not player.moving:
+		var centre := Vector2(castle.position[0], castle.position[1])
+		var reach: float = SettlementModels.RADIUS.get(castle.type, 20.0) + 24.0
+		at_home = player.inside_settlement == player.home or player.map_position().distance_to(centre) <= reach
+	Economy.warband_home = at_home
+
+
 func _on_arrived(party: Party) -> void:
 	if party == player:
+		_update_warband_home()
 		if not party.inside_settlement.is_empty():
 			_set_status("Staying in %s" % GameData.get_settlement(party.inside_settlement).name)
 		else:
@@ -157,6 +182,10 @@ func _on_arrived(party: Party) -> void:
 			_lord_timers[party] = 1.0
 		else:
 			_lord_timers[party] = _rng.randf_range(LORD_WAIT.x, LORD_WAIT.y)
+			if party.inside_settlement == party.home:
+				var castle := Economy.get_castle(party.home)
+				if castle != null and NpcBrain.resupply(castle) > 0:
+					_sync_troops()
 
 
 func _on_zoom_changed(zoom_t: float) -> void:
@@ -200,6 +229,13 @@ func _update_lords(delta: float) -> void:
 
 func _pick_lord_destination(party: Party) -> Dictionary:
 	## Another settlement of the lord's own faction, preferring nearby ones.
+	## A lord whose warband has shrunk below half strength heads home first.
+	var castle := Economy.get_castle(party.home)
+	if castle != null and party.inside_settlement != party.home \
+			and castle.field_count() < NpcBrain.WARBAND_BASE / 2 and castle.troop_count() > 0:
+		var home := GameData.get_settlement(party.home)
+		if not home.is_empty():
+			return home
 	var here := party.map_position()
 	var near: Array[Dictionary] = []
 	var all: Array[Dictionary] = []

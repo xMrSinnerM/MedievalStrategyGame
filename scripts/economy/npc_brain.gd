@@ -36,6 +36,10 @@ const BATCH := 20
 const QUEUE := 2
 ## NPC garrisons stop growing at this many soldiers per keep level.
 const GARRISON_PER_KEEP := 60
+## A lord visiting their home castle fills their warband up to this size
+## (plus WARBAND_PER_KEEP per keep level), leaving at least half the garrison.
+const WARBAND_BASE := 40
+const WARBAND_PER_KEEP := 20
 
 
 static func catch_up(castle: CastleState, now: float) -> void:
@@ -235,3 +239,23 @@ static func _lowest(castle: CastleState, type: String) -> Dictionary:
 		if b.type == type and b.target == 0 and (best.is_empty() or b.level < best.level):
 			best = b
 	return best
+
+
+static func resupply(castle: CastleState) -> int:
+	## Moves soldiers from the garrison into the lord's warband, strongest
+	## units first. Returns how many joined.
+	var rules := castle.rules
+	var want := WARBAND_BASE + WARBAND_PER_KEEP * castle.keep_level() - castle.field_count()
+	var spare := castle.troop_count() / 2
+	var n := mini(want, spare)
+	if n <= 0:
+		return 0
+	var units: Array = castle.troops.keys()
+	units.sort_custom(func(a: String, b: String) -> bool:
+		return rules.unit_stat(a, "attack") + rules.unit_stat(a, "defense") > rules.unit_stat(b, "attack") + rules.unit_stat(b, "defense"))
+	var moved := 0
+	for unit: String in units:
+		moved += castle.send_to_field(unit, n - moved)
+		if moved >= n:
+			break
+	return moved

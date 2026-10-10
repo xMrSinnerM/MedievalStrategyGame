@@ -17,7 +17,7 @@ func _ready() -> void:
 		push_error("World data failed to load; see errors above.")
 		return
 	Economy.ensure_loaded()
-	Economy.sync_castles(GameData.settlements)
+	Economy.sync_castles(GameData.settlements, GameData.parties)
 	var started := Time.get_ticks_msec()
 	_build_environment()
 	terrain.build()

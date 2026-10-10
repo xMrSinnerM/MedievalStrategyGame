@@ -70,8 +70,8 @@ func refresh() -> void:
 			var noun := rules.unit_name(unit) if castle.troops[unit] == 1 else rules.unit_plural(unit)
 			parts.append("%d %s" % [castle.troops[unit], noun.to_lower()])
 	_garrison.text = "Garrison: %s" % (", ".join(parts) if not parts.is_empty() else "nobody yet")
-	if castle.troop_count() > 0:
-		_garrison.text += " (eats %d food/h)" % int(castle.upkeep_per_hour())
+	if castle.troop_count() + castle.field_count() > 0:
+		_garrison.text += ". With the warband, soldiers eat %d food/h" % int(castle.upkeep_per_hour())
 	if castle.hunger > 0.0 or (castle.resources.get("food", 0.0) <= 0.0 and castle.net_per_hour().food < 0.0):
 		_garrison.text += "\nNo food left: soldiers are deserting!"
 

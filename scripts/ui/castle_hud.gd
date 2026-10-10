@@ -16,6 +16,8 @@ var _resource_labels := {}
 var _builders_label: Label
 var _defense_label: Label
 var _troops_label: Label
+var _warband_button: Button
+var _warband: PanelContainer
 var _recruit: VBoxContainer
 var _build_menu: PanelContainer
 var _build_buttons := {}       ## type -> Button
@@ -69,6 +71,12 @@ func _ready() -> void:
 	controls.add_theme_constant_override("outline_size", 5)
 	controls.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.7))
 	add_child(controls)
+	_warband = preload("res://scripts/ui/warband_panel.gd").new()
+	_warband.hud = self
+	_warband.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
+	_warband.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_warband.offset_top = 70
+	add_child(_warband)
 	Economy.changed.connect(_refresh)
 
 
@@ -78,6 +86,8 @@ func show_castle() -> void:
 	view.mode_changed.connect(_on_mode_changed, CONNECT_REFERENCE_COUNTED)
 	view.message.connect(_show_toast, CONNECT_REFERENCE_COUNTED)
 	_build_menu.visible = view.editable
+	_warband_button.visible = view.editable
+	_warband.visible = false
 	_queue_signature = "?"
 	_on_mode_changed(view.mode)
 	_refresh()
@@ -91,7 +101,7 @@ func _build_top_bar() -> void:
 	bar.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
 	add_child(bar)
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 14)
+	row.add_theme_constant_override("separation", 12)
 	bar.add_child(row)
 	_title = _label("", 18, Color(1.0, 0.9, 0.65))
 	row.add_child(_title)
@@ -108,7 +118,12 @@ func _build_top_bar() -> void:
 	var spacer := Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(spacer)
-	var back := _button("World map (C)")
+	_warband_button = _button("Warband")
+	_warband_button.pressed.connect(func() -> void:
+		_warband.visible = not _warband.visible
+		_warband.refresh())
+	row.add_child(_warband_button)
+	var back := _button("Map (C)")
 	back.pressed.connect(func() -> void: EventBus.world_map_requested.emit())
 	row.add_child(back)
 
@@ -253,8 +268,10 @@ func _refresh() -> void:
 	var total_builders := rules.builders(castle.keep_level())
 	_builders_label.text = "Builders %d / %d" % [castle.free_builders(), total_builders]
 	_defense_label.text = "Defence %d" % int(castle.defense())
-	_troops_label.text = "Troops %d" % castle.troop_count()
-	_troops_label.tooltip_text = "Soldiers eat %d food an hour" % int(castle.upkeep_per_hour())
+	_troops_label.text = "Garrison %d" % castle.troop_count()
+	_troops_label.tooltip_text = "Soldiers in the castle and its warband eat %d food an hour" % int(castle.upkeep_per_hour())
+	_warband_button.text = "Warband %d" % castle.field_count()
+	_warband.refresh()
 	_troops_label.mouse_filter = Control.MOUSE_FILTER_PASS
 
 	for type: String in _build_buttons:

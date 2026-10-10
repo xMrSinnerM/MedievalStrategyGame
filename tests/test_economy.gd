@@ -22,6 +22,7 @@ func _initialize() -> void:
 	test_npc_brain()
 	test_recruitment()
 	test_upkeep_and_desertion()
+	test_warband()
 	print("%d checks, %d failed" % [checks, failures])
 	quit(1 if failures > 0 else 0)
 
@@ -236,6 +237,31 @@ func test_upkeep_and_desertion() -> void:
 	check(c.troops.spearman == 45, "an hour without food: soldiers leave until the farms can feed the rest (%d left)" % c.troops.spearman)
 	c.advance_to(T0 + 3.0 * 3600.0)
 	check(c.troops.spearman == 45, "and then the garrison is stable")
+
+
+func test_warband() -> void:
+	var c := fresh()
+	c.troops = {"spearman": 30, "archer": 5}
+	check(c.send_to_field("spearman", 10) == 10, "ten spearmen join the warband")
+	check(c.send_to_field("archer", 50) == 5, "you can't send more than the garrison has")
+	check(c.troop_count() == 20 and c.field_count() == 15, "garrison 20, warband 15")
+	check(c.return_from_field("spearman", 4) == 4 and c.troops.spearman == 24, "four spearmen come home")
+	near(c.upkeep_per_hour(), 35.0, "the castle feeds its warband too")
+	var copy := CastleState.from_dict(rules, JSON.parse_string(JSON.stringify(c.to_dict(), "", true, true)))
+	check(copy.field_count() == c.field_count(), "the warband survives saving")
+	# Starving: the biggest eater deserts first, garrison or warband alike.
+	c.resources.food = 0.0
+	c.troops = {"spearman": 10}
+	c.field = {"spearman": 90}
+	c.advance_to(T0 + 3600.0)
+	check(c.troop_count() + c.field_count() == 45 and c.field_count() < 90, "hungry warband soldiers desert too (%d + %d left)" % [c.troop_count(), c.field_count()])
+	# A lord at home tops up the warband but leaves half the garrison.
+	var npc := fresh()
+	npc.troops = {"spearman": 100, "swordsman": 20}
+	var joined := NpcBrain.resupply(npc)
+	check(joined == 60, "a lord takes up to 60 soldiers at keep level 1 (%d)" % joined)
+	check(npc.field.get("swordsman", 0) == 20, "the best soldiers go first")
+	check(npc.troop_count() == 60, "and half the garrison stays")
 
 
 func _first(c: CastleState, type: String) -> int:

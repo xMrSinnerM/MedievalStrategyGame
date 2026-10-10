@@ -1,8 +1,9 @@
 class_name CastleState
 extends RefCounted
 ## One castle's economy: its stock of resources, its buildings on the castle
-## grid, the constructions under way, its garrison of soldiers and the
-## barracks' training queue. The same class runs the player's castle and NPC
+## grid, the constructions under way, its garrison of soldiers, the
+## barracks' training queue and the warband its lord leads in the field
+## (which the castle still has to feed). The same class runs the player's castle and NPC
 ## castles; only who gives the orders differs.
 ##
 ## Time is passed in explicitly (Unix seconds) so the castle can catch up on
@@ -21,6 +22,8 @@ var last_update := 0.0
 var troops := {}               ## unit -> soldiers in the garrison
 var training: Array[Dictionary] = []    ## batches {unit, remaining: int, unit_time: float, next: float}
 var hunger := 0.0              ## food owed to soldiers while the stores are empty
+var field := {}                ## unit -> soldiers away in the lord's warband
+var field_ready := false       ## the warband has been given its starting army
 
 var _next_id := 1
 
@@ -102,6 +105,8 @@ func upkeep_per_hour() -> float:
 	var total := 0.0
 	for unit: String in troops:
 		total += troops[unit] * rules.unit_upkeep(unit)
+	for unit: String in field:
+		total += field[unit] * rules.unit_upkeep(unit)
 	return total
 
 
@@ -116,6 +121,34 @@ func troop_count() -> int:
 	var n := 0
 	for unit: String in troops:
 		n += troops[unit]
+	return n
+
+
+func field_count() -> int:
+	var n := 0
+	for unit: String in field:
+		n += field[unit]
+	return n
+
+
+func send_to_field(unit: String, amount: int) -> int:
+	## Moves up to `amount` soldiers from the garrison into the warband.
+	## Returns how many moved.
+	var n := mini(amount, troops.get(unit, 0))
+	if n <= 0:
+		return 0
+	troops[unit] -= n
+	field[unit] = field.get(unit, 0) + n
+	return n
+
+
+func return_from_field(unit: String, amount: int) -> int:
+	## Moves up to `amount` soldiers from the warband back into the garrison.
+	var n := mini(amount, field.get(unit, 0))
+	if n <= 0:
+		return 0
+	field[unit] -= n
+	troops[unit] = troops.get(unit, 0) + n
 	return n
 
 
@@ -387,20 +420,27 @@ func _produce(seconds: float) -> void:
 
 func _desert() -> void:
 	## Each hour of food a soldier goes without makes one soldier leave. The
-	## hungriest units (most upkeep in total) desert first.
+	## hungriest group (most upkeep in total, in the garrison or the warband)
+	## deserts first.
 	while hunger > 0.0:
 		var worst := ""
-		for unit: String in troops:
-			if troops[unit] > 0 and (worst == "" or troops[unit] * rules.unit_upkeep(unit) > troops[worst] * rules.unit_upkeep(worst)):
-				worst = unit
+		var pool := {}
+		var most := 0.0
+		for group: Dictionary in [troops, field]:
+			for unit: String in group:
+				var eats: float = group[unit] * rules.unit_upkeep(unit)
+				if group[unit] > 0 and eats > most:
+					most = eats
+					worst = unit
+					pool = group
 		if worst == "":
 			hunger = 0.0
 			return
 		var upkeep := rules.unit_upkeep(worst)
-		var leaving := mini(int(hunger / upkeep), troops[worst])
+		var leaving := mini(int(hunger / upkeep), pool[worst])
 		if leaving <= 0:
 			return
-		troops[worst] -= leaving
+		pool[worst] -= leaving
 		hunger -= leaving * upkeep
 
 
@@ -418,6 +458,7 @@ func to_dict() -> Dictionary:
 		"resources": resources.duplicate(), "buildings": list,
 		"last_update": last_update, "next_id": _next_id,
 		"troops": troops.duplicate(), "training": training.duplicate(true), "hunger": hunger,
+		"field": field.duplicate(), "field_ready": field_ready,
 	}
 
 
@@ -449,6 +490,10 @@ static func from_dict(p_rules: BuildingRules, data: Dictionary) -> CastleState:
 	if not castle.training.is_empty() and castle.training[0].next <= 0.0:
 		castle.training[0].next = castle.last_update + castle.training[0].unit_time
 	castle.hunger = float(data.get("hunger", 0.0))
+	for unit: String in data.get("field", {}):
+		if p_rules.has_unit(unit):
+			castle.field[unit] = int(data.field[unit])
+	castle.field_ready = bool(data.get("field_ready", false))
 	return castle
 
 

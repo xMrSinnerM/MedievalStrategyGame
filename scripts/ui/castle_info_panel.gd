@@ -84,7 +84,7 @@ func _refresh() -> void:
 	var lines: PackedStringArray = []
 	lines.append("Keep level %d    Defence %d" % [castle.keep_level(), int(castle.defense())])
 	lines.append("%d buildings, %d under construction" % [castle.buildings.size(), castle.constructions().size()])
-	lines.append("Garrison %d soldiers" % castle.troop_count())
+	lines.append("Garrison %d soldiers, warband %d" % [castle.troop_count(), castle.field_count()])
 	var rates := castle.net_per_hour()
 	var income: PackedStringArray = []
 	for r in castle.rules.resources:

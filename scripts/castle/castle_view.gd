@@ -147,6 +147,18 @@ func cancel_training(index: int) -> void:
 		Economy.changed.emit()
 
 
+func move_troops(unit: String, amount: int, to_field: bool) -> void:
+	## Moves soldiers between the garrison and your warband, which must be at the castle.
+	if not editable:
+		return
+	if not Economy.warband_home:
+		message.emit("Your warband is away. Bring it to your castle first.")
+		return
+	var moved := castle.send_to_field(unit, amount) if to_field else castle.return_from_field(unit, amount)
+	if moved > 0:
+		Economy.changed.emit()
+
+
 func stop_mode() -> void:
 	_set_mode(Mode.SELECT)
 
