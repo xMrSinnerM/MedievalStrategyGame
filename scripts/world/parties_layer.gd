@@ -214,8 +214,8 @@ func get_party(party_id: String) -> Party:
 
 func _attack(party_id: String) -> void:
 	var target := get_party(party_id)
-	if player == null or target == null or target == player:
-		return
+	if player == null or target == null or target == player or not GameData.at_war(player.faction_id, target.faction_id):
+		return   # war is declared first (the diplomacy screen asks)
 	_lift_siege()
 	_start_chase(player, target)
 	if player.chasing == target:
@@ -236,7 +236,8 @@ func _start_chase(hunter: Party, prey: Party) -> void:
 
 func _besiege(castle_id: String) -> void:
 	var settlement := GameData.get_settlement(castle_id)
-	if player == null or settlement.is_empty() or Economy.get_castle(castle_id) == null:
+	if player == null or settlement.is_empty() or Economy.get_castle(castle_id) == null \
+			or not GameData.at_war(player.faction_id, settlement.faction):
 		return
 	_lift_siege()
 	player.chasing = null

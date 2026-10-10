@@ -28,3 +28,7 @@ signal battle_fought(report: Dictionary)
 signal siege_started(castle_id: String, besieger: String, until: float)
 ## A lord's siege ended: stormed, lifted or abandoned.
 signal siege_ended(castle_id: String)
+
+## Something (an attack on a faction at peace) needs war declared first: the
+## diplomacy screen asks, declares it and then calls then.
+signal war_declaration_requested(faction_id: String, then: Callable)

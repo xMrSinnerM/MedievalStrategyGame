@@ -37,6 +37,17 @@ func _ready() -> void:
 	castle_button.offset_right = -12
 	castle_button.pressed.connect(func() -> void: EventBus.castle_requested.emit(Economy.player_castle.id))
 	add_child(castle_button)
+	var diplomacy := preload("res://scripts/ui/diplomacy_panel.gd").new()
+	var diplomacy_button := Button.new()
+	diplomacy_button.text = "Diplomacy (K)"
+	diplomacy_button.focus_mode = Control.FOCUS_NONE
+	diplomacy_button.add_theme_font_size_override("font_size", 15)
+	diplomacy_button.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
+	diplomacy_button.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	diplomacy_button.offset_top = 12
+	diplomacy_button.offset_right = -150
+	diplomacy_button.pressed.connect(diplomacy.toggle)
+	add_child(diplomacy_button)
 	var info := preload("res://scripts/ui/castle_info_panel.gd").new()
 	info.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
 	info.grow_horizontal = Control.GROW_DIRECTION_BEGIN
@@ -54,6 +65,10 @@ func _ready() -> void:
 	report.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	report.grow_vertical = Control.GROW_DIRECTION_BOTH
 	add_child(report)
+	diplomacy.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	diplomacy.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	diplomacy.grow_vertical = Control.GROW_DIRECTION_BOTH
+	add_child(diplomacy)
 	_news = Label.new()
 	_news.add_theme_color_override("font_color", Color(1.0, 0.92, 0.7))
 	_news.add_theme_color_override("font_outline_color", Color(0.1, 0.07, 0.04))
@@ -110,6 +125,8 @@ func _on_diplomacy(news: Array) -> void:
 	if news.is_empty():
 		return
 	_news.text = "  ".join(news)
+	if _news.text.contains("offers you peace"):
+		_news.text += "  Press K to answer."
 	_news_left = NEWS_TIME * 1.5
 
 
@@ -132,4 +149,4 @@ func _process(delta: float) -> void:
 		for r in Economy.rules.resources:
 			stock += "%s %d/%d (%+d/h)   " % [r.capitalize(), int(castle.resources[r]), int(cap), int(rates[r])]
 		stock += "Garrison %d   " % castle.troop_count()
-	_info.text = stock + "\n" + "Click: travel there, or pick a castle or party    F: find your party    C: your castle\nWASD / drag: pan    Q E / right-drag: rotate    wheel: zoom\nM: parchment map    Home: recentre    F1: hide    Esc: menu\nYour party: %s\nzoom %d%%    %d fps" % [_party_status, int(_zoom_t * 100.0), Engine.get_frames_per_second()]
+	_info.text = stock + "\n" + "Click: travel there, or pick a castle or party    F: find your party    C: your castle    K: diplomacy\nWASD / drag: pan    Q E / right-drag: rotate    wheel: zoom\nM: parchment map    Home: recentre    F1: hide    Esc: menu\nYour party: %s\nzoom %d%%    %d fps" % [_party_status, int(_zoom_t * 100.0), Engine.get_frames_per_second()]

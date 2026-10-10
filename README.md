@@ -26,6 +26,7 @@ The continent, its names and its factions are original to this game.
 | M | Toggle the parchment map |
 | Home | Recentre |
 | F1 | Hide the help panel |
+| K | Diplomacy screen: wars, peace, gifts |
 | Esc | Pause menu: save, settings, main menu, quit |
 
 Your warband starts just outside Highford, with a gold ring around it. Click
@@ -223,8 +224,8 @@ and go (see Diplomacy). Lords of warring factions fight when they
 meet, sometimes raid each other's towns, and a lord at war with you who spots
 your warband comes after it if they think they will win. Your warband is safe
 while it stands at your castle, and slipping into a town or village shakes off
-a pursuer. A beaten lord goes home to recover. For now you can attack any lord who isn't
-from your own faction.
+a pursuer. A beaten lord goes home to recover. Attacking a lord, or besieging a castle,
+of a faction you are at peace with asks you to declare war first.
 
 ### Sieges
 
@@ -275,8 +276,15 @@ truces and a relation from -100 to 100 between every pair of factions.
   30 points per faction per hour, so gold can't simply buy friendship.
 
 New wars and peace treaties appear in the news line at the bottom of the
-screen, and peace calls off sieges and chases between the two factions. The
-diplomacy screen comes next.
+screen, and peace calls off sieges and chases between the two factions.
+
+The **diplomacy screen** (K, or the Diplomacy button) lists every other faction
+with your relation and your war or peace: how long the war has run and who is
+winning, or how long a truce has left. From there you declare war (it asks
+first), make peace (free if they offered it or are losing, otherwise for the
+gold they ask, and impossible while they are clearly winning) and send gifts of
+100 or 500 gold, each button showing the goodwill it would buy. Below are the
+other factions' wars and the latest news.
 
 ## Project layout
 
@@ -353,7 +361,7 @@ How the parts work:
 - [x] Main menu, pause menu and settings
 - [x] Save slots
 - [x] Diplomacy rules: relations, wars and peace between the factions
-- [ ] Diplomacy screen
+- [x] Diplomacy screen
 
 ## Known limitations
 

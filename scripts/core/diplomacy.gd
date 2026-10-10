@@ -96,6 +96,18 @@ func relation(a: String, b: String) -> float:
 	return 0.0 if a == b else float(relations.get(key(a, b), 0.0))
 
 
+static func relation_word(value: float) -> String:
+	if value <= -50.0:
+		return "Hostile"
+	if value < HATE / 2.0:
+		return "Unfriendly"
+	if value <= 15.0:
+		return "Neutral"
+	if value <= 50.0:
+		return "Friendly"
+	return "Close friends"
+
+
 func change_relation(a: String, b: String, delta: float) -> void:
 	if a == b:
 		return
