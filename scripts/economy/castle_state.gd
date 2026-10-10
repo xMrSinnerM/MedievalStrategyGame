@@ -115,17 +115,25 @@ func can_afford(cost: Dictionary) -> bool:
 	return true
 
 
-func check_place(type: String, cell: Vector2i) -> String:
-	## Why a new building can't go here, or "" if it can.
+func check_build(type: String) -> String:
+	## Why a new building of this type can't be started anywhere, or "" if it can.
 	if not rules.has_type(type):
 		return "Unknown building"
 	if rules.is_perimeter(type):
 		return "This is built around the castle, not placed"
 	if count(type) >= rules.max_count(type, keep_level()):
 		return "The castle already has one" if rules.is_unique(type) else "Upgrade the keep to build more of these"
+	return _check_start_work(rules.cost(type, 1))
+
+
+func check_place(type: String, cell: Vector2i) -> String:
+	## Why a new building can't go here, or "" if it can.
+	var reason := check_build(type)
+	if reason != "":
+		return reason
 	if not fits(type, cell):
 		return "There's no room there"
-	return _check_start_work(rules.cost(type, 1))
+	return ""
 
 
 func check_upgrade(building_id: int) -> String:

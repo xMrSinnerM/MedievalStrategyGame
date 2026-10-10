@@ -28,6 +28,13 @@ func ensure_loaded() -> void:
 		new_game()
 
 
+func get_castle(castle_id: String) -> CastleState:
+	for c in castles:
+		if c.id == castle_id:
+			return c
+	return null
+
+
 static func now() -> float:
 	return Time.get_unix_time_from_system()
 

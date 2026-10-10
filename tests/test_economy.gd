@@ -115,6 +115,10 @@ func test_placement() -> void:
 	check(c.move(farm, Vector2i(18, 0)), "farm moved")
 	check(c.get_building(farm).cell == Vector2i(18, 0), "farm at its new spot")
 	check(not c.move(farm, Vector2i(10, 10)), "can't move onto the keep")
+	check(c.check_build("house") == "", "a house can be started")
+	check(c.check_place("house", Vector2i(11, 11)) == "There's no room there", "but not on top of the keep")
+	c.resources.wood = 0.0
+	check(c.check_build("house") == "Not enough resources", "the build menu knows when you can't afford it")
 
 
 func test_offline_catch_up_in_order() -> void:

@@ -6,6 +6,7 @@ extends RefCounted
 const PROP_SHADER := preload("res://shaders/prop.gdshader")
 
 static var _materials := {}
+static var _plain_materials := {}
 
 var _surfaces := {}   ## Color -> SurfaceTool
 
@@ -20,6 +21,19 @@ static func material(color: Color) -> ShaderMaterial:
 		m.set_shader_parameter("albedo", color)
 		_materials[key] = m
 	return _materials[key]
+
+
+static func plain_material(color: Color) -> StandardMaterial3D:
+	## Ordinary lit material without the world map's fog, for scenes off the map
+	## such as the castle screen.
+	var key := color.to_html(false)
+	if not _plain_materials.has(key):
+		var m := StandardMaterial3D.new()
+		m.albedo_color = color
+		m.roughness = 0.9
+		m.metallic_specular = 0.15
+		_plain_materials[key] = m
+	return _plain_materials[key]
 
 
 func box(color: Color, xform: Transform3D, size: Vector3) -> void:
@@ -79,13 +93,14 @@ func gable_roof(color: Color, xform: Transform3D, width: float, depth: float, he
 			st.add_vertex(xform * v)
 
 
-func commit() -> ArrayMesh:
+func commit(plain := false) -> ArrayMesh:
+	## plain = true uses plain_material() instead of the fogged map material.
 	var mesh := ArrayMesh.new()
 	for color: Color in _surfaces:
 		var st: SurfaceTool = _surfaces[color]
 		st.generate_normals()
 		st.commit(mesh)
-		mesh.surface_set_material(mesh.get_surface_count() - 1, material(color))
+		mesh.surface_set_material(mesh.get_surface_count() - 1, plain_material(color) if plain else material(color))
 	return mesh
 
 
