@@ -1,4 +1,9 @@
 {
+	"wars": [
+		["aldmere", "varnholt"],
+		["ashkar", "thornwald"],
+		["thornwald", "corvane"]
+	],
 	"factions": [
 		{
 			"id": "aldmere",

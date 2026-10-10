@@ -11,6 +11,7 @@ const PLAYER_PATH := "res://data/player.json"
 var terrain_config: Dictionary = {}
 var factions: Array[Dictionary] = []
 var factions_by_id: Dictionary = {}
+var wars: Array = []                   ## [faction id, faction id] pairs at war
 var settlements: Array[Dictionary] = []
 var settlements_by_id: Dictionary = {}
 var terrain: TerrainData
@@ -33,6 +34,7 @@ func ensure_loaded() -> bool:
 		return false
 
 	var faction_data := load_json(FACTIONS_PATH)
+	wars = faction_data.get("wars", [])
 	for f in faction_data.get("factions", []):
 		var faction: Dictionary = f
 		faction.color = Color.html(faction.color)
@@ -71,6 +73,13 @@ func ensure_loaded() -> bool:
 
 func get_faction(id: String) -> Dictionary:
 	return factions_by_id.get(id, {})
+
+
+func at_war(a: String, b: String) -> bool:
+	for pair in wars:
+		if (pair[0] == a and pair[1] == b) or (pair[0] == b and pair[1] == a):
+			return true
+	return false
 
 
 func get_settlement(id: String) -> Dictionary:

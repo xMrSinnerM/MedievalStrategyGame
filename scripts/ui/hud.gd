@@ -1,10 +1,15 @@
 extends CanvasLayer
-## Minimal HUD: controls, what your party is doing, zoom level and frame rate.
-## F1 hides it.
+## Minimal HUD: controls, what your party is doing, zoom level and frame rate,
+## plus the castle and party panels, battle reports and news of battles
+## between lords. F1 hides it.
+
+const NEWS_TIME := 7.0
 
 var _info: Label
 var _zoom_t := 0.0
 var _party_status := ""
+var _news: Label
+var _news_left := 0.0
 
 
 func _ready() -> void:
@@ -36,6 +41,29 @@ func _ready() -> void:
 	info.offset_top = 56
 	info.offset_right = -12
 	add_child(info)
+	var party_panel := preload("res://scripts/ui/party_panel.gd").new()
+	party_panel.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
+	party_panel.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	party_panel.offset_top = 56
+	party_panel.offset_right = -12
+	add_child(party_panel)
+	var report := preload("res://scripts/ui/battle_report.gd").new()
+	report.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	report.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	report.grow_vertical = Control.GROW_DIRECTION_BOTH
+	add_child(report)
+	_news = Label.new()
+	_news.add_theme_color_override("font_color", Color(1.0, 0.92, 0.7))
+	_news.add_theme_color_override("font_outline_color", Color(0.1, 0.07, 0.04))
+	_news.add_theme_constant_override("outline_size", 6)
+	_news.add_theme_font_size_override("font_size", 17)
+	_news.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
+	_news.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_news.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	_news.offset_bottom = -24
+	_news.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	add_child(_news)
+	EventBus.battle_fought.connect(_on_battle)
 	EventBus.camera_zoom_changed.connect(func(t: float) -> void: _zoom_t = t)
 	EventBus.party_status_changed.connect(func(text: String) -> void: _party_status = text)
 
@@ -45,7 +73,19 @@ func _unhandled_input(event: InputEvent) -> void:
 		visible = not visible
 
 
-func _process(_delta: float) -> void:
+func _on_battle(report: Dictionary) -> void:
+	## Battles between lords make the news; your own get the full report.
+	if report.player != "":
+		return
+	var winner: String = report.attacker if report.winner == "a" else report.defender
+	var loser: String = report.defender if report.winner == "a" else report.attacker
+	_news.text = "%s defeated %s near %s" % [winner, loser, report.place]
+	_news_left = NEWS_TIME
+
+
+func _process(delta: float) -> void:
+	_news_left = maxf(_news_left - delta, 0.0)
+	_news.modulate.a = clampf(_news_left, 0.0, 1.0)
 	if not visible:
 		return
 	var castle: CastleState = Economy.player_castle
@@ -56,4 +96,4 @@ func _process(_delta: float) -> void:
 		for r in Economy.rules.resources:
 			stock += "%s %d/%d (%+d/h)   " % [r.capitalize(), int(castle.resources[r]), int(cap), int(rates[r])]
 		stock += "Garrison %d   " % castle.troop_count()
-	_info.text = stock + "\n" + "Click: travel there, or pick a castle    F: find your party    C: your castle\nWASD / drag: pan    Q E / right-drag: rotate    wheel: zoom\nM: parchment map    Home: recentre    F1: hide\nYour party: %s\nzoom %d%%    %d fps" % [_party_status, int(_zoom_t * 100.0), Engine.get_frames_per_second()]
+	_info.text = stock + "\n" + "Click: travel there, or pick a castle or party    F: find your party    C: your castle\nWASD / drag: pan    Q E / right-drag: rotate    wheel: zoom\nM: parchment map    Home: recentre    F1: hide\nYour party: %s\nzoom %d%%    %d fps" % [_party_status, int(_zoom_t * 100.0), Engine.get_frames_per_second()]
