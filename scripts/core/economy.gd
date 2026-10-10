@@ -11,8 +11,8 @@ signal castle_captured(castle_id: String, old_owner: String, new_owner: String)
 const SAVE_PATH := "user://savegame.json"
 const SAVE_VERSION := 1
 const TICK := 1.0              ## seconds between economy updates
-const AUTOSAVE := 30.0
-const MAIN_CASTLE := "player_castle"   ## id of your first castle, which can't be captured         ## seconds between autosaves
+const AUTOSAVE := 30.0           ## seconds between autosaves
+const MAIN_CASTLE := "player_castle"   ## id of your first castle, which can't be captured
 ## A new NPC castle starts with this many hours of building behind it (by seed).
 const NPC_HEAD_START_HOURS := Vector2(12.0, 72.0)
 
