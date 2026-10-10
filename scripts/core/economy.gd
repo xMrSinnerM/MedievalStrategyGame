@@ -7,6 +7,8 @@ extends Node
 signal changed   ## something in a castle changed (resources tick, build finished, order given)
 ## A castle changed hands. Owners are faction ids, or "player".
 signal castle_captured(castle_id: String, old_owner: String, new_owner: String)
+## Wars or truces changed; news holds what happened, as sentences.
+signal diplomacy_changed(news: Array)
 
 ## Games are kept in SLOTS save slots under save_dir (slot_1.json ...).
 const SLOTS := 3
@@ -15,6 +17,7 @@ const OLD_SAVE_PATH := "user://savegame.json"
 const SAVE_VERSION := 1
 const TICK := 1.0              ## seconds between economy updates
 const AUTOSAVE := 30.0           ## seconds between autosaves
+const DIPLOMACY_TICK := 30.0     ## seconds between rounds of AI diplomacy
 const MAIN_CASTLE := "player_castle"   ## id of your first castle, which can't be captured
 ## Lords leave your main castle alone until its keep reaches this level.
 const PROTECTED_BELOW_KEEP := 2
@@ -24,6 +27,8 @@ const NPC_HEAD_START_HOURS := Vector2(12.0, 72.0)
 var rules: BuildingRules
 var player_castle: CastleState
 var castles: Array[CastleState] = []   ## the player's first, then NPC castles
+## Wars, truces and relations between the factions.
+var diplomacy: Diplomacy
 
 ## Lords whose home castle changed since data/parties.json: party id -> castle id.
 var homes := {}
@@ -46,7 +51,15 @@ var slot := 1
 
 var _tick_timer := 0.0
 var _save_timer := 0.0
+var _diplomacy_timer := 0.0
+var _rng := RandomNumberGenerator.new()
 var _loaded := false
+
+
+func _ready() -> void:
+	_rng.randomize()
+	# Through the tree: tests load this script where autoload names don't resolve.
+	get_node("/root/EventBus").battle_fought.connect(record_battle)
 
 
 func ensure_loaded() -> void:
@@ -272,6 +285,75 @@ static func new_npc_castle(p_rules: BuildingRules, id: String, castle_name: Stri
 	return castle
 
 
+func faction_of(owner: String) -> String:
+	## The faction a castle owner belongs to ("player" is the player's faction).
+	return player_faction if owner == "player" else owner
+
+
+func faction_power() -> Dictionary:
+	## Rough military strength per faction: soldiers in its castles and
+	## warbands, plus 100 for each castle.
+	var power := {}
+	for c in castles:
+		var f := faction_of(c.owner)
+		power[f] = float(power.get(f, 0.0)) + 100.0 + c.troop_count() + c.field_count()
+	return power
+
+
+func record_battle(report: Dictionary) -> void:
+	## Counts a battle (EventBus.battle_fought) towards the war between its factions.
+	if diplomacy == null:
+		return
+	var a := faction_of(report.get("attacker_faction", ""))
+	var d := faction_of(report.get("defender_faction", ""))
+	var won_a: bool = report.get("winner", "") == "a"
+	if report.get("siege", false):
+		diplomacy.record_siege(a, d, report.get("outcome", "held"))
+		return
+	var losers: Dictionary = report.get("b" if won_a else "a", {})
+	var kills := 0
+	for unit in losers:
+		kills += int(losers[unit].get("lost", 0))
+	diplomacy.record_battle(a if won_a else d, d if won_a else a, kills)
+
+
+# --- The player's diplomacy (gold comes from the main castle) -----------------
+
+func declare_war(faction: String) -> String:
+	## Returns "" or why war can't be declared.
+	var why := diplomacy.declare_war(player_faction, faction, now())
+	if why == "":
+		_diplomacy_done()
+	return why
+
+
+func propose_peace(faction: String, gold := 0) -> bool:
+	if gold > int(player_castle.resources.get("gold", 0.0)):
+		return false
+	if not diplomacy.propose_peace(player_faction, faction, gold, now()):
+		return false
+	player_castle.resources.gold = float(player_castle.resources.get("gold", 0.0)) - gold
+	_diplomacy_done()
+	return true
+
+
+func send_gift(faction: String, gold: int) -> float:
+	## Returns the relation gained (0 if the gold isn't there).
+	if gold <= 0 or gold > int(player_castle.resources.get("gold", 0.0)) or faction == player_faction:
+		return 0.0
+	player_castle.resources.gold = float(player_castle.resources.gold) - gold
+	var points := diplomacy.give_gift(player_faction, faction, gold, now())
+	save_game()
+	changed.emit()
+	return points
+
+
+func _diplomacy_done() -> void:
+	save_game()
+	changed.emit()
+	diplomacy_changed.emit([diplomacy.news.back().text] if not diplomacy.news.is_empty() else [])
+
+
 func get_castle(castle_id: String) -> CastleState:
 	for c in castles:
 		if c.id == castle_id:
@@ -289,6 +371,7 @@ func new_game() -> void:
 	exiled.clear()
 	player_castle = CastleState.create_new(rules, MAIN_CASTLE, "Your Castle", "player", now())
 	castles.append(player_castle)
+	diplomacy = Diplomacy.from_data_files(now())
 	save_game()
 	changed.emit()
 
@@ -308,6 +391,7 @@ func load_game() -> bool:
 		exiled[id] = true
 	for c in data.get("castles", []):
 		castles.append(CastleState.from_dict(rules, c))
+	diplomacy = Diplomacy.from_dict(data.get("diplomacy", {}), now())
 	player_castle = find_main_castle()
 	if player_castle == null:
 		return false
@@ -332,7 +416,8 @@ func save_game() -> void:
 		push_error("Could not write %s" % save_path())
 		return
 	f.store_string(JSON.stringify({"version": SAVE_VERSION, "saved_at": now(), "castles": list,
-			"homes": homes, "exiled": exiled.keys()}, "\t", true, true))
+			"homes": homes, "exiled": exiled.keys(),
+			"diplomacy": diplomacy.to_dict() if diplomacy != null else {}}, "\t", true, true))
 	f.close()
 
 
@@ -348,6 +433,12 @@ func _process(delta: float) -> void:
 			if c.is_npc():
 				NpcBrain.think(c, t)
 		changed.emit()
+	_diplomacy_timer += delta
+	if _diplomacy_timer >= DIPLOMACY_TICK and diplomacy != null:
+		_diplomacy_timer = 0.0
+		var made := diplomacy.think(now(), _rng, faction_power(), newcomer_protected())
+		if not made.is_empty():
+			diplomacy_changed.emit(made)
 	_save_timer += delta
 	if _save_timer >= AUTOSAVE:
 		_save_timer = 0.0

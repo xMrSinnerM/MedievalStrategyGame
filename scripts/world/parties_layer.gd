@@ -366,6 +366,19 @@ func on_castle_captured(castle_id: String) -> void:
 	_sync_troops()
 
 
+func on_diplomacy_changed() -> void:
+	## Peace calls off sieges and chases between factions no longer at war.
+	if _siege_castle != "" and not GameData.at_war(player.faction_id, GameData.get_settlement(_siege_castle).faction):
+		_lift_siege()
+	for lord: Party in _lord_sieges.keys():
+		if not _hostile_castle(lord, GameData.get_settlement(_lord_sieges[lord].castle)):
+			_lift_lord_siege(lord)
+	for hunter in parties:
+		if hunter != player and hunter.chasing != null and not GameData.at_war(hunter.faction_id, hunter.chasing.faction_id):
+			hunter.stop()
+			_lord_timers[hunter] = 1.0
+
+
 func _travel(target: Vector2, settlement: Dictionary) -> void:
 	_lift_siege()
 	player.chasing = null

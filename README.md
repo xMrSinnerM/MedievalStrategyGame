@@ -217,13 +217,14 @@ down archers (`"bonus"` in `data/units.json`). The winner's castle plunders 3
 gold for every enemy that fell. Your own battles end with a report; battles
 between lords show up as a line of news at the bottom of the screen.
 
-Which factions are at war is listed under `"wars"` in `data/factions.json`
-(Aldmere and Varnholt to start with). Lords of warring factions fight when they
+Which factions are at war when a game starts is listed under `"wars"` in
+`data/factions.json` (Aldmere and Varnholt to start with); after that, wars come
+and go (see Diplomacy). Lords of warring factions fight when they
 meet, sometimes raid each other's towns, and a lord at war with you who spots
 your warband comes after it if they think they will win. Your warband is safe
 while it stands at your castle, and slipping into a town or village shakes off
-a pursuer. A beaten lord goes home to recover. Diplomacy comes later; for now
-you can attack any lord who isn't from your own faction.
+a pursuer. A beaten lord goes home to recover. For now you can attack any lord who isn't
+from your own faction.
 
 ### Sieges
 
@@ -249,6 +250,33 @@ of yours, and attacking the besieger lifts the siege. A castle that has just
 been stormed is left alone for 10 minutes. Your main castle is safe from
 sieges until its keep reaches level 2 (newcomer's protection), so train a
 garrison before you upgrade it.
+
+## Diplomacy
+
+You rule Aldmere: its lords follow your wars. `Diplomacy`
+(`scripts/core/diplomacy.gd`, owned and saved by `Economy`) keeps the wars,
+truces and a relation from -100 to 100 between every pair of factions.
+
+- **Relations** wander over time, drifting back to how two factions usually get
+  on (some are old rivals). Declaring war costs 40 with the victim and 5 with
+  everyone else; peace gains 20.
+- **AI factions** think every 30 seconds. A faction that dislikes another
+  (below -30), isn't already fighting two wars and is at least 80% as strong
+  may declare war. Wars last at least 20 minutes; after that, a faction that is
+  losing, or tired of a long war, makes peace. Peace brings a 30 minute truce.
+  Newcomer's protection also keeps new wars off you.
+- **War score** follows each war: +5 for a won battle and 0.1 per enemy
+  killed, +25 for taking a castle, +10 for sacking one.
+- **Peace with you** is never made without you. An AI faction losing to you
+  offers peace. One you propose peace to accepts if it is losing, if the war
+  has dragged on or if it likes you, or else names a price in gold (10 gold
+  per missing point); a faction that is clearly winning refuses.
+- **Gifts** of gold improve relations, less per coin for big gifts, and at most
+  30 points per faction per hour, so gold can't simply buy friendship.
+
+New wars and peace treaties appear in the news line at the bottom of the
+screen, and peace calls off sieges and chases between the two factions. The
+diplomacy screen comes next.
 
 ## Project layout
 
@@ -324,7 +352,8 @@ How the parts work:
 - [x] Lords besiege castles, including yours
 - [x] Main menu, pause menu and settings
 - [x] Save slots
-- [ ] Diplomacy
+- [x] Diplomacy rules: relations, wars and peace between the factions
+- [ ] Diplomacy screen
 
 ## Known limitations
 

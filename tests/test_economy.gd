@@ -27,6 +27,8 @@ func _initialize() -> void:
 	test_siege()
 	test_capture()
 	test_save_slots()
+	test_diplomacy()
+	test_diplomacy_ai()
 	print("%d checks, %d failed" % [checks, failures])
 	quit(1 if failures > 0 else 0)
 
@@ -409,6 +411,115 @@ func test_save_slots() -> void:
 	eco.delete_slot(2)
 	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://test_saves"))
 	eco.free()
+
+func test_diplomacy() -> void:
+	var ids := ["aldmere", "varnholt", "ashkar", "corvane"]
+	var d := Diplomacy.create_new(ids, [["aldmere", "varnholt"]], "aldmere", T0)
+	check(d.at_war("varnholt", "aldmere") and not d.at_war("aldmere", "ashkar"), "starting wars come from the data")
+	near(d.relation("aldmere", "varnholt"), Diplomacy.START_AT_WAR, "factions at war start out hostile")
+	d.change_relation("aldmere", "ashkar", 500.0)
+	near(d.relation("ashkar", "aldmere"), 100.0, "relations stop at 100")
+	# Declaring war.
+	var before := d.relation("aldmere", "corvane")
+	check(d.declare_war("aldmere", "ashkar", T0) == "", "you can declare war on a faction at peace")
+	check(d.at_war("aldmere", "ashkar"), "and then you are at war")
+	check(d.relation("aldmere", "ashkar") <= -50.0, "declaring war ruins relations")
+	near(d.relation("aldmere", "corvane"), before - Diplomacy.WARMONGER, "others think less of a warmonger")
+	check(d.declare_war("aldmere", "ashkar", T0) != "", "you can't declare the same war twice")
+	check(d.news.back().text == "You declared war on Ashkar.", "war makes the news: %s" % d.news.back().text)
+	# War score.
+	d.record_battle("ashkar", "aldmere", 40)
+	near(d.war_score("ashkar", "aldmere"), Diplomacy.SCORE_BATTLE + 4.0, "a won battle counts for the winner")
+	near(d.war_score("aldmere", "ashkar"), -(Diplomacy.SCORE_BATTLE + 4.0), "and against the loser")
+	d.record_siege("aldmere", "ashkar", "captured")
+	near(d.war_score("aldmere", "ashkar"), Diplomacy.SCORE_CAPTURE - 9.0, "taking a castle counts most")
+	d.record_battle("corvane", "ashkar", 10)
+	check(not d.wars.has(Diplomacy.key("corvane", "ashkar")), "battles outside a war change nothing")
+	# Peace terms: winning factions refuse, losing ones accept, others want gold.
+	d.record_siege("aldmere", "ashkar", "captured")
+	d.record_siege("aldmere", "ashkar", "captured")
+	var terms: Dictionary = d.peace_terms("aldmere", "ashkar", T0 + 60.0)
+	check(terms.possible and terms.price == 0, "a faction losing badly accepts peace for nothing: %s" % terms)
+	terms = d.peace_terms("ashkar", "aldmere", T0)
+	terms = d.peace_terms("aldmere", "varnholt", T0)
+	check(terms.possible and terms.price > 0, "an even war needs gold: %s" % terms)
+	check(not d.propose_peace("aldmere", "varnholt", terms.price - 1, T0), "too little gold is refused")
+	check(d.propose_peace("aldmere", "varnholt", terms.price, T0), "enough gold buys peace")
+	check(not d.at_war("aldmere", "varnholt"), "peace ends the war")
+	check(d.truce_left("aldmere", "varnholt", T0) > 0.0, "and starts a truce")
+	check(d.declare_war("varnholt", "aldmere", T0 + 60.0) != "", "no war during a truce")
+	check(d.declare_war("varnholt", "aldmere", T0 + Diplomacy.TRUCE + 1.0) == "", "war is possible after the truce")
+	d.record_siege("varnholt", "aldmere", "captured")
+	d.record_siege("varnholt", "aldmere", "captured")
+	terms = d.peace_terms("aldmere", "varnholt", T0 + Diplomacy.TRUCE + 2.0)
+	check(not terms.possible, "a faction that is winning won't hear of peace")
+	# Gifts buy goodwill, less per coin for big gifts, and only so much.
+	var g1 := d.give_gift("aldmere", "corvane", 100, T0)
+	var g2 := d.gift_value("aldmere", "corvane", 1000, T0 + 1.0)
+	check(g1 > 5.0 and g1 < 8.0, "a 100 gold gift is worth a little (%.1f)" % g1)
+	check(g2 < 10.0 * g1, "ten times the gold buys less than ten times the goodwill")
+	for i in 10:
+		d.give_gift("aldmere", "corvane", 1000, T0 + 2.0)
+	near(d.gift_value("aldmere", "corvane", 1000, T0 + 3.0), 0.0, "gifts stop helping for a while")
+	check(d.gift_value("aldmere", "corvane", 1000, T0 + Diplomacy.GIFT_WINDOW + 3.0) > 0.0, "and work again later")
+	# Saving.
+	var copy := Diplomacy.from_dict(JSON.parse_string(JSON.stringify(d.to_dict())), T0)
+	check(copy.at_war("aldmere", "varnholt") and copy.at_war("aldmere", "ashkar"), "wars are saved")
+	near(copy.relation("aldmere", "corvane"), d.relation("aldmere", "corvane"), "relations are saved")
+	near(copy.war_score("varnholt", "aldmere"), d.war_score("varnholt", "aldmere"), "war scores are saved")
+	check(copy.truce_left("aldmere", "varnholt", T0) == d.truce_left("aldmere", "varnholt", T0), "truces are saved")
+	check(copy.news.size() == d.news.size(), "and the news")
+	check(copy.player_faction == "aldmere", "you rule Aldmere")
+
+
+func test_diplomacy_ai() -> void:
+	var ids := ["aldmere", "varnholt", "ashkar", "thornwald", "corvane"]
+	var d := Diplomacy.create_new(ids, [["ashkar", "thornwald"], ["thornwald", "corvane"]], "aldmere", T0)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7
+	var power := {"aldmere": 500.0, "varnholt": 500.0, "ashkar": 600.0, "thornwald": 400.0, "corvane": 500.0}
+	d.record_siege("ashkar", "thornwald", "captured")
+	d.record_siege("ashkar", "thornwald", "captured")
+	var t := T0
+	var wars_seen := {}
+	var peace_seen := false
+	var most_wars := 0
+	for i in 400:   # 200 minutes of half-minute rounds
+		t += 30.0
+		for k in d.wars:
+			wars_seen[k] = true
+		for text: String in d.think(t, rng, power):
+			if text.contains("made peace"):
+				peace_seen = true
+		for f in ids:
+			most_wars = maxi(most_wars, d.enemies_of(f).size())
+	check(most_wars <= Diplomacy.MAX_WARS + 1, "no faction fights everyone at once (%d wars)" % most_wars)
+	check(peace_seen, "AI factions make peace")
+	check(wars_seen.size() > 2, "and start new wars (%d wars seen)" % wars_seen.size())
+	var in_range := true
+	for k: String in d.relations:
+		in_range = in_range and d.relations[k] >= -100.0 and d.relations[k] <= 100.0
+	check(in_range, "relations stay between -100 and 100")
+	# A faction losing to you offers peace; you are never made to declare war.
+	var e := Diplomacy.create_new(ids, [["aldmere", "varnholt"]], "aldmere", T0)
+	for i in 4:
+		e.record_battle("aldmere", "varnholt", 50)
+	var offered := false
+	t = T0
+	for i in 100:
+		t += 30.0
+		e.think(t, rng, power, true)
+		offered = offered or e.offers.has("varnholt")
+	check(offered, "Varnholt, losing, offers you peace")
+	check(e.at_war("aldmere", "varnholt"), "but peace with you is never made without you")
+	var declared_by_you := false
+	for item: Dictionary in e.news:
+		declared_by_you = declared_by_you or item.text.begins_with("You declared")
+	check(not declared_by_you, "and you are never made to declare war")
+	check(e.enemies_of("aldmere").size() == 1, "newcomer protection keeps new wars off you")
+	var terms: Dictionary = e.peace_terms("aldmere", "varnholt", t)
+	check(not e.offers.has("varnholt") or terms.price == 0, "an offer of peace costs nothing to accept")
+
 
 func _first(c: CastleState, type: String) -> int:
 	for b in c.buildings:

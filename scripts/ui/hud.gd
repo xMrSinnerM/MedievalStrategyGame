@@ -66,6 +66,7 @@ func _ready() -> void:
 	_news.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	add_child(_news)
 	EventBus.battle_fought.connect(_on_battle)
+	Economy.diplomacy_changed.connect(_on_diplomacy)
 	_alert = Label.new()
 	_alert.add_theme_color_override("font_color", Color(1.0, 0.5, 0.38))
 	_alert.add_theme_color_override("font_outline_color", Color(0.12, 0.05, 0.03))
@@ -102,6 +103,14 @@ func _on_battle(report: Dictionary) -> void:
 	else:
 		_news.text = "%s defeated %s near %s" % [winner, loser, report.place]
 	_news_left = NEWS_TIME
+
+
+func _on_diplomacy(news: Array) -> void:
+	## Wars declared and peace made are news too.
+	if news.is_empty():
+		return
+	_news.text = "  ".join(news)
+	_news_left = NEWS_TIME * 1.5
 
 
 func _process(delta: float) -> void:

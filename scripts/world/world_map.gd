@@ -30,6 +30,7 @@ func _ready() -> void:
 	parchment.build()
 	camera_rig.setup()
 	Economy.castle_captured.connect(_on_castle_captured)
+	Economy.diplomacy_changed.connect(func(_news: Array) -> void: parties.on_diplomacy_changed())
 	print("World map built in %d ms (%d settlements, %d bridges, %d trees, %d parties)" % [Time.get_ticks_msec() - started,
 		settlements.settlements.size(), settlements.bridge_count, vegetation.tree_count, parties.parties.size()])
 
