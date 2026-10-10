@@ -48,6 +48,7 @@ func _ready() -> void:
 	ok.pressed.connect(func() -> void: visible = false)
 	box.add_child(ok)
 	EventBus.battle_fought.connect(_on_battle)
+	Economy.attack_resolved.connect(show_baron_report)
 
 
 func _on_battle(report: Dictionary) -> void:
@@ -123,6 +124,39 @@ func show_report(report: Dictionary) -> void:
 	if report.get("lifted", "") != "":
 		_footer.text += "\nThe siege of %s is lifted." % report.lifted
 	visible = true
+
+
+func show_baron_report(report: Dictionary) -> void:
+	## The report for an army you sent against a robber baron camp.
+	if report.get("empty", false):
+		_title.text = "Nothing to fight"
+		_title.add_theme_color_override("font_color", MUTED)
+		_place.text = "%s was still in ashes when your army arrived." % report.defender
+		_clear_grid()
+		_footer.text = "Your army is marching home."
+		visible = true
+		return
+	report = report.duplicate()
+	report.attacker = "Your army"
+	show_report(report)
+	var won: bool = report.winner == "a"
+	_place.text = "Your army attacked %s (level %d)" % [report.defender, report.level]
+	var lines: PackedStringArray = []
+	if won:
+		lines.append("Your army is bringing home %s." % _spoils(report.spoils))
+		if report.leveled:
+			lines.append("%s rises to level %d: more soldiers, more loot." % [report.defender, report.new_level])
+		else:
+			lines.append("Wins %d of %d before %s reaches level %d." % [report.defeats, report.needed, report.defender, report.new_level + 1])
+	else:
+		lines.append("The camp held. Your surviving soldiers are marching home.")
+	_footer.text = "\n".join(lines)
+
+
+func _clear_grid() -> void:
+	for child in _grid.get_children():
+		_grid.remove_child(child)
+		child.queue_free()
 
 
 func _spoils(spoils: Dictionary) -> String:

@@ -32,3 +32,5 @@ signal siege_ended(castle_id: String)
 ## Something (an attack on a faction at peace) needs war declared first: the
 ## diplomacy screen asks, declares it and then calls then.
 signal war_declaration_requested(faction_id: String, then: Callable)
+## A robber baron camp was clicked on the map ("" clears the selection).
+signal baron_selected(camp_id: String)

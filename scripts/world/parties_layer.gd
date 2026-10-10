@@ -145,6 +145,10 @@ func _build_markers() -> void:
 	add_child(_ring)
 
 
+## The robber baron layer, for picking camps (set by the world map).
+var barons: Node3D
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		if event.pressed:
@@ -173,6 +177,12 @@ func _on_click(screen_pos: Vector2) -> void:
 	if hit == null:
 		return
 	var target := Vector2(hit.x, hit.z)
+	var camp: String = barons.camp_at(target) if barons != null else ""
+	if camp != "":
+		EventBus.settlement_selected.emit("")
+		EventBus.baron_selected.emit(camp)
+		return
+	EventBus.baron_selected.emit("")
 	var settlement := _settlement_at(target)
 	if settlement.get("type", "") == "castle":
 		EventBus.settlement_selected.emit(settlement.id)
