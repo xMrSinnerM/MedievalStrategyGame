@@ -17,6 +17,10 @@ var rules: BuildingRules
 var player_castle: CastleState
 var castles: Array[CastleState] = []   ## the player's first, then NPC castles
 
+## True while your warband stands at your castle, so troops can change hands.
+## Set by the world map; not saved (the warband starts at the castle).
+var warband_home := false
+
 var _tick_timer := 0.0
 var _save_timer := 0.0
 var _loaded := false
@@ -31,10 +35,12 @@ func ensure_loaded() -> void:
 		new_game()
 
 
-func sync_castles(settlements: Array) -> void:
+func sync_castles(settlements: Array, parties: Array = []) -> void:
 	## Gives every castle on the map an economy: the player's settlement uses
 	## the player's castle, every other castle gets an NPC economy (created
 	## with a head start the first time it appears, then saved like any other).
+	## Each party's warband belongs to its "home" castle and starts with the
+	## party's troops as spearmen.
 	var added := false
 	for s in settlements:
 		if s.get("type", "") != "castle":
@@ -46,6 +52,12 @@ func sync_castles(settlements: Array) -> void:
 			continue
 		castles.append(new_npc_castle(rules, s.id, s.name, s.faction, now()))
 		added = true
+	for p in parties:
+		var home := get_castle(p.get("home", ""))
+		if home != null and not home.field_ready:
+			home.field = {"spearman": int(p.get("troops", 20))}
+			home.field_ready = true
+			added = true
 	if added:
 		save_game()
 		changed.emit()

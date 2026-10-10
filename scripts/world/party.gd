@@ -22,6 +22,7 @@ var party_name := ""
 var faction_id := ""
 var troops := 0
 var is_player := false
+var home := ""                       ## castle id whose warband this party is
 
 var path := PackedVector2Array()     ## remaining route, map units
 var destination_settlement := ""     ## settlement id the party is heading for, if any
@@ -40,6 +41,7 @@ func setup(data: Dictionary) -> void:
 	faction_id = data.faction
 	troops = int(data.get("troops", 20))
 	is_player = data.get("player", false)
+	home = data.get("home", "")
 	name = id
 	var faction := GameData.get_faction(faction_id)
 
@@ -71,6 +73,13 @@ func setup(data: Dictionary) -> void:
 	_label.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
 	_label.position = Vector3(0, 8.5, 0)
 	add_child(_label)
+
+
+func set_troops(count: int) -> void:
+	if count == troops:
+		return
+	troops = count
+	_label.text = "%s (%d)" % [party_name, troops]
 
 
 func place_at(p: Vector2) -> void:

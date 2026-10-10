@@ -95,7 +95,7 @@ limit and production per hour.
 ### Castle screen
 
 Press **C** or click **Your castle** on the world map to walk into your castle;
-press C again or click **World map** to go back. Both screens stay loaded, so
+press C again or click **Map** to go back. Both screens stay loaded, so
 switching is instant and the map keeps its camera and your party's route.
 
 - **Build menu** (bottom): pick a building, then click a free spot on the grid.
@@ -174,6 +174,20 @@ train a little faster.
   have to spare, up to 60 soldiers per keep level, never starving them.
 - All unit numbers are in `data/units.json`.
 
+### Your warband
+
+Your party on the map is your castle's **warband**, and it starts at your
+castle with 24 spearmen. Click **Warband** in the castle's top bar to send
+soldiers from the garrison into the warband or call them back. That only works
+while the warband stands at your castle, so march home to reinforce. The castle
+keeps feeding its warband wherever it goes, and hungry warband soldiers desert
+like any others.
+
+Every lord's party is likewise the warband of one of their faction's castles
+(`"home"` in `data/parties.json`). A lord visiting home tops the warband up to
+40 + 20 per keep level from the garrison, best soldiers first, always leaving
+half the garrison behind; a lord whose warband falls below 20 heads home.
+
 ## Project layout
 
 ```
@@ -241,7 +255,7 @@ How the parts work:
 - [x] Castle screen: place and upgrade buildings
 - [x] Your castle and NPC castles on the world map
 - [x] Barracks, training queue, food upkeep and desertion
-- [ ] Moving troops between your castle and your warband
+- [x] Moving troops between your castle and your warband
 - [ ] Battles between warbands
 
 ## Known limitations
