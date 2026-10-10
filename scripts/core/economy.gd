@@ -13,6 +13,8 @@ const SAVE_VERSION := 1
 const TICK := 1.0              ## seconds between economy updates
 const AUTOSAVE := 30.0           ## seconds between autosaves
 const MAIN_CASTLE := "player_castle"   ## id of your first castle, which can't be captured
+## Lords leave your main castle alone until its keep reaches this level.
+const PROTECTED_BELOW_KEEP := 2
 ## A new NPC castle starts with this many hours of building behind it (by seed).
 const NPC_HEAD_START_HOURS := Vector2(12.0, 72.0)
 
@@ -139,6 +141,11 @@ func find_main_castle() -> CastleState:
 		if fallback == null and not c.is_npc():
 			fallback = c
 	return fallback
+
+
+func newcomer_protected() -> bool:
+	## Newcomer's protection: no sieges of your main castle while you find your feet.
+	return player_castle != null and player_castle.keep_level() < PROTECTED_BELOW_KEEP
 
 
 func castles_of(owner: String) -> Array[CastleState]:

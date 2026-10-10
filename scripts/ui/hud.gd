@@ -10,6 +10,8 @@ var _zoom_t := 0.0
 var _party_status := ""
 var _news: Label
 var _news_left := 0.0
+var _alert: Label
+var _sieges := {}                ## castle id -> {"besieger", "until"} for sieges of your castles
 
 
 func _ready() -> void:
@@ -64,6 +66,21 @@ func _ready() -> void:
 	_news.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	add_child(_news)
 	EventBus.battle_fought.connect(_on_battle)
+	_alert = Label.new()
+	_alert.add_theme_color_override("font_color", Color(1.0, 0.5, 0.38))
+	_alert.add_theme_color_override("font_outline_color", Color(0.12, 0.05, 0.03))
+	_alert.add_theme_constant_override("outline_size", 7)
+	_alert.add_theme_font_size_override("font_size", 20)
+	_alert.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
+	_alert.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_alert.offset_top = 180
+	_alert.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	add_child(_alert)
+	EventBus.siege_started.connect(func(castle_id: String, besieger: String, until: float) -> void:
+		var castle := Economy.get_castle(castle_id)
+		if castle != null and castle.owner == "player":
+			_sieges[castle_id] = {"besieger": besieger, "until": until})
+	EventBus.siege_ended.connect(func(castle_id: String) -> void: _sieges.erase(castle_id))
 	EventBus.camera_zoom_changed.connect(func(t: float) -> void: _zoom_t = t)
 	EventBus.party_status_changed.connect(func(text: String) -> void: _party_status = text)
 
@@ -79,13 +96,23 @@ func _on_battle(report: Dictionary) -> void:
 		return
 	var winner: String = report.attacker if report.winner == "a" else report.defender
 	var loser: String = report.defender if report.winner == "a" else report.attacker
-	_news.text = "%s defeated %s near %s" % [winner, loser, report.place]
+	if report.get("siege", false):
+		_news.text = {"captured": "%s captured %s", "sacked": "%s sacked %s"}.get(report.outcome,
+				"%s failed to storm %s") % [report.attacker, report.defender]
+	else:
+		_news.text = "%s defeated %s near %s" % [winner, loser, report.place]
 	_news_left = NEWS_TIME
 
 
 func _process(delta: float) -> void:
 	_news_left = maxf(_news_left - delta, 0.0)
 	_news.modulate.a = clampf(_news_left, 0.0, 1.0)
+	var alerts: PackedStringArray = []
+	var now := Time.get_ticks_msec() * 0.001
+	for castle_id: String in _sieges:
+		alerts.append("%s is besieging %s! Assault in %d s" % [_sieges[castle_id].besieger,
+				Economy.get_castle(castle_id).castle_name, maxi(ceili(_sieges[castle_id].until - now), 0)])
+	_alert.text = "\n".join(alerts)
 	if not visible:
 		return
 	var castle: CastleState = Economy.player_castle

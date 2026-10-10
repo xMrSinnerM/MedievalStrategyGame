@@ -97,6 +97,8 @@ func _refresh() -> void:
 	lines.append("Keep level %d    Defence %d" % [castle.keep_level(), int(castle.defense())])
 	lines.append("%d buildings, %d under construction" % [castle.buildings.size(), castle.constructions().size()])
 	lines.append("Garrison %d soldiers, warband %d" % [castle.troop_count(), castle.field_count()])
+	if castle == Economy.player_castle and Economy.newcomer_protected():
+		lines.append("Safe from sieges until your keep reaches level %d" % Economy.PROTECTED_BELOW_KEEP)
 	var rates := castle.net_per_hour()
 	var income: PackedStringArray = []
 	for r in castle.rules.resources:
