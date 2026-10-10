@@ -26,6 +26,7 @@ func _initialize() -> void:
 	test_battle()
 	test_siege()
 	test_capture()
+	test_save_slots()
 	print("%d checks, %d failed" % [checks, failures])
 	quit(1 if failures > 0 else 0)
 
@@ -336,6 +337,7 @@ func test_siege() -> void:
 
 func test_capture() -> void:
 	var eco = load("res://scripts/core/economy.gd").new()
+	eco.save_dir = "user://test_saves"   # sync_castles saves; keep real saves out of it
 	eco.rules = rules
 	eco.player_castle = CastleState.create_new(rules, "player_castle", "Mine", "player", T0)
 	var north := CastleState.create_new(rules, "north", "North", "varnholt", T0)
@@ -380,8 +382,33 @@ func test_capture() -> void:
 	eco.castles = [north, eco.player_castle, south] as Array[CastleState]
 	north.owner = "player"
 	check(eco.find_main_castle() == eco.player_castle, "your main castle is the one you started with")
+	eco.delete_slot(1)
 	eco.free()
 
+
+func test_save_slots() -> void:
+	var eco = load("res://scripts/core/economy.gd").new()
+	eco.save_dir = "user://test_saves"
+	for k in range(1, eco.SLOTS + 1):
+		eco.delete_slot(k)
+	check(not eco.has_save(), "no saves to begin with")
+	eco.begin_new(2)
+	eco.player_castle.troops = {"spearman": 7}
+	eco.player_castle.field = {"archer": 3}
+	eco.save_game()
+	check(eco.has_save(2) and not eco.has_save(1), "a new game in slot 2 is saved there")
+	var info: Dictionary = eco.slot_info(2)
+	check(info.keep == 1 and info.castles == 1 and info.soldiers == 10, "slot 2 summary: %s" % info)
+	check(eco.slot_info(1).is_empty(), "an empty slot has no summary")
+	eco.begin_new(3)
+	check(eco.last_played_slot() == 3, "Continue picks the slot saved last")
+	eco.begin_load(2)
+	check(eco.player_castle.troop_count() == 7, "loading slot 2 brings its garrison back")
+	eco.delete_slot(3)
+	check(not eco.has_save(3) and eco.last_played_slot() == 2, "a deleted slot is empty again")
+	eco.delete_slot(2)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://test_saves"))
+	eco.free()
 
 func _first(c: CastleState, type: String) -> int:
 	for b in c.buildings:

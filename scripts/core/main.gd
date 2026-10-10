@@ -19,8 +19,7 @@ func _ready() -> void:
 	EventBus.castle_requested.connect(show_castle)
 	EventBus.world_map_requested.connect(show_world_map)
 	main_menu = preload("res://scripts/ui/main_menu.gd").new()
-	main_menu.continue_requested.connect(start_game.bind(false))
-	main_menu.new_game_requested.connect(start_game.bind(true))
+	main_menu.game_requested.connect(start_game)
 	add_child(main_menu)
 	pause_menu = preload("res://scripts/ui/pause_menu.gd").new()
 	pause_menu.main_menu_requested.connect(show_main_menu)
@@ -31,12 +30,12 @@ func in_game() -> bool:
 	return world_map != null
 
 
-func start_game(new_game: bool) -> void:
-	## Builds the world map for a new game or the saved one.
+func start_game(slot: int, new_game: bool) -> void:
+	## Builds the world map for a new game in a save slot, or the game saved there.
 	if new_game:
-		Economy.begin_new()
+		Economy.begin_new(slot)
 	else:
-		Economy.begin_load()
+		Economy.begin_load(slot)
 	GameData.ensure_loaded()
 	GameData.reset_settlements()
 	world_map = WORLD_SCENE.instantiate()
