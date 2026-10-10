@@ -52,7 +52,8 @@ func _process(_delta: float) -> void:
 	var stock := ""
 	if castle:
 		var cap := castle.storage_capacity()
-		var rates := castle.production_per_hour()
+		var rates := castle.net_per_hour()
 		for r in Economy.rules.resources:
-			stock += "%s %d/%d (+%d/h)   " % [r.capitalize(), int(castle.resources[r]), int(cap), int(rates[r])]
+			stock += "%s %d/%d (%+d/h)   " % [r.capitalize(), int(castle.resources[r]), int(cap), int(rates[r])]
+		stock += "Troops %d   " % castle.troop_count()
 	_info.text = stock + "\n" + "Click: travel there, or pick a castle    F: find your party    C: your castle\nWASD / drag: pan    Q E / right-drag: rotate    wheel: zoom\nM: parchment map    Home: recentre    F1: hide\nYour party: %s\nzoom %d%%    %d fps" % [_party_status, int(_zoom_t * 100.0), Engine.get_frames_per_second()]

@@ -2,16 +2,21 @@ class_name BuildingRules
 extends RefCounted
 ## The castle economy's numbers, read from data/buildings.json: what each
 ## building costs, how long it takes, what it produces or stores, and the
-## limits the keep's level sets.
+## limits the keep's level sets. Troop types come from data/units.json.
 ##
 ## Values for level N grow from the level-1 value: base * growth^(N - 1).
 
 const PATH := "res://data/buildings.json"
+const UNITS_PATH := "res://data/units.json"
 
 var resources: Array[String] = []
 var grid_size := 24
 var start: Dictionary = {}
 var types: Dictionary = {}       ## type id -> definition
+var units: Dictionary = {}       ## unit id -> definition
+var queue_size := 5              ## training batches a castle can queue
+var max_batch := 50              ## soldiers per batch
+var time_per_barracks_level := 0.92
 
 
 static func load_default() -> BuildingRules:
@@ -21,6 +26,11 @@ static func load_default() -> BuildingRules:
 		push_error("Could not read %s" % PATH)
 		data = {}
 	rules.load_from(data)
+	var unit_data = JSON.parse_string(FileAccess.get_file_as_string(UNITS_PATH))
+	if not unit_data is Dictionary:
+		push_error("Could not read %s" % UNITS_PATH)
+		unit_data = {}
+	rules.load_units(unit_data)
 	return rules
 
 
@@ -31,6 +41,13 @@ func load_from(data: Dictionary) -> void:
 	grid_size = int(data.get("grid_size", 24))
 	start = data.get("start", {})
 	types = data.get("buildings", {})
+
+
+func load_units(data: Dictionary) -> void:
+	units = data.get("units", {})
+	queue_size = int(data.get("queue_size", 5))
+	max_batch = int(data.get("max_batch", 50))
+	time_per_barracks_level = float(data.get("time_per_barracks_level", 0.92))
 
 
 func has_type(type: String) -> bool:
@@ -117,3 +134,43 @@ func max_count(type: String, keep_level: int) -> int:
 		return 1
 	var table: Array = types[type].get("max_count", [1])
 	return int(table[clampi(keep_level - 1, 0, table.size() - 1)])
+
+
+# --- Troops -------------------------------------------------------------------
+
+func has_unit(unit: String) -> bool:
+	return units.has(unit)
+
+
+func unit_name(unit: String) -> String:
+	return units[unit].get("name", unit)
+
+
+func unit_plural(unit: String) -> String:
+	return units[unit].get("plural", unit_name(unit) + "s")
+
+
+func unit_cost(unit: String, count := 1) -> Dictionary:
+	var out := {}
+	for r: String in units[unit].get("cost", {}):
+		out[r] = float(units[unit].cost[r]) * count
+	return out
+
+
+func unit_time(unit: String, barracks_level: int) -> float:
+	## Seconds to train one soldier; each barracks level above 1 trains faster.
+	return roundf(float(units[unit].get("time", 30)) * pow(time_per_barracks_level, maxi(barracks_level - 1, 0)))
+
+
+func unit_upkeep(unit: String) -> float:
+	## Food each soldier eats per hour.
+	return float(units[unit].get("upkeep", 1.0))
+
+
+func unit_stat(unit: String, stat: String) -> float:
+	return float(units[unit].get(stat, 0.0))
+
+
+func unit_barracks_level(unit: String) -> int:
+	## The barracks level that unlocks this unit.
+	return int(units[unit].get("barracks_level", 1))

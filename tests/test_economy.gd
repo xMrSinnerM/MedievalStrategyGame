@@ -20,6 +20,8 @@ func _initialize() -> void:
 	test_offline_catch_up_in_order()
 	test_save_round_trip()
 	test_npc_brain()
+	test_recruitment()
+	test_upkeep_and_desertion()
 	print("%d checks, %d failed" % [checks, failures])
 	quit(1 if failures > 0 else 0)
 
@@ -170,12 +172,70 @@ func test_npc_brain() -> void:
 		if c.resources[r] < -0.001:
 			negative = true
 	print("NPC after 3 days: keep %d, %s" % [c.keep_level(), ", ".join(c.buildings.map(func(b): return "%s %d" % [b.type, b.level]))])
+	print("NPC garrison: %s, food %+d/h" % [c.troops, int(c.net_per_hour().food)])
+	check(c.barracks_level() >= 1, "the NPC has built a barracks")
+	check(c.troop_count() > 0, "and trained soldiers (%d)" % c.troop_count())
+	check(c.net_per_hour().food >= 0.0, "without starving them")
 	check(not overlaps, "NPC buildings don't overlap")
 	check(not negative, "NPC never spends more than it has")
 	var twin := CastleState.create_new(rules, "npc", "NPC", "aldmere", T0)
 	NpcBrain.think(twin, T0)
 	NpcBrain.catch_up(twin, T0 + 3.0 * 86400.0)
 	check(var_to_str(twin.to_dict()) == var_to_str(c.to_dict()), "NPC decisions are repeatable")
+
+
+func with_barracks() -> CastleState:
+	var c := fresh()
+	c.place("barracks", Vector2i(18, 18), T0)
+	c.advance_to(T0 + 60.0)
+	c.resources = {"wood": 1000.0, "stone": 1000.0, "food": 1000.0, "gold": 1000.0}
+	c.last_update = T0 + 60.0
+	return c
+
+
+func test_recruitment() -> void:
+	var c := fresh()
+	check(c.check_recruit("spearman", 5) == "Build a barracks first", "no training without a barracks")
+	c = with_barracks()
+	var t := T0 + 60.0
+	check(c.barracks_level() == 1, "barracks built")
+	check(c.check_recruit("archer", 1) == "Needs barracks level 2", "archers need a better barracks")
+	check(c.check_recruit("spearman", 0) != "", "can't train zero soldiers")
+	check(c.recruit("spearman", 5, t), "five spearmen queued")
+	near(c.resources.gold, 1000.0 - 60.0, "spearmen paid in gold up front")
+	near(c.resources.food, 1000.0 - 50.0, "and in food")
+	c.advance_to(t + 50.0)
+	check(c.troops.get("spearman", 0) == 2, "two of five trained after 50 s (20 s each)")
+	check(c.recruit("spearman", 2, t + 50.0), "a second batch queues behind the first")
+	near(c.training_left(t + 50.0), 10.0 + 2 * 20.0 + 2 * 20.0, "time left covers the whole queue")
+	c.advance_to(t + 140.0)
+	check(c.troops.spearman == 7 and c.training.is_empty(), "both batches trained in order")
+	check(c.recruit("spearman", 10, t + 140.0), "ten more queued")
+	var gold: float = c.resources.gold
+	check(c.cancel_training(0, t + 140.0), "batch cancelled")
+	near(c.resources.gold, gold + 10 * 12 * 0.75, "75% of the gold back")
+	check(c.training.is_empty(), "queue empty after cancelling")
+	for i in c.rules.queue_size:
+		c.recruit("spearman", 1, t + 140.0)
+	check(c.check_recruit("spearman", 1) == "The training queue is full", "the queue has a limit")
+	c.get_building(_first(c, "barracks")).level = 3
+	near(c.rules.unit_time("spearman", 3), 17.0, "a level 3 barracks trains faster")
+	var copy := CastleState.from_dict(rules, JSON.parse_string(JSON.stringify(c.to_dict(), "", true, true)))
+	check(var_to_str(copy.to_dict()) == var_to_str(c.to_dict()), "troops and the training queue survive saving")
+
+
+func test_upkeep_and_desertion() -> void:
+	var c := fresh()
+	c.troops = {"spearman": 100}
+	near(c.net_per_hour().food, 45.0 - 100.0, "100 spearmen eat 100 food an hour")
+	c.advance_to(T0 + 3600.0)
+	near(c.resources.food, 300.0 - 55.0, "food goes down while the stores last")
+	check(c.troops.spearman == 100, "nobody deserts while there is food")
+	c.resources.food = 0.0
+	c.advance_to(T0 + 7200.0)
+	check(c.troops.spearman == 45, "an hour without food: soldiers leave until the farms can feed the rest (%d left)" % c.troops.spearman)
+	c.advance_to(T0 + 3.0 * 3600.0)
+	check(c.troops.spearman == 45, "and then the garrison is stable")
 
 
 func _first(c: CastleState, type: String) -> int:

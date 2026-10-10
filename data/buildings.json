@@ -90,6 +90,17 @@
 			"produces": { "gold": 15 },
 			"production_growth": 1.35
 		},
+		"barracks": {
+			"name": "Barracks",
+			"description": "Trains soldiers. Higher levels unlock stronger troops and train faster.",
+			"size": [3, 3],
+			"unique": true,
+			"max_level": 10,
+			"cost": { "wood": 150, "stone": 100, "gold": 60 },
+			"cost_growth": 1.6,
+			"time": 60,
+			"time_growth": 1.7
+		},
 		"storehouse": {
 			"name": "Storehouse",
 			"description": "Raises how much of every resource the castle can hold.",

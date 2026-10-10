@@ -1,17 +1,23 @@
 class_name NpcBrain
 extends RefCounted
 ## Runs an NPC lord's castle: whenever a builder is free it picks something
-## sensible to build or upgrade. It plays by exactly the same rules as the
-## player (same costs, times, builders and storage); it only has no hands on
-## the mouse.
+## sensible to build or upgrade, and it trains soldiers from what it has to
+## spare. It plays by exactly the same rules as the player (same costs, times,
+## builders, storage and food upkeep); it only has no hands on the mouse.
 ##
-## Priorities, in order:
+## Building priorities, in order:
 ##   1. the keep, once nothing else can grow without it
 ##   2. a storehouse, when the keep's next level costs more than storage holds
-##   3. the producer of whatever resource comes in slowest
-##   4. the wall, kept no lower than the keep
-##   5. the keep anyway
+##   3. a barracks, from keep level 2
+##   4. the producer of whatever resource comes in slowest
+##   5. the wall, kept no lower than the keep
+##   6. the barracks, kept no lower than the keep
+##   7. the keep anyway
 ## The first of these the castle can afford right now is started.
+##
+## Recruiting: the strongest unlocked unit, paid only from stock above half the
+## storage, never so many that soldiers eat more than 70% of the food, and up
+## to 60 soldiers per keep level.
 
 ## Seconds between decisions while catching up on time the game was closed
 ## (with a builder free but nothing affordable yet).
@@ -22,6 +28,14 @@ const MAX_CATCH_UP := 7.0 * 86400.0
 const PRODUCER := {"wood": "woodcutter", "stone": "quarry", "food": "farm", "gold": "house"}
 ## How much each resource matters when deciding what is "slowest".
 const WEIGHT := {"wood": 1.0, "stone": 1.0, "food": 0.8, "gold": 0.6}
+## Recruiting limits: stock kept back (share of storage), share of food
+## production soldiers may eat, soldiers per batch and batches queued.
+const KEEP_BACK := 0.5
+const FOOD_FOR_TROOPS := 0.7
+const BATCH := 20
+const QUEUE := 2
+## NPC garrisons stop growing at this many soldiers per keep level.
+const GARRISON_PER_KEEP := 60
 
 
 static func catch_up(castle: CastleState, now: float) -> void:
@@ -58,7 +72,35 @@ static func think(castle: CastleState, now: float) -> int:
 		if not ok:
 			break
 		started += 1
+	recruit(castle, now)
 	return started
+
+
+static func recruit(castle: CastleState, now: float) -> int:
+	## Queues soldiers from spare stock. Returns how many were queued.
+	var rules := castle.rules
+	if castle.barracks_level() <= 0 or castle.training.size() >= QUEUE:
+		return 0
+	var cap := castle.storage_capacity()
+	var food_left: float = castle.production_per_hour().get("food", 0.0) * FOOD_FOR_TROOPS - castle.upkeep_per_hour()
+	var room := GARRISON_PER_KEEP * castle.keep_level() - castle.troop_count()
+	for t in castle.training:
+		food_left -= t.remaining * rules.unit_upkeep(t.unit)
+		room -= t.remaining
+	var units: Array = rules.units.keys()
+	units.sort_custom(func(a: String, b: String) -> bool:
+		return rules.unit_barracks_level(a) > rules.unit_barracks_level(b))
+	for unit: String in units:
+		if rules.unit_barracks_level(unit) > castle.barracks_level():
+			continue
+		var n := mini(mini(BATCH, room), int(food_left / rules.unit_upkeep(unit)))
+		var cost := rules.unit_cost(unit)
+		for r: String in cost:
+			if cost[r] > 0.0:
+				n = mini(n, int((castle.resources.get(r, 0.0) - cap * KEEP_BACK) / cost[r]))
+		if n >= 1 and castle.recruit(unit, n, now):
+			return n
+	return 0
 
 
 static func choose(castle: CastleState) -> Dictionary:
@@ -165,10 +207,15 @@ static func _options(castle: CastleState) -> Array[Dictionary]:
 			var store := _lowest(castle, "storehouse")
 			if not store.is_empty():
 				out.append({"id": store.id})
+	if keep_level >= 2 and castle.count("barracks") == 0:
+		out.append({"type": "barracks"})
 	out.append_array(producers)
 	var wall := _first(castle, "wall")
 	if not wall.is_empty() and wall.level < keep_level:
 		out.append({"id": wall.id})
+	var barracks := _lowest(castle, "barracks")
+	if not barracks.is_empty() and barracks.level < keep_level:
+		out.append({"id": barracks.id})
 	if not keep_maxed:
 		out.append({"id": keep.id})
 	return out
