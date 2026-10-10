@@ -54,6 +54,12 @@ func _ready() -> void:
 	info.offset_top = 56
 	info.offset_right = -12
 	add_child(info)
+	var baron_panel := preload("res://scripts/ui/baron_panel.gd").new()
+	baron_panel.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
+	baron_panel.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	baron_panel.offset_top = 56
+	baron_panel.offset_right = -12
+	add_child(baron_panel)
 	var party_panel := preload("res://scripts/ui/party_panel.gd").new()
 	party_panel.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
 	party_panel.grow_horizontal = Control.GROW_DIRECTION_BEGIN
@@ -149,4 +155,6 @@ func _process(delta: float) -> void:
 		for r in Economy.rules.resources:
 			stock += "%s %d/%d (%+d/h)   " % [r.capitalize(), int(castle.resources[r]), int(cap), int(rates[r])]
 		stock += "Garrison %d   " % castle.troop_count()
+		if not Economy.marches.is_empty():
+			stock += "Armies away %d (%d soldiers)   " % [Economy.marches.size(), Economy.troops_away()]
 	_info.text = stock + "\n" + "Click: travel there, or pick a castle or party    F: find your party    C: your castle    K: diplomacy\nWASD / drag: pan    Q E / right-drag: rotate    wheel: zoom\nM: parchment map    Home: recentre    F1: hide    Esc: menu\nYour party: %s\nzoom %d%%    %d fps" % [_party_status, int(_zoom_t * 100.0), Engine.get_frames_per_second()]

@@ -23,6 +23,9 @@ var carry_per_soldier := 12.0
 var defeats_per_level: Array = [] ## [{"from_level", "defeats"}], ascending
 var rebuild_base := 300.0
 var rebuild_per_level := 30.0
+var march_speed := 6.0            ## map units an army covers per second
+var camps: Dictionary = {}        ## how camps are spread over the map (BaronPlacer)
+var names: Dictionary = {}        ## "first" and "second" halves of camp names
 
 
 static func load_default() -> BaronRules:
@@ -48,6 +51,9 @@ func load_from(data: Dictionary) -> void:
 	defeats_per_level = data.get("defeats_per_level", [{"from_level": 1, "defeats": 1}])
 	rebuild_base = float(data.get("rebuild_base", rebuild_base))
 	rebuild_per_level = float(data.get("rebuild_per_level", rebuild_per_level))
+	march_speed = float(data.get("march_speed", march_speed))
+	camps = data.get("camps", {})
+	names = data.get("names", {})
 
 
 func garrison(level: int) -> Dictionary:
@@ -94,6 +100,11 @@ func defeats_needed(level: int) -> int:
 func rebuild_time(level: int) -> float:
 	## Seconds a camp beaten at this level takes to rebuild.
 	return rebuild_base + rebuild_per_level * (level - 1)
+
+
+func march_time(distance: float) -> float:
+	## Seconds an army takes to march this far (one way).
+	return maxf(10.0, distance / march_speed)
 
 
 func carry(army: Dictionary) -> float:

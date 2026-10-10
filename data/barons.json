@@ -4,20 +4,99 @@
 	"garrison_base": 14,
 	"garrison_growth": 1.16,
 	"armies": [
-		{ "from_level": 1, "mix": { "spearman": 0.7, "archer": 0.3 } },
-		{ "from_level": 4, "mix": { "spearman": 0.45, "archer": 0.35, "swordsman": 0.2 } },
-		{ "from_level": 8, "mix": { "spearman": 0.3, "archer": 0.3, "swordsman": 0.25, "horseman": 0.15 } }
+		{
+			"from_level": 1,
+			"mix": {
+				"spearman": 0.7,
+				"archer": 0.3
+			}
+		},
+		{
+			"from_level": 4,
+			"mix": {
+				"spearman": 0.45,
+				"archer": 0.35,
+				"swordsman": 0.2
+			}
+		},
+		{
+			"from_level": 8,
+			"mix": {
+				"spearman": 0.3,
+				"archer": 0.3,
+				"swordsman": 0.25,
+				"horseman": 0.15
+			}
+		}
 	],
 	"palisade_base": 20,
 	"palisade_per_level": 15,
-	"loot_base": { "wood": 140, "stone": 90, "food": 140, "gold": 70 },
+	"loot_base": {
+		"wood": 140,
+		"stone": 90,
+		"food": 140,
+		"gold": 70
+	},
 	"loot_growth": 1.15,
 	"carry_per_soldier": 12,
 	"defeats_per_level": [
-		{ "from_level": 1, "defeats": 1 },
-		{ "from_level": 10, "defeats": 2 },
-		{ "from_level": 20, "defeats": 3 }
+		{
+			"from_level": 1,
+			"defeats": 1
+		},
+		{
+			"from_level": 10,
+			"defeats": 2
+		},
+		{
+			"from_level": 20,
+			"defeats": 3
+		}
 	],
 	"rebuild_base": 300,
-	"rebuild_per_level": 30
+	"rebuild_per_level": 30,
+	"march_speed": 6,
+	"camps": {
+		"count": 30,
+		"seed": 4242,
+		"min_gap": 70,
+		"settlement_gap": 45,
+		"edge_margin": 80,
+		"level_per_distance": 170,
+		"start_level_max": 12
+	},
+	"names": {
+		"first": [
+			"Black",
+			"Raven",
+			"Wolf",
+			"Grim",
+			"Iron",
+			"Thorn",
+			"Ash",
+			"Blood",
+			"Crow",
+			"Dread",
+			"Mire",
+			"Storm",
+			"Bone",
+			"Red",
+			"Gallows",
+			"Fang"
+		],
+		"second": [
+			"Hollow",
+			"Ridge",
+			"Den",
+			"Hold",
+			"Lair",
+			"Watch",
+			"Rock",
+			"Ford",
+			"Wood",
+			"Gulch",
+			"Pit",
+			"Crag"
+		]
+	}
 }

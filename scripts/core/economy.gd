@@ -9,6 +9,10 @@ signal changed   ## something in a castle changed (resources tick, build finishe
 signal castle_captured(castle_id: String, old_owner: String, new_owner: String)
 ## Wars or truces changed; news holds what happened, as sentences.
 signal diplomacy_changed(news: Array)
+## One of your armies fought a robber baron camp (the report is like a battle's).
+signal attack_resolved(report: Dictionary)
+## An army set out, fought or came home.
+signal marches_changed
 
 ## Games are kept in SLOTS save slots under save_dir (slot_1.json ...).
 const SLOTS := 3
@@ -32,6 +36,10 @@ var diplomacy: Diplomacy
 ## Robber baron camps and how far you have levelled each of them.
 var baron_rules: BaronRules
 var barons: Array[BaronCamp] = []
+## Your armies on the road: {"id", "camp", "army", "depart", "arrive", "back",
+## "state" ("out" or "home"), "survivors", "loot"}. Times are unix seconds.
+var marches: Array = []
+var _next_march := 1
 
 ## Lords whose home castle changed since data/parties.json: party id -> castle id.
 var homes := {}
@@ -304,6 +312,120 @@ func sync_barons(camps: Array) -> void:
 		save_game()
 
 
+func home_position() -> Vector2:
+	## Where your armies march from: your main castle on the map.
+	return castle_positions.get(MAIN_CASTLE, Vector2.ZERO)
+
+
+func march_time_to(camp: BaronCamp) -> float:
+	return baron_rules.march_time(home_position().distance_to(camp.position))
+
+
+func check_attack(camp_id: String, army: Dictionary) -> String:
+	## Why this army can't be sent against the camp ("" if it can).
+	var camp := get_baron(camp_id)
+	if camp == null:
+		return "No such camp."
+	if not camp.is_ready(now()):
+		return "The camp is still rebuilding."
+	var total := 0
+	for unit: String in army:
+		if int(army[unit]) < 0 or int(army[unit]) > int(player_castle.troops.get(unit, 0)):
+			return "Your garrison doesn't have that many soldiers."
+		total += int(army[unit])
+	if total <= 0:
+		return "Choose some soldiers to send."
+	return ""
+
+
+func send_attack(camp_id: String, army: Dictionary) -> String:
+	## Sends soldiers from your main castle's garrison against a camp. They
+	## march there, fight, and come home with what they can carry.
+	var why := check_attack(camp_id, army)
+	if why != "":
+		return why
+	var sent := {}
+	for unit: String in army:
+		if int(army[unit]) > 0:
+			sent[unit] = int(army[unit])
+			player_castle.troops[unit] = int(player_castle.troops[unit]) - int(army[unit])
+	var t := now()
+	var travel := march_time_to(get_baron(camp_id))
+	marches.append({"id": _next_march, "camp": camp_id, "army": sent, "depart": t,
+			"arrive": t + travel, "back": t + 2.0 * travel, "state": "out", "survivors": {}, "loot": {}})
+	_next_march += 1
+	save_game()
+	changed.emit()
+	marches_changed.emit()
+	return ""
+
+
+func troops_away() -> int:
+	var n := 0
+	for m: Dictionary in marches:
+		var side: Dictionary = m.army if m.state == "out" else m.survivors
+		for unit: String in side:
+			n += int(side[unit])
+	return n
+
+
+func advance_marches(t: float) -> void:
+	## Fights the battles and brings home the armies whose time has come, in
+	## order, including those that happened while the game was closed.
+	var events: Array = []
+	for m: Dictionary in marches:
+		if m.state == "out" and t >= float(m.arrive):
+			events.append([float(m.arrive), m])
+		elif m.state == "home" and t >= float(m.back):
+			events.append([float(m.back), m])
+		elif m.state == "out" and t >= float(m.back):
+			events.append([float(m.arrive), m])
+	if events.is_empty():
+		return
+	events.sort_custom(func(x: Array, y: Array) -> bool: return x[0] < y[0])
+	for e: Array in events:
+		var m: Dictionary = e[1]
+		if m.state == "out":
+			_fight_camp(m)
+		if m.state == "home" and t >= float(m.back):
+			_come_home(m)
+	marches = marches.filter(func(m: Dictionary) -> bool: return m.state != "done")
+	save_game()
+	marches_changed.emit()
+
+
+func _fight_camp(m: Dictionary) -> void:
+	var camp := get_baron(m.camp)
+	m.state = "home"
+	if camp == null or not camp.is_ready(float(m.arrive)):
+		# Someone else got there first; the camp lies in ashes.
+		m.survivors = m.army
+		attack_resolved.emit({"player": "a", "baron": true, "empty": true, "defender": camp.camp_name if camp else "",
+				"winner": "a", "a": {}, "b": {}, "loot": 0, "place": ""})
+		return
+	var result := camp.attack(baron_rules, rules, m.army, int(m.id) * 7919 + hash(m.camp), float(m.arrive))
+	m.survivors = result.survivors
+	m.loot = result.loot
+	attack_resolved.emit({
+		"player": "a", "baron": true, "attacker": "Your army", "defender": camp.camp_name,
+		"attacker_faction": player_faction, "defender_faction": "barons", "place": camp.camp_name,
+		"winner": result.winner, "a": result.a, "b": result.b, "loot": 0, "spoils": result.loot,
+		"level": result.level, "leveled": result.leveled, "new_level": camp.level,
+		"defeats": camp.defeats, "needed": baron_rules.defeats_needed(camp.level),
+		"home_in": maxf(0.0, float(m.back) - now()),
+	})
+
+
+func _come_home(m: Dictionary) -> void:
+	for unit: String in m.survivors:
+		player_castle.troops[unit] = int(player_castle.troops.get(unit, 0)) + int(m.survivors[unit])
+	var cap := player_castle.storage_capacity()
+	for r: String in m.loot:
+		var have := float(player_castle.resources.get(r, 0.0))
+		player_castle.resources[r] = maxf(have, minf(cap, have + float(m.loot[r])))
+	m.state = "done"
+
+
 func get_baron(camp_id: String) -> BaronCamp:
 	for b in barons:
 		if b.id == camp_id:
@@ -399,6 +521,7 @@ func new_game() -> void:
 	castles.append(player_castle)
 	diplomacy = Diplomacy.from_data_files(now())
 	barons.clear()
+	marches.clear()
 	save_game()
 	changed.emit()
 
@@ -422,6 +545,8 @@ func load_game() -> bool:
 	barons.clear()
 	for b in data.get("barons", []):
 		barons.append(BaronCamp.from_dict(b))
+	marches = data.get("marches", [])
+	_next_march = int(data.get("next_march", 1))
 	player_castle = find_main_castle()
 	if player_castle == null:
 		return false
@@ -432,6 +557,7 @@ func load_game() -> bool:
 			NpcBrain.catch_up(c, t)
 		else:
 			c.advance_to(t)
+	advance_marches(t)
 	changed.emit()
 	return true
 
@@ -448,7 +574,8 @@ func save_game() -> void:
 	f.store_string(JSON.stringify({"version": SAVE_VERSION, "saved_at": now(), "castles": list,
 			"homes": homes, "exiled": exiled.keys(),
 			"diplomacy": diplomacy.to_dict() if diplomacy != null else {},
-			"barons": barons.map(func(b: BaronCamp) -> Dictionary: return b.to_dict())}, "\t", true, true))
+			"barons": barons.map(func(b: BaronCamp) -> Dictionary: return b.to_dict()),
+			"marches": marches, "next_march": _next_march}, "\t", true, true))
 	f.close()
 
 
@@ -463,6 +590,7 @@ func _process(delta: float) -> void:
 			c.advance_to(t)
 			if c.is_npc():
 				NpcBrain.think(c, t)
+		advance_marches(t)
 		changed.emit()
 	_diplomacy_timer += delta
 	if _diplomacy_timer >= DIPLOMACY_TICK and diplomacy != null:

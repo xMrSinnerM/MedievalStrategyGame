@@ -10,6 +10,7 @@ extends Node3D
 @onready var parties: Node3D = $Parties
 @onready var parchment: Node3D = $ParchmentOverlay
 @onready var camera_rig: CampaignCamera = $CampaignCamera
+var barons: Node3D
 
 
 func _ready() -> void:
@@ -25,6 +26,11 @@ func _ready() -> void:
 	rivers.build()
 	settlements.build()
 	vegetation.build()
+	barons = preload("res://scripts/world/barons_layer.gd").new()
+	barons.name = "Barons"
+	add_child(barons)
+	barons.build()
+	parties.barons = barons
 	parties.camera_rig = camera_rig
 	parties.build()
 	parchment.build()

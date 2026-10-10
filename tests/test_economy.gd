@@ -31,6 +31,8 @@ func _initialize() -> void:
 	test_diplomacy_ai()
 	test_baron_rules()
 	test_baron_camp()
+	test_baron_placer()
+	test_marches()
 	print("%d checks, %d failed" % [checks, failures])
 	quit(1 if failures > 0 else 0)
 
@@ -588,6 +590,87 @@ func test_baron_camp() -> void:
 	check(eco.get_baron("camp_1") != null and eco.get_baron("camp_1").level == 7, "camp levels are saved with the game")
 	eco.sync_barons([{"id": "camp_1", "name": "Black Hollow", "position": [100, 200]}])
 	check(eco.barons.size() == 1 and eco.get_baron("camp_1").level == 7, "syncing again keeps the level")
+	eco.delete_slot(1)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://test_saves"))
+	eco.free()
+
+
+func test_baron_placer() -> void:
+	var br := BaronRules.load_default()
+	var water := func(x: float, z: float) -> bool: return x > 300.0   # west strip is sea
+	var towns: Array = [{"position": [1000, 1000]}, {"position": [500, 1500]}]
+	var home := Vector2(1100, 1000)
+	var camps := BaronPlacer.place(br, water, towns, home, 2048.0)
+	check(camps.size() == int(br.camps.count), "every camp finds a spot (%d)" % camps.size())
+	var ok := true
+	var names := {}
+	var nearest_level := 99
+	var nearest_d := 1e9
+	for c: Dictionary in camps:
+		var p := Vector2(c.position[0], c.position[1])
+		ok = ok and p.x > 300.0
+		for t: Dictionary in towns:
+			ok = ok and p.distance_to(Vector2(t.position[0], t.position[1])) >= float(br.camps.settlement_gap)
+		names[c.name] = true
+		if p.distance_to(home) < nearest_d:
+			nearest_d = p.distance_to(home)
+			nearest_level = c.level
+	check(ok, "camps stand on dry land away from settlements")
+	check(names.size() == camps.size(), "every camp has its own name")
+	check(nearest_level == 1, "the camp nearest your castle starts at level 1")
+	check(camps.any(func(c: Dictionary) -> bool: return c.level >= 5), "far camps start higher")
+	var again := BaronPlacer.place(br, water, towns, home, 2048.0)
+	check(again == camps, "the same seed gives the same camps")
+
+
+func test_marches() -> void:
+	var eco = load("res://scripts/core/economy.gd").new()
+	eco.save_dir = "user://test_saves"
+	eco.begin_new(1)
+	eco.castle_positions[eco.MAIN_CASTLE] = Vector2(0, 0)
+	eco.sync_barons([{"id": "near", "name": "Near", "position": [60, 0]},
+			{"id": "far", "name": "Far", "position": [600, 0], "level": 9}])
+	eco.player_castle.troops = {"spearman": 30, "archer": 10}
+	check(eco.check_attack("near", {"spearman": 50}) != "", "you can't send more soldiers than you have")
+	check(eco.check_attack("near", {}) != "", "or nobody")
+	var reports: Array = []
+	eco.attack_resolved.connect(func(r: Dictionary) -> void: reports.append(r))
+	var army := {"spearman": 25, "archer": 10}
+	check(eco.send_attack("near", army) == "", "an army sets out")
+	check(eco.player_castle.troops.spearman == 5 and eco.player_castle.troops.archer == 0, "and leaves the garrison")
+	check(eco.troops_away() == 35, "35 soldiers are on the road")
+	var m: Dictionary = eco.marches[0]
+	near(m.arrive - m.depart, 10.0, "a short march takes the minimum time")
+	near(m.back - m.depart, 20.0, "and as long again to come home")
+	eco.advance_marches(m.depart + 5.0)
+	check(reports.is_empty(), "nothing happens on the way")
+	eco.advance_marches(m.arrive + 1.0)
+	check(reports.size() == 1 and reports[0].winner == "a", "the army beats the camp on arrival")
+	check(reports[0].leveled and eco.get_baron("near").level == 2, "and the camp levels up")
+	check(m.state == "home", "then the army heads home")
+	var wood_before: float = eco.player_castle.resources.wood
+	var loot: Dictionary = m.loot
+	var survivors := 0
+	for u in m.survivors:
+		survivors += m.survivors[u]
+	eco.advance_marches(m.back + 1.0)
+	check(eco.marches.is_empty(), "and arrives")
+	check(eco.player_castle.troop_count() == 5 + survivors, "the survivors rejoin the garrison")
+	near(eco.player_castle.resources.wood, minf(eco.player_castle.storage_capacity(), wood_before + loot.wood), "the loot goes into storage")
+	check(eco.check_attack("near", {"spearman": 1}) != "", "the beaten camp is rebuilding")
+	# A whole trip while the game was closed resolves on loading.
+	eco.player_castle.troops = {"spearman": 300}
+	check(eco.send_attack("far", {"spearman": 300}) == "", "a big army sets out for a far camp")
+	var trip: Dictionary = eco.marches[0]
+	near(trip.arrive - trip.depart, 100.0, "600 map units take 100 seconds at speed 6")
+	trip.depart -= 1000.0
+	trip.arrive -= 1000.0
+	trip.back -= 1000.0
+	eco.save_game()
+	reports.clear()
+	eco.begin_load(1)
+	check(eco.marches.is_empty() and reports.size() == 1, "a trip that ended while away is settled on loading")
+	check(eco.player_castle.troop_count() > 0 and eco.player_castle.troop_count() <= 300, "and the army is home")
 	eco.delete_slot(1)
 	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://test_saves"))
 	eco.free()
