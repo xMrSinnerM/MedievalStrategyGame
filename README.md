@@ -209,15 +209,21 @@ while it stands at your castle, and slipping into a town or village shakes off
 a pursuer. A beaten lord goes home to recover. Diplomacy comes later; for now
 you can attack any lord who isn't from your own faction.
 
-### Sieges (in progress)
+### Sieges
 
-The rules are in place; the map side comes next. A siege camps outside the
-walls for 30 s plus 15 s per wall level, then storms them: a `Battle` against
-the garrison, whose defence the wall raises by up to 150% (half of that at
-wall defence 200). A castle that falls changes hands with its buildings and
-stock (`Economy.capture`), and its lord moves with their warband to their
-faction's nearest castle, or leaves the map if there is none. Your main castle
-can never be captured; storming it sacks 30% of its stock instead.
+Click a castle of another faction to see its walls, its garrison and your
+chances, then press **Besiege**. Your warband marches to the walls and camps
+there for 30 s plus 15 s per wall level (a countdown hangs over the castle),
+then storms them: a `Battle` against the garrison, whose defence the wall
+raises by up to 150% (half of that at wall defence 200). Walking away lifts
+the siege, and so does losing a battle while camped.
+
+A castle that falls changes hands with its buildings and stock
+(`Economy.capture`): its banner, colours, label and parchment territory turn
+yours, and you can build and recruit in it from the castle screen. Its lord
+moves with their warband to their faction's nearest castle, or leaves the map
+if there is none. Your main castle can never be captured; storming it sacks
+30% of its stock instead.
 
 ## Project layout
 
@@ -288,7 +294,9 @@ How the parts work:
 - [x] Barracks, training queue, food upkeep and desertion
 - [x] Moving troops between your castle and your warband
 - [x] Battles between warbands, with battle reports
-- [ ] Sieges
+- [x] Siege rules and capturing castles
+- [x] Besieging castles from the map
+- [ ] Lords besiege castles, including yours
 
 ## Known limitations
 

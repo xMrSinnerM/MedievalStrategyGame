@@ -86,7 +86,8 @@ func show_castle() -> void:
 	view.mode_changed.connect(_on_mode_changed, CONNECT_REFERENCE_COUNTED)
 	view.message.connect(_show_toast, CONNECT_REFERENCE_COUNTED)
 	_build_menu.visible = view.editable
-	_warband_button.visible = view.editable
+	# Only your main castle has a warband; castles you capture just hold a garrison.
+	_warband_button.visible = view.editable and view.castle == Economy.player_castle
 	_warband.visible = false
 	_queue_signature = "?"
 	_on_mode_changed(view.mode)

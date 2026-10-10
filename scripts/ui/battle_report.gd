@@ -1,6 +1,6 @@
 extends PanelContainer
-## The report shown after your warband fights: who won, each side's soldiers
-## before the battle and how many fell, and the plunder.
+## The report shown after your warband fights or storms a castle: who won,
+## each side's soldiers before the battle and how many fell, and the plunder.
 
 const TEXT := Color(0.95, 0.9, 0.8)
 const MUTED := Color(0.78, 0.72, 0.62)
@@ -61,16 +61,21 @@ func show_report(report: Dictionary) -> void:
 	var them := "b" if me == "a" else "a"
 	var won: bool = report.winner == me
 	var enemy: String = report.defender if me == "a" else report.attacker
+	var siege: bool = report.get("siege", false)
 	_title.text = "Victory!" if won else "Defeat"
+	if siege:
+		_title.text = {"captured": "Castle captured!", "sacked": "Castle sacked!"}.get(report.outcome, "The walls held")
 	_title.add_theme_color_override("font_color", WIN if won else LOSS)
-	if me == "a":
+	if siege and me == "a":
+		_place.text = "You stormed the walls of %s" % enemy
+	elif me == "a":
 		_place.text = "You attacked %s near %s" % [enemy, report.place]
 	else:
 		_place.text = "%s attacked you near %s" % [enemy, report.place]
 	for child in _grid.get_children():
 		_grid.remove_child(child)
 		child.queue_free()
-	for text in ["", "Yours", "Fell", enemy, "Fell"]:
+	for text in ["", "Yours", "Fell", "Garrison" if siege else enemy, "Fell"]:
 		_grid.add_child(_label(14, MUTED, text))
 	var units: Array = []
 	for side in [report[me], report[them]]:
@@ -88,12 +93,29 @@ func show_report(report: Dictionary) -> void:
 	_grid.add_child(_label(15, Color(1.0, 0.9, 0.65), "Total"))
 	for k in 4:
 		_grid.add_child(_cell(totals[k], k % 2 == 1))
-	if won:
+	if siege and me == "a":
+		if report.outcome == "captured":
+			_footer.text = "%s is yours, with its buildings and stores." % enemy
+		elif report.outcome == "sacked":
+			_footer.text = "You carried off %s." % _spoils(report.spoils)
+		else:
+			_footer.text = "Your surviving soldiers fell back from the walls."
+		if won and report.loot > 0:
+			_footer.text += " Plunder: %d gold." % report.loot
+	elif won:
 		var fate := "%s fled home." % enemy if totals[3] < totals[2] else "None of %s's soldiers survived." % enemy
 		_footer.text = "Your warband plundered %d gold. %s" % [report.loot, fate] if report.loot > 0 else fate
 	else:
 		_footer.text = "Your surviving soldiers fell back. %s took %d gold in plunder." % [enemy, report.loot]
 	visible = true
+
+
+func _spoils(spoils: Dictionary) -> String:
+	var parts: PackedStringArray = []
+	for r: String in spoils:
+		if spoils[r] > 0:
+			parts.append("%d %s" % [spoils[r], r])
+	return ", ".join(parts) if not parts.is_empty() else "nothing"
 
 
 func _count(side: Dictionary, unit: String, key: String) -> int:

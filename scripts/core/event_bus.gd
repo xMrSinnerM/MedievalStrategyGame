@@ -18,6 +18,8 @@ signal settlement_selected(settlement_id: String)
 signal travel_requested(settlement_id: String)
 ## A party on the world map was clicked (its id; "" clears the selection).
 signal party_selected(party_id: String)
+## Asks the player's warband to march on a castle and lay siege to it.
+signal siege_requested(castle_id: String)
 ## Asks the player's warband to march on a party and attack it.
 signal attack_requested(party_id: String)
 ## Two warbands fought. The report is described in parties_layer._fight().

@@ -7,6 +7,7 @@ const BRIDGE_DECK := Color(0.45, 0.34, 0.24)
 
 var settlements: Array[Settlement] = []
 var bridge_count := 0
+var _zoom_t := 0.0
 
 
 func build() -> void:
@@ -19,7 +20,23 @@ func build() -> void:
 	EventBus.camera_zoom_changed.connect(_on_zoom_changed)
 
 
+func rebuild(settlement_id: String) -> void:
+	## Redraws one settlement after it changed hands (banner, colours, label).
+	for i in settlements.size():
+		var old := settlements[i]
+		if old.id != settlement_id:
+			continue
+		var s := Settlement.new()
+		add_child(s)
+		s.setup(GameData.get_settlement(settlement_id))
+		s.set_zoom(_zoom_t)
+		settlements[i] = s
+		old.queue_free()
+		return
+
+
 func _on_zoom_changed(zoom_t: float) -> void:
+	_zoom_t = zoom_t
 	for s in settlements:
 		s.set_zoom(zoom_t)
 
