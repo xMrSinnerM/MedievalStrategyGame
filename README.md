@@ -288,6 +288,13 @@ of spreading them over the walls, and picks the plan with the best odds (then
 the fewest losses) against what it knows of the defence: a camp's garrison,
 or what your spy last saw of a player's soldiers, walls and layout.
 
+In the castle screen, **Defence** sets how the garrison mans each wall and
+the courtyard: a slider per post in steps of 5%, the soldiers that puts there,
+and a warning for an empty wall or courtyard. The four must add up to 100%
+before you can save. Every castle keeps its own layout (offline, captured
+castles too). Online it is stored on the server (`set_layout`), and a spy's
+report on your castle shows it.
+
 Battle reports say which walls broke and how the courtyard went, with a row
 for each wall and the courtyard: broken in which wave, held, undefended or not
 attacked, and who fell there.
@@ -544,7 +551,7 @@ How the parts work:
 - [x] Owner tools: start and stop events, give players resources and soldiers
 - [x] Siege waves: battle rules (walls and courtyard)
 - [x] Siege waves: choose your waves on the attack screen
-- [ ] Siege waves: set your defenders on the walls
+- [x] Siege waves: set your defenders on the walls
 
 ## Known limitations
 

@@ -138,6 +138,10 @@ func _refresh() -> void:
 		for unit: String in troops:
 			lines.append("    %d %s" % [int(troops[unit]), Economy.rules.unit_plural(unit)])
 		lines.append("    Walls: defenders +%d%% defence" % roundi((float(seen.get("wall", 1.0)) - 1.0) * 100.0))
+		var layout: Variant = seen.get("layout")
+		if Battle.check_layout(layout) == "":
+			lines.append("    Posts: left %d%%, front %d%%, right %d%%, courtyard %d%%" % [int(layout.left), int(layout.front),
+					int(layout.right), int(layout.courtyard)])
 	for r: Dictionary in Economy.raids:
 		if r.get("mine", false) and String(r.defender_name) == player_name:
 			var out: bool = r.state == "out"

@@ -35,6 +35,7 @@ func _initialize() -> void:
 	test_baron_placer()
 	test_marches()
 	test_march_waves()
+	test_set_layout()
 	print("%d checks, %d failed" % [checks, failures])
 	quit(1 if failures > 0 else 0)
 
@@ -768,6 +769,21 @@ func test_march_waves() -> void:
 	check(report.wall_result({"broken": true, "fights": [{"wave": 0, "open": true}]}) == "Undefended", "an empty wall")
 	check(report.courtyard_result({}, true) == "Not reached" and report.courtyard_result({"winner": "b"}, false) == "Held",
 			"the courtyard, seen from either side")
+	eco.delete_slot(1)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://test_saves"))
+	eco.free()
+
+
+func test_set_layout() -> void:
+	var eco = load("res://scripts/core/economy.gd").new()
+	eco.save_dir = "user://test_saves"
+	eco.begin_new(1)
+	check(eco.player_castle.layout == Battle.DEFAULT_LAYOUT, "a new castle uses the default layout")
+	check(eco.set_layout(eco.player_castle, {"left": 50, "front": 40, "right": 20, "courtyard": 20}) != "", "a layout must add up to 100%")
+	check(eco.set_layout(eco.player_castle, {"left": 10, "front": 60.0, "right": 10, "courtyard": 20}) == "", "a good layout is set")
+	check(eco.player_castle.layout == {"left": 10, "front": 60, "right": 10, "courtyard": 20}, "as whole numbers")
+	eco.begin_load(1)
+	check(eco.player_castle.layout.front == 60, "and saved")
 	eco.delete_slot(1)
 	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://test_saves"))
 	eco.free()

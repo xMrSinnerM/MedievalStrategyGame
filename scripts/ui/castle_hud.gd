@@ -11,6 +11,8 @@ var _title: Label
 var _resources: ResourceBar
 var _warband_button: Button
 var _warband: PanelContainer
+var _defence_button: Button
+var _defence: PanelContainer
 var _recruit: VBoxContainer
 var _build_menu: PanelContainer
 var _build_buttons := {}       ## type -> Button
@@ -71,6 +73,12 @@ func _ready() -> void:
 	_warband.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	_warband.offset_top = 70
 	add_child(_warband)
+	_defence = preload("res://scripts/ui/defence_panel.gd").new()
+	_defence.hud = self
+	_defence.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
+	_defence.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_defence.offset_top = 70
+	add_child(_defence)
 	Economy.changed.connect(_refresh)
 
 
@@ -83,6 +91,8 @@ func show_castle() -> void:
 	# Only your main castle has a warband; castles you capture just hold a garrison.
 	_warband_button.visible = view.editable and view.castle == Economy.player_castle and not Economy.online
 	_warband.visible = false
+	_defence_button.visible = view.editable
+	_defence.visible = false
 	_queue_signature = "?"
 	_on_mode_changed(view.mode)
 	_refresh()
@@ -96,7 +106,7 @@ func _build_top_bar() -> void:
 	bar.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
 	add_child(bar)
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 12)
+	row.add_theme_constant_override("separation", 6)
 	bar.add_child(row)
 	_title = MenuStyle.title("", 22)
 	_title.custom_minimum_size = Vector2(150, 0)
@@ -104,6 +114,8 @@ func _build_top_bar() -> void:
 	_title.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	row.add_child(_title)
 	_resources = ResourceBar.new()
+	# Tighter than on the map, to leave room for the Warband and Defence buttons at 1280 wide.
+	_resources.add_theme_constant_override("separation", 4)
 	row.add_child(_resources)
 	var spacer := Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -111,8 +123,17 @@ func _build_top_bar() -> void:
 	_warband_button = _button("Warband")
 	_warband_button.pressed.connect(func() -> void:
 		_warband.visible = not _warband.visible
+		_defence.visible = false
 		_warband.refresh())
 	row.add_child(_warband_button)
+	_defence_button = _button("Defence")
+	_defence_button.tooltip_text = "Choose how your soldiers man the walls"
+	_defence_button.pressed.connect(func() -> void:
+		_defence.visible = not _defence.visible
+		_warband.visible = false
+		if _defence.visible:
+			_defence.refresh())
+	row.add_child(_defence_button)
 	var back := _button("Map (C)")
 	back.pressed.connect(func() -> void: EventBus.world_map_requested.emit())
 	row.add_child(back)
@@ -249,6 +270,8 @@ func _refresh() -> void:
 	if view == null or view.castle == null or not is_inside_tree():
 		return
 	var castle: CastleState = view.castle
+	if _defence.visible:
+		_defence.update_counts()
 	var rules := castle.rules
 	_title.text = castle.castle_name
 	_resources.show_castle(castle)
@@ -321,6 +344,8 @@ func _refresh_side_panel() -> void:
 	if type == "keep":
 		lines.append("[b]Builders:[/b] %d, at level %d: %d" % [rules.builders(b.level), mini(b.level + 1, max_level), rules.builders(mini(b.level + 1, max_level))])
 		lines.append("Other buildings can reach level %d" % rules.max_level("woodcutter", b.level))
+	if type == "wall" and view.editable:
+		lines.append("Choose how your soldiers man the walls with [b]Defence[/b] at the top.")
 	var reason := castle.check_upgrade(b.id) if view.editable else ""
 	if not view.editable:
 		pass
