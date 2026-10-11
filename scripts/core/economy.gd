@@ -26,6 +26,10 @@ signal leaderboard_changed
 signal alliance_changed(error: String)
 ## Online: new chat messages arrived, or the server refused one you sent (error).
 signal chat_changed(error: String)
+## Online: carts or defenders sent to allies, or theirs to you, set out, arrived or came home (see `aid`).
+signal aid_changed
+## Online: news about help between allies, as a sentence (a cart arrived, your defenders fought).
+signal aid_news(text: String)
 
 ## Games are kept in SLOTS save slots under save_dir (slot_1.json ...).
 const SLOTS := 3
@@ -118,6 +122,13 @@ const CHAT_POLL_OPEN := 4.0
 const CHAT_POLL_CLOSED := 15.0
 ## Messages kept for the chat box.
 const CHAT_KEPT := 150
+## Online: carts and defenders you sent to allies ("mine") and theirs coming to
+## or standing in your castle, as the server lists them: {"id", "kind"
+## ("resources" or "troops"), "sender_name", "receiver_name", "resources",
+## "army", "depart", "arrive", "leave", "back", "mine"}.
+var aid: Array = []
+## Helping allies (data/aid.json): carry_per_keep_level, station_hours.
+var aid_rules := {}
 
 var _seen_report := 0          ## newest server battle report already shown
 var _poll_timer := 0.0
@@ -440,6 +451,10 @@ func troops_away() -> int:
 		var side: Dictionary = m.army if m.state == "out" else m.survivors
 		for unit: String in side:
 			n += int(side[unit])
+	for a: Dictionary in aid:
+		if a.get("mine", false) and a.kind == "troops":
+			for unit: String in a.army:
+				n += int(a.army[unit])
 	return n
 
 
@@ -725,9 +740,12 @@ func begin_online(answer: Dictionary) -> void:
 	chat_in_alliance = false
 	chat_loaded = false
 	_chat_timer = 0.0
+	aid = []
 	protected_until = 0.0
 	if pvp.is_empty():
 		pvp = get_node("/root/GameData").load_json("res://data/pvp.json")
+	if aid_rules.is_empty():
+		aid_rules = get_node("/root/GameData").load_json("res://data/aid.json")
 	_world_timer = WORLD_POLL
 	apply_server(answer)
 	get_node("/root/Online").order({"action": "alliance"})
@@ -738,6 +756,7 @@ func end_online() -> void:
 	online = false
 	others = []
 	raids = []
+	aid = []
 	_loaded = false
 	clock_offset = 0.0
 
@@ -769,13 +788,20 @@ func apply_server(answer: Dictionary) -> void:
 	if answer.has("raids"):
 		raids = answer.raids
 		raids_changed.emit()
+	if answer.has("aid"):
+		aid = answer.aid
+		aid_changed.emit()
 	var fresh_reports: Array = []
 	for r in answer.get("reports", []):
 		if int(r.get("id", 0)) > _seen_report:
 			fresh_reports.push_front(r)
 	for r in fresh_reports:
 		_seen_report = maxi(_seen_report, int(r.id))
-		attack_resolved.emit(_server_report(r.get("report", {})))
+		var report: Dictionary = r.get("report", {})
+		if report.get("kind", "") == "aid":
+			aid_news.emit(aid_text(report))
+		else:
+			attack_resolved.emit(_server_report(report))
 	changed.emit()
 	marches_changed.emit()
 
@@ -789,7 +815,7 @@ func _server_report(r: Dictionary) -> Dictionary:
 				"attacker": "Your army" if attacking else other, "defender": other if attacking else "Your castle",
 				"attacker_faction": player_faction, "defender_faction": "", "place": "",
 				"winner": r.get("winner", "b"), "a": r.get("a", {}), "b": r.get("b", {}), "loot": 0,
-				"spoils": r.get("spoils", {}), "wall": float(r.get("wall", 1.0))}
+				"spoils": r.get("spoils", {}), "wall": float(r.get("wall", 1.0)), "helped_by": r.get("helped_by", [])}
 	if r.get("empty", false):
 		return {"player": "a", "baron": true, "empty": true, "defender": r.get("name", ""),
 				"winner": "a", "a": {}, "b": {}, "loot": 0, "place": ""}
@@ -852,6 +878,11 @@ func _next_march_event() -> float:
 			due = t
 	for r: Dictionary in raids:
 		var t := float(r.arrive) if r.state == "out" else (float(r.back) if r.get("mine", false) else 0.0)
+		if t > 0.0 and (due == 0.0 or t < due):
+			due = t
+	# Carts arriving, and your defenders coming home.
+	for a: Dictionary in aid:
+		var t := float(a.arrive) if a.kind == "resources" else (float(a.back) if a.get("mine", false) else 0.0)
 		if t > 0.0 and (due == 0.0 or t < due):
 			due = t
 	return due
@@ -979,6 +1010,133 @@ func set_alliance(view: Dictionary, error: String) -> void:
 		get_node("/root/Online").order({"action": "chat", "after": 0})
 		chat_changed.emit("")
 	alliance_changed.emit(error)
+
+
+# --- Online: helping allies ------------------------------------------------------------
+
+func carry_limit() -> int:
+	## How much one cart shipment can carry from your castle.
+	return int(aid_rules.get("carry_per_keep_level", 500)) * maxi(1, player_castle.keep_level())
+
+
+func _check_ally(player_name: String) -> String:
+	var target := get_other(player_name)
+	if target.is_empty():
+		return "There's no player by that name."
+	if not target.get("ally", false):
+		return "You can only help members of your own alliance."
+	return ""
+
+
+func check_shipment(player_name: String, resources: Dictionary) -> String:
+	## Why these resources can't be sent to that ally ("" if they can).
+	var why := _check_ally(player_name)
+	if why != "":
+		return why
+	var total := 0
+	for r: String in resources:
+		var n := int(resources[r])
+		if n < 0:
+			return "Choose what to send."
+		if n > floori(float(player_castle.resources.get(r, 0.0))):
+			return "You don't have that much %s." % r
+		total += n
+	if total <= 0:
+		return "Choose what to send."
+	if total > carry_limit():
+		return "Your carts carry at most %d at a time." % carry_limit()
+	return ""
+
+
+func send_resources(player_name: String, resources: Dictionary) -> String:
+	## Sends a cart of resources to an ally. The server decides; they leave
+	## your storage here straight away.
+	var why := check_shipment(player_name, resources)
+	if why != "":
+		return why
+	var sent := {}
+	for r: String in resources:
+		if int(resources[r]) > 0:
+			sent[r] = int(resources[r])
+			player_castle.resources[r] = float(player_castle.resources[r]) - int(resources[r])
+	get_node("/root/Online").order({"action": "send_resources", "target": player_name, "resources": sent})
+	changed.emit()
+	return ""
+
+
+func check_defenders(player_name: String, army: Dictionary) -> String:
+	## Why these soldiers can't go and defend that ally's castle ("" if they can).
+	var why := _check_ally(player_name)
+	if why != "":
+		return why
+	var total := 0
+	for unit: String in army:
+		var n := int(army[unit])
+		if n < 0 or n > int(player_castle.troops.get(unit, 0)):
+			return "Your garrison doesn't have that many soldiers."
+		total += n
+	return "" if total > 0 else "Choose some soldiers to send."
+
+
+func send_defenders(player_name: String, army: Dictionary) -> String:
+	## Sends soldiers to stand in an ally's castle for station_hours.
+	var why := check_defenders(player_name, army)
+	if why != "":
+		return why
+	var sent := {}
+	for unit: String in army:
+		if int(army[unit]) > 0:
+			sent[unit] = int(army[unit])
+			player_castle.troops[unit] = int(player_castle.troops[unit]) - int(army[unit])
+	get_node("/root/Online").order({"action": "send_defenders", "target": player_name, "army": sent})
+	changed.emit()
+	return ""
+
+
+func recall_defenders(id: int) -> void:
+	## Calls your defenders home from an ally's castle (or turns them round on the road).
+	get_node("/root/Online").order({"action": "recall_defenders", "id": id})
+
+
+func aid_to(player_name: String) -> Array:
+	## Your carts and defenders on their way to, standing in, or coming back from this ally.
+	return aid.filter(func(a: Dictionary) -> bool: return a.get("mine", false) and String(a.receiver_name) == player_name)
+
+
+func defenders_here() -> Array:
+	## Allies' defenders standing in your castle now.
+	var t := now()
+	return aid.filter(func(a: Dictionary) -> bool:
+		return not a.get("mine", false) and a.kind == "troops" and float(a.arrive) <= t and t < float(a.leave))
+
+
+func aid_text(r: Dictionary) -> String:
+	## A server report about help between allies as one sentence.
+	var other := String(r.get("name", ""))
+	match String(r.get("event", "")):
+		"received":
+			return "%s's cart arrived: %s." % [other, _amounts(r.get("resources", {}))]
+		"delivered":
+			var text := "Your cart reached %s: %s." % [other, _amounts(r.get("resources", {}))]
+			var spilled: Dictionary = r.get("spilled", {})
+			if not spilled.is_empty():
+				text += " Their storage was full, so %s was lost." % _amounts(spilled)
+			return text
+		"defended":
+			var held: bool = r.get("held", false)
+			var lost: Dictionary = r.get("lost", {})
+			var losses := "losing %s" % _amounts(lost, true) if not lost.is_empty() else "without losses"
+			return ("Your defenders helped %s hold off %s, %s." if held else "%s's castle fell to %s. Your defenders fought, %s.") \
+					% [other, String(r.get("attacker", "")), losses]
+	return ""
+
+
+func _amounts(d: Dictionary, units := false) -> String:
+	var parts: PackedStringArray = []
+	for k: String in d:
+		if int(d[k]) > 0:
+			parts.append("%d %s" % [int(d[k]), rules.unit_plural(k) if units else k])
+	return ", ".join(parts) if not parts.is_empty() else "nothing"
 
 
 # --- Online: chat ---------------------------------------------------------------------

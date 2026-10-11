@@ -380,6 +380,17 @@ it shows the alliance's recent talk when you join. Messages are up to 200
 characters, one every 2 seconds, and are kept for three days. While you type,
 the keys don't move the camera.
 
+### Helping allies
+
+Click a member of your alliance on the map to send them resources or
+defenders. A cart carries up to 500 resources per level of your keep and
+takes as long as a march; what their storage can't hold is lost. Defenders
+stand in their castle for 8 hours and fight beside their garrison if it is
+attacked, then walk home. You can call them back sooner from the same panel.
+Allied defenders in your own castle show when you click it, and a battle
+report says when they fought for you. Helping costs only what you send, so
+it can't be bought.
+
 ## Project layout
 
 ```
@@ -467,7 +478,7 @@ How the parts work:
 - [x] Play online from the game
 - [x] Alliances
 - [x] Chat (world and alliance)
-- [ ] Helping allies: sending resources and soldiers
+- [x] Helping allies: sending resources and soldiers
 
 ## Known limitations
 
