@@ -399,6 +399,14 @@ same for everyone (`data/events.json`). The first is the Plunder Weekend,
 Friday 18:00 to Monday 00:00 UTC: robber barons drop 50% more loot, and the
 camp and attack panels show the bonus.
 
+The Baron Invasion runs from Wednesday 12:00 to Friday 12:00 UTC. Three
+invader camps (red banners) appear near every castle, the first at level 1
+plus 2 per keep level above 1 and each next one a level higher. Every win
+raises an invader camp a level and gives 10 event points per level it had,
+and a beaten camp is back after two minutes. The banner, the camp panel and
+the battle report show your points. The camps leave when the event ends;
+your points count for the event's rewards and leaderboard (next step).
+
 ## Project layout
 
 ```
@@ -487,7 +495,7 @@ How the parts work:
 - [x] Alliances
 - [x] Chat (world and alliance)
 - [x] Helping allies: sending resources and soldiers
-- [ ] Timed events: weekend loot bonus (done), baron invasions, event rewards
+- [ ] Timed events: weekend loot bonus (done), baron invasions (done), event rewards
 
 ## Known limitations
 

@@ -8,7 +8,7 @@ import { advanceMarches, type Army, type Report } from "../../../server/rules/ma
 import { CastleState } from "../../../server/rules/castle_state.ts";
 import type { Rules } from "../../../server/rules/load.ts";
 import type { Dict } from "../../../server/rules/util.ts";
-import type { PlayerState } from "./game.ts";
+import { scored, type PlayerState } from "./game.ts";
 
 /** The numbers for helping allies, from data/aid.json. */
 export interface AidRules {
@@ -105,7 +105,8 @@ export function deliver(rules: Rules, stored: PlayerState, aid: Aid): Delivery {
     if (got[r] < aid.resources[r]) spilled[r] = aid.resources[r] - got[r];
   }
   return {
-    receiver: { ...stored, castle: castle.toDict(), camps: world.camps, marches: world.marches, next_march: world.nextMarch },
+    receiver: { ...stored, castle: castle.toDict(), camps: world.camps, marches: world.marches, next_march: world.nextMarch,
+      ...scored(stored, campReports) },
     campReports,
     receiverReport: { kind: "aid", event: "received", name: aid.sender_name, at: aid.arrive, resources: got },
     senderReport: { kind: "aid", event: "delivered", name: aid.receiver_name, at: aid.arrive, resources: got, spilled },

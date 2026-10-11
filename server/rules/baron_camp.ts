@@ -14,6 +14,12 @@ export interface CampData {
   level: number;
   defeats: number;
   rebuilt_at: number;
+  /** Invader camps only (online events): the start of the invasion it belongs to. */
+  event?: number;
+  /** Invader camps only: event points per level for a win. */
+  points?: number;
+  /** Invader camps only: seconds it rebuilds after a defeat. */
+  rebuild?: number;
 }
 
 export interface CampAttack extends FightResult {
@@ -36,9 +42,11 @@ export function attackCamp(camp: CampData, rules: BaronRules, units: BuildingRul
   const stock: Dict = {};
   for (const [r, n] of Object.entries(rules.loot(camp.level))) stock[r] = Math.floor(n * factor);
   out.loot = carried(stock, rules.carry(out.survivors));
-  camp.rebuilt_at = now + rules.rebuildTime(camp.level);
+  camp.rebuilt_at = now + (camp.rebuild ?? rules.rebuildTime(camp.level));
   camp.defeats += 1;
-  if (camp.defeats >= rules.defeatsNeeded(camp.level) && camp.level < rules.maxLevel) {
+  // An invader camp rises a level with every win.
+  const needed = camp.event === undefined ? rules.defeatsNeeded(camp.level) : 1;
+  if (camp.defeats >= needed && camp.level < rules.maxLevel) {
     camp.level += 1;
     camp.defeats = 0;
     out.leveled = true;

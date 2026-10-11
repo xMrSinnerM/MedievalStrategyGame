@@ -1,8 +1,9 @@
 extends SceneTree
 ## Writes server/world/world.json: the robber baron camps, placed exactly as
 ## the game places them (BaronPlacer), how their starting level grows with
-## distance, and the spots where players' castles can stand (PlayerSpots).
-## The server can't read the terrain, so it uses these lists.
+## distance, the spots where players' castles can stand (PlayerSpots), and
+## for each spot the places around it where invader camps can stand during a
+## Baron Invasion. The server can't read the terrain, so it uses these lists.
 ##
 ## Run from the project folder after changing the terrain, settlements,
 ## player.json or the "camps" section of barons.json:
@@ -30,6 +31,7 @@ func _initialize() -> void:
 				"max": int(baron_rules.camps.get("start_level_max", 12))},
 		"camps": camps,
 		"spots": spots,
+		"invasion_spots": invasion_spots(game_data, spots, camps),
 	}
 	var file := FileAccess.open(OUT, FileAccess.WRITE)
 	file.store_string(JSON.stringify(out, "\t", false))
@@ -37,3 +39,58 @@ func _initialize() -> void:
 	print("wrote %s with %d camps and %d spots" % [OUT, camps.size(), spots.size()])
 	game_data.free()
 	quit()
+
+
+## Invader camps stand this far from the castle, on open ground clear of
+## other castles' spots, camps, settlements and each other.
+const INVADER_RINGS := [65.0, 85.0, 105.0, 125.0, 145.0]
+const INVADER_PER_SPOT := 4
+const INVADER_GAP := 35.0
+const INVADER_MAX_SLOPE := 0.15
+
+
+static func invasion_spots(game_data, spots: Array, camps: Array) -> Array:
+	var others: Array[Vector2] = []
+	for s: Array in spots:
+		others.append(Vector2(s[0], s[1]))
+	for c: Dictionary in camps:
+		others.append(Vector2(c.position[0], c.position[1]))
+	var out := []
+	for i in spots.size():
+		var home := Vector2(spots[i][0], spots[i][1])
+		var found: Array[Vector2] = []
+		var turn := float(i % 7) * 0.4
+		for radius: float in INVADER_RINGS:
+			for k in 16:
+				if found.size() >= INVADER_PER_SPOT:
+					break
+				var p := home + Vector2.from_angle(turn + k * TAU / 16.0) * radius
+				if not _open_ground(game_data, p):
+					continue
+				if others.any(func(q: Vector2) -> bool: return q != home and p.distance_to(q) < INVADER_GAP):
+					continue
+				if found.any(func(q: Vector2) -> bool: return p.distance_to(q) < INVADER_GAP * 1.5):
+					continue
+				if game_data.settlements.any(func(st: Dictionary) -> bool:
+						var reach: float = PlayerSpots.SETTLEMENT_RADIUS.get(st.get("type", "village"), 20.0) + 35.0
+						return p.distance_to(Vector2(st.position[0], st.position[1])) < reach):
+					continue
+				found.append(p)
+		var row := []
+		for p in found:
+			row.append([snappedf(p.x, 0.1), snappedf(p.y, 0.1)])
+		out.append(row)
+	return out
+
+
+static func _open_ground(game_data, p: Vector2) -> bool:
+	var terrain: TerrainData = game_data.terrain
+	var size := terrain.world_size
+	if p.x < 40.0 or p.y < 40.0 or p.x > size - 40.0 or p.y > size - 40.0:
+		return false
+	for k in 9:
+		var q := p if k == 8 else p + Vector2.from_angle(k * TAU / 8.0) * 9.0
+		if not game_data.nav.is_passable(q.x, q.y) or terrain.is_water(q.x, q.y) \
+				or terrain.get_slope(q.x, q.y) > INVADER_MAX_SLOPE:
+			return false
+	return true

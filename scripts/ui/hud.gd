@@ -232,6 +232,8 @@ func _show_event() -> void:
 	if not on.is_empty():
 		var e: Dictionary = on[0]
 		_event.text = "%s: %s  Ends in %s" % [e.name, e.description, _days(float(e.end) - Economy.now())]
+		if e.has("invasion"):
+			_event.text += "    Your points: %d" % Economy.invasion_points()
 		_event.add_theme_color_override("font_color", MenuStyle.GOLD)
 		banner.visible = true
 		return

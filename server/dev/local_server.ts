@@ -24,6 +24,7 @@ import {
 } from "../../supabase/functions/game/alliances.ts";
 import { chatView, MemoryChatStore, send as sendChat, type Speaker } from "../../supabase/functions/game/chat.ts";
 import { deliver, recall, type Aid, type AidRules } from "../../supabase/functions/game/aid.ts";
+import { invade } from "../../supabase/functions/game/invasion.ts";
 
 const root = new URL("../../", import.meta.url);
 const json = (path: string) => JSON.parse(readFileSync(new URL(path, root), "utf8"));
@@ -232,8 +233,9 @@ createServer(async (req, res) => {
       Object.assign(state.castle.resources, START_RESOURCES);
       const keep = state.castle.buildings.find((b) => b.type === "keep");
       if (keep && START_KEEP > 0) keep.level = START_KEEP;
-      players.set(user, state);
-      return send(res, 200, view(user, state));
+      const placed = invade(state, eventRules, world, now(), EVENTS_OFFSET);
+      players.set(user, placed);
+      return send(res, 200, view(user, placed));
     }
     if (body.action === "world") {
       const others = [...players.entries()].filter(([id]) => id !== user)
@@ -292,7 +294,8 @@ createServer(async (req, res) => {
     for (const a of aid) if (a.sender === user && a.kind === "troops" && a.state === "out" && a.back <= now()) a.state = "done";
     const t = now();
     const outcome = act(rules, players.get(user)!, body, t,
-      { pvp, target: target?.target, homecomings, alliances: allianceRules, aid: aidRules });
+      { pvp, target: target?.target, homecomings, alliances: allianceRules, aid: aidRules,
+        events: { rules: eventRules, world, offset: EVENTS_OFFSET } });
     players.set(user, outcome.state);
     for (const r of outcome.reports) report(user, r);
     if (outcome.raid && target) raids.push({ ...outcome.raid, id: nextRaid++, attacker: user, defender: target.user });

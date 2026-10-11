@@ -579,6 +579,12 @@ func test_baron_camp() -> void:
 	var copy := BaronCamp.from_dict(JSON.parse_string(JSON.stringify(camp.to_dict())))
 	check(copy.level == camp.level and copy.defeats == 1 and copy.position == camp.position, "a camp saves and loads")
 	near(copy.rebuilt_at, camp.rebuilt_at, "including its rebuild time")
+	check(not copy.is_invader() and not copy.to_dict().has("event"), "an ordinary camp isn't an invader")
+	var invader := BaronCamp.from_dict({"id": "invader_1", "name": "Raiders' Camp", "position": [5, 6], "level": 3,
+			"event": 1792000000.0, "points": 10})
+	var invader_copy := BaronCamp.from_dict(JSON.parse_string(JSON.stringify(invader.to_dict())))
+	check(invader_copy.is_invader() and invader_copy.points == 10 and invader_copy.event == 1792000000.0,
+			"an invader camp keeps its invasion and points")
 	# Economy keeps each camp's level in the save slot.
 	var eco = load("res://scripts/core/economy.gd").new()
 	eco.save_dir = "user://test_saves"

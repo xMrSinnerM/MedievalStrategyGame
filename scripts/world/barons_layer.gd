@@ -2,6 +2,8 @@ extends Node3D
 ## Robber baron camps on the world map (a palisade, tents and a black banner,
 ## with a label showing the camp's level), and your armies marching to and
 ## from them. Camps are placed by BaronPlacer the first time a game sees them.
+## Online, the invader camps of a Baron Invasion come and go with the event;
+## they fly a red banner.
 
 const PICK_RADIUS := 16.0
 const LABEL_MAX_ZOOM := 0.9
@@ -11,6 +13,9 @@ const TENT_DARK := Color(0.42, 0.2, 0.16)
 const FIRE := Color(0.95, 0.5, 0.15)
 const BARON_BANNER := {"id": "barons", "color": Color(0.1, 0.09, 0.09), "secondary_color": Color(0.7, 0.12, 0.1),
 		"banner": {"pattern": "chevron", "charge": ""}}
+const INVADER_BANNER := {"id": "invaders", "color": Color(0.62, 0.08, 0.06), "secondary_color": Color(0.1, 0.09, 0.09),
+		"banner": {"pattern": "chevron", "charge": ""}}
+const INVADER_LABEL := Color(1.0, 0.42, 0.32)
 const ARMY := Color(0.85, 0.7, 0.25)
 
 var _camps := {}          ## camp id -> {"node", "label"}
@@ -31,6 +36,7 @@ func build() -> void:
 		for id in _camps:
 			_camps[id].label.visible = t <= LABEL_MAX_ZOOM)
 	Economy.marches_changed.connect(_sync_armies)
+	Economy.barons_changed.connect(_sync_camps)
 	_sync_armies()
 	_refresh_labels()
 
@@ -45,6 +51,21 @@ func camp_at(map_pos: Vector2) -> String:
 			best_d = d
 			best = camp.id
 	return best
+
+
+func _sync_camps() -> void:
+	## Adds camps that are new and removes those that have gone.
+	var live := {}
+	for camp in Economy.barons:
+		live[camp.id] = true
+		if not _camps.has(camp.id):
+			_add_camp(camp)
+			_camps[camp.id].label.visible = _zoom_t <= LABEL_MAX_ZOOM
+	for id in _camps.keys():
+		if not live.has(id):
+			_camps[id].node.queue_free()
+			_camps.erase(id)
+	_refresh_labels()
 
 
 func _add_camp(camp: BaronCamp) -> void:
@@ -71,7 +92,7 @@ func _add_camp(camp: BaronCamp) -> void:
 	var model := MeshInstance3D.new()
 	model.mesh = kit.commit()
 	root.add_child(model)
-	var banner := Banners.make(BARON_BANNER, 8.0, 4.0)
+	var banner := Banners.make(INVADER_BANNER if camp.is_invader() else BARON_BANNER, 8.0, 4.0)
 	banner.position = Vector3(-1.5, 0, -0.5)
 	root.add_child(banner)
 	var label := Label3D.new()
@@ -100,10 +121,13 @@ func _refresh_labels() -> void:
 			continue
 		var label: Label3D = _camps[camp.id].label
 		var text := "%s  Lv %d" % [camp.camp_name, camp.level]
+		if camp.is_invader():
+			text = "Invaders: " + text
 		if not camp.is_ready(now):
 			text += "\nRebuilding %s" % _clock(camp.rebuilt_at - now)
 		label.text = text
-		label.modulate = Color(1.0, 0.62, 0.5) if camp.is_ready(now) else Color(0.7, 0.62, 0.58)
+		var color := INVADER_LABEL if camp.is_invader() else Color(1.0, 0.62, 0.5)
+		label.modulate = color if camp.is_ready(now) else Color(0.7, 0.62, 0.58)
 
 
 func _sync_armies() -> void:

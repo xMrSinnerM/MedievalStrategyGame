@@ -1,5 +1,5 @@
 {
-	"_comment": "Timed events online, the same for everyone. Each weekly event starts on a day of the week (1 = Monday ... 7 = Sunday) at an hour in UTC and lasts `hours`. Effects: baron_loot multiplies what robber baron camps drop.",
+	"_comment": "Timed events online, the same for everyone. Each weekly event starts on a day of the week (1 = Monday ... 7 = Sunday) at an hour in UTC and lasts `hours`. Effects: baron_loot multiplies what robber baron camps drop. An event with `invasion` puts invader camps near every castle while it runs: `camps` of them (named from `names`), the first at level 1 + `level_per_keep` per keep level above 1 and each next one a level higher. Every win raises an invader camp a level and gives `points_per_level` event points for each level it had; a beaten camp rebuilds for `rebuild` seconds.",
 	"weekly": [
 		{
 			"id": "plunder_weekend",
@@ -10,6 +10,26 @@
 			"hours": 54,
 			"effects": {
 				"baron_loot": 1.5
+			}
+		},
+		{
+			"id": "baron_invasion",
+			"name": "Baron Invasion",
+			"description": "Invader camps have appeared near your castle. Beat them for event points.",
+			"day": 3,
+			"hour": 12,
+			"hours": 48,
+			"effects": {},
+			"invasion": {
+				"camps": 3,
+				"names": [
+					"Raiders' Camp",
+					"Marauders' Camp",
+					"Reavers' Camp"
+				],
+				"level_per_keep": 2,
+				"points_per_level": 10,
+				"rebuild": 120
 			}
 		}
 	]
