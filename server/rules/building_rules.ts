@@ -29,7 +29,7 @@ export class BuildingRules {
   }
 
   hasType(type: string): boolean {
-    return type in this.types;
+    return Object.hasOwn(this.types, type);
   }
 
   size(type: string): [number, number] {
@@ -98,7 +98,7 @@ export class BuildingRules {
   // --- Troops ---------------------------------------------------------------
 
   hasUnit(unit: string): boolean {
-    return unit in this.units;
+    return Object.hasOwn(this.units, unit);
   }
 
   unitCost(unit: string, count = 1): Dict {
