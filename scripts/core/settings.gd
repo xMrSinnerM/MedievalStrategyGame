@@ -20,6 +20,7 @@ var values := DEFAULTS.duplicate()
 
 
 func _ready() -> void:
+	GameTheme.apply()
 	var cfg := ConfigFile.new()
 	if cfg.load(PATH) == OK:
 		for key: String in DEFAULTS:

@@ -14,13 +14,7 @@ var _footer: Label
 
 
 func _ready() -> void:
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.12, 0.09, 0.06, 0.94)
-	style.border_color = Color(0.7, 0.55, 0.3)
-	style.set_border_width_all(2)
-	style.set_corner_radius_all(8)
-	style.set_content_margin_all(18)
-	add_theme_stylebox_override("panel", style)
+	add_theme_stylebox_override("panel", MenuStyle.panel(0.94, 18))
 	custom_minimum_size = Vector2(440, 0)
 	visible = false
 	var box := VBoxContainer.new()

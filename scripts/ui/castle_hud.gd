@@ -4,18 +4,11 @@ extends CanvasLayer
 
 const TEXT := Color(0.95, 0.9, 0.8)
 const MUTED := Color(0.78, 0.72, 0.62)
-const RESOURCE_COLORS := {
-	"wood": Color(0.85, 0.65, 0.4), "stone": Color(0.78, 0.78, 0.8),
-	"food": Color(0.6, 0.85, 0.45), "gold": Color(1.0, 0.84, 0.35),
-}
 
 var view: Node3D   ## the castle view this HUD belongs to; set by the view
 
 var _title: Label
-var _resource_labels := {}
-var _builders_label: Label
-var _defense_label: Label
-var _troops_label: Label
+var _resources: ResourceBar
 var _warband_button: Button
 var _warband: PanelContainer
 var _recruit: VBoxContainer
@@ -99,24 +92,19 @@ func show_castle() -> void:
 
 func _build_top_bar() -> void:
 	var bar := PanelContainer.new()
-	bar.add_theme_stylebox_override("panel", _panel_style(0.8, 0))
+	bar.add_theme_stylebox_override("panel", GameTheme.bar_box())
 	bar.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
 	add_child(bar)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 12)
 	bar.add_child(row)
-	_title = _label("", 18, Color(1.0, 0.9, 0.65))
+	_title = MenuStyle.title("", 22)
+	_title.custom_minimum_size = Vector2(150, 0)
+	_title.add_theme_constant_override("outline_size", 6)
+	_title.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	row.add_child(_title)
-	for r in ["wood", "stone", "food", "gold"]:
-		var l := _label("", 15, RESOURCE_COLORS.get(r, TEXT))
-		row.add_child(l)
-		_resource_labels[r] = l
-	_builders_label = _label("", 15, TEXT)
-	row.add_child(_builders_label)
-	_defense_label = _label("", 15, TEXT)
-	row.add_child(_defense_label)
-	_troops_label = _label("", 15, TEXT)
-	row.add_child(_troops_label)
+	_resources = ResourceBar.new()
+	row.add_child(_resources)
 	var spacer := Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(spacer)
@@ -263,18 +251,9 @@ func _refresh() -> void:
 	var castle: CastleState = view.castle
 	var rules := castle.rules
 	_title.text = castle.castle_name
-	var cap := castle.storage_capacity()
-	var rates := castle.net_per_hour()
-	for r: String in _resource_labels:
-		_resource_labels[r].text = "%s %d/%d  %+d/h" % [r.capitalize(), int(castle.resources.get(r, 0.0)), int(cap), int(rates.get(r, 0.0))]
-	var total_builders := rules.builders(castle.keep_level())
-	_builders_label.text = "Builders %d / %d" % [castle.free_builders(), total_builders]
-	_defense_label.text = "Defence %d" % int(castle.defense())
-	_troops_label.text = "Garrison %d" % castle.troop_count()
-	_troops_label.tooltip_text = "Soldiers in the castle and its warband eat %d food an hour" % int(castle.upkeep_per_hour())
+	_resources.show_castle(castle)
 	_warband_button.text = "Warband %d" % castle.field_count()
 	_warband.refresh()
-	_troops_label.mouse_filter = Control.MOUSE_FILTER_PASS
 
 	for type: String in _build_buttons:
 		var b: Button = _build_buttons[type]
@@ -443,31 +422,9 @@ func _button(text: String) -> Button:
 	var b := Button.new()
 	b.text = text
 	b.focus_mode = Control.FOCUS_NONE
-	b.add_theme_font_size_override("font_size", 14)
-	var normal := _panel_style(0.9, 6)
-	normal.bg_color = Color(0.3, 0.22, 0.14, 0.95)
-	normal.border_color = Color(0.6, 0.47, 0.28)
-	normal.set_border_width_all(1)
-	var hover := normal.duplicate()
-	hover.bg_color = Color(0.4, 0.3, 0.18, 0.95)
-	var pressed := normal.duplicate()
-	pressed.bg_color = Color(0.22, 0.16, 0.1, 0.95)
-	var disabled := normal.duplicate()
-	disabled.bg_color = Color(0.2, 0.17, 0.14, 0.8)
-	disabled.border_color = Color(0.35, 0.3, 0.25)
-	b.add_theme_stylebox_override("normal", normal)
-	b.add_theme_stylebox_override("hover", hover)
-	b.add_theme_stylebox_override("pressed", pressed)
-	b.add_theme_stylebox_override("disabled", disabled)
-	b.add_theme_color_override("font_color", TEXT)
-	b.add_theme_color_override("font_hover_color", Color(1.0, 0.95, 0.85))
-	b.add_theme_color_override("font_disabled_color", Color(0.55, 0.5, 0.45))
+	b.add_theme_font_size_override("font_size", 15)
 	return b
 
 
 func _panel_style(alpha: float, radius: int) -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.12, 0.09, 0.06, alpha)
-	style.set_corner_radius_all(radius)
-	style.set_content_margin_all(10)
-	return style
+	return GameTheme.panel_box(alpha, 10, radius)
