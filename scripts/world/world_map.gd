@@ -37,6 +37,7 @@ func _ready() -> void:
 		add_child(players)
 		players.build()
 	parties.barons = barons
+	parties.players = players
 	parties.camera_rig = camera_rig
 	parties.build()
 	parchment.build()

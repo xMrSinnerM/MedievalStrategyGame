@@ -127,7 +127,11 @@ func show_report(report: Dictionary) -> void:
 
 
 func show_baron_report(report: Dictionary) -> void:
-	## The report for an army you sent against a robber baron camp.
+	## The report for an army you sent against a robber baron camp (or, online,
+	## a battle between your castle and another player's).
+	if report.get("raid", false):
+		show_raid_report(report)
+		return
 	if report.get("empty", false):
 		_title.text = "Nothing to fight"
 		_title.add_theme_color_override("font_color", MUTED)
@@ -151,6 +155,27 @@ func show_baron_report(report: Dictionary) -> void:
 	else:
 		lines.append("The camp held. Your surviving soldiers are marching home.")
 	_footer.text = "\n".join(lines)
+
+
+func show_raid_report(report: Dictionary) -> void:
+	## A battle between players: your army against their castle, or theirs against yours.
+	show_report(report)
+	var attacking: bool = report.player == "a"
+	var won: bool = report.winner == report.player
+	var walls := "+%d%% from the walls" % roundi((float(report.get("wall", 1.0)) - 1.0) * 100.0)
+	if attacking:
+		_title.text = "Victory!" if won else "Defeat"
+		_place.text = "Your army attacked %s's castle (%s)" % [report.name, walls]
+		_footer.text = "Your army is bringing home %s." % _spoils(report.spoils) if won \
+				else "%s's garrison held. Your surviving soldiers are marching home." % report.name
+		if report.b.is_empty():
+			_footer.text = "No soldiers were home to defend it.\n" + _footer.text
+	else:
+		_title.text = "Your walls held!" if won else "Your castle was raided!"
+		_place.text = "%s attacked your castle (%s)" % [report.name, walls]
+		_footer.text = "%s's army fell back with nothing." % report.name if won \
+				else "%s carried off %s. Train more soldiers to hold the walls." % [report.name, _spoils(report.spoils)]
+	_title.add_theme_color_override("font_color", WIN if won else LOSS)
 
 
 func _clear_grid() -> void:

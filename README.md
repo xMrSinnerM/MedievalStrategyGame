@@ -337,7 +337,9 @@ first.
 To play online, pick **Play online** on the main menu, then create an
 account or sign in (email and password) and name your castle. Online you
 have your castle on your own spot of the map, the other players' castles
-around you, and the robber baron camps; your castle keeps building and
+around you, and the robber baron camps. Click another player's castle to
+send a spy or an attack; new players are protected from attacks for their
+first three days. Your castle keeps building and
 training while the game is closed, and nothing is saved on your computer
 except that you're signed in. The warband, lords and diplomacy are single
 player only for now. Single player works offline exactly as before.

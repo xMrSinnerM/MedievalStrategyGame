@@ -148,6 +148,7 @@ func _build_markers() -> void:
 
 ## The robber baron layer, for picking camps (set by the world map).
 var barons: Node3D
+var players: Node3D   ## online: the other players' castles (players_layer.gd)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -182,6 +183,12 @@ func _on_click(screen_pos: Vector2) -> void:
 		EventBus.baron_selected.emit(camp)
 		return
 	EventBus.baron_selected.emit("")
+	var other: Dictionary = players.player_at(target) if players != null else {}
+	if not other.is_empty():
+		EventBus.settlement_selected.emit("")
+		EventBus.player_selected.emit(String(other.name))
+		return
+	EventBus.player_selected.emit("")
 	var settlement := _settlement_at(target)
 	if settlement.get("type", "") == "castle":
 		EventBus.settlement_selected.emit(settlement.id)

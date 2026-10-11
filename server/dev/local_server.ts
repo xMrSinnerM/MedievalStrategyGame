@@ -5,18 +5,25 @@
 //
 //   node server/dev/local_server.ts            (listens on port 54321)
 //   START_TROOPS='{"spearman":60}' node server/dev/local_server.ts   (castles start with soldiers)
+//   PROTECTION_HOURS=0 node server/dev/local_server.ts              (no beginner protection)
 //   godot --path . -- --online-url=http://127.0.0.1:54321
 
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { makeRules } from "../rules/load.ts";
-import { act, castleLevel, checkName, newPlayer, pickSpot, type PlayerState, type World } from "../../supabase/functions/game/game.ts";
+import {
+  act, castleLevel, checkName, fightRaid, isProtected, newPlayer, pickSpot, spyReport,
+  type PlayerState, type PvpRules, type Raid, type Target, type World,
+} from "../../supabase/functions/game/game.ts";
 
 const root = new URL("../../", import.meta.url);
 const json = (path: string) => JSON.parse(readFileSync(new URL(path, root), "utf8"));
 const rules = makeRules(json("data/buildings.json"), json("data/units.json"), json("data/barons.json"));
 const world: World = json("server/world/world.json");
+const pvp: PvpRules = json("data/pvp.json");
+// For testing: hours of beginner protection for new castles (data/pvp.json's by default).
+if (process.env.PROTECTION_HOURS !== undefined) pvp.protection_hours = Number(process.env.PROTECTION_HOURS);
 const PORT = Number(process.env.PORT ?? 54321);
 const TOKEN_LIFE = Number(process.env.TOKEN_LIFE ?? 3600);
 // For testing: soldiers every new castle starts with, as JSON ({"spearman": 50}).
@@ -28,6 +35,8 @@ const refreshTokens = new Map<string, string>();
 const players = new Map<string, PlayerState>();
 const reports: { id: number; user: string; at: number; report: unknown }[] = [];
 let nextReport = 1;
+const raids: (Raid & { attacker: string; defender: string })[] = [];
+let nextRaid = 1;
 
 const now = () => Date.now() / 1000;
 
@@ -59,7 +68,41 @@ function session(email: string) {
 
 function view(user: string, state: PlayerState, extra: Record<string, unknown> = {}) {
   const mine = reports.filter((r) => r.user === user).slice(-20).reverse().map(({ id, at, report }) => ({ id, at, report }));
-  return { ok: true, now: now(), ...extra, player: state, reports: mine };
+  const moving = raids.filter((r) => (r.attacker === user || r.defender === user) && r.state !== "done")
+    .map(({ attacker, defender: _d, ...r }) => {
+      const own = attacker === user;
+      return { ...r, mine: own, army: own ? r.army : {}, survivors: own ? r.survivors : {}, loot: own ? r.loot : {} };
+    });
+  return { ok: true, now: now(), ...extra, player: state, raids: moving, reports: mine };
+}
+
+function report(user: string, r: { at: number }) {
+  reports.push({ id: nextReport++, user, at: r.at, report: r });
+}
+
+// The same as resolveRaids() in index.ts, without the database.
+function resolveRaids(user: string) {
+  for (const raid of raids.filter((r) => r.state === "out" && r.arrive <= now() && (r.attacker === user || r.defender === user))
+    .sort((a, b) => a.arrive - b.arrive)) {
+    const defender = players.get(raid.defender);
+    if (defender === undefined) continue;
+    const outcome = fightRaid(rules, pvp, defender, raid);
+    players.set(raid.defender, outcome.defender);
+    for (const r of outcome.campReports) report(raid.defender, r);
+    report(raid.defender, outcome.defenderReport);
+    report(raid.attacker, outcome.attackerReport);
+    Object.assign(raid, { state: "home", survivors: outcome.survivors, loot: outcome.loot });
+  }
+}
+
+function findTarget(name: unknown): { target: Target; user: string } | undefined {
+  if (typeof name !== "string") return undefined;
+  for (const [id, p] of players) {
+    if (p.name.toLowerCase() === name.trim().toLowerCase()) {
+      return { target: { name: p.name, home: [p.home_x, p.home_y], protected: isProtected(p, pvp, now()) }, user: id };
+    }
+  }
+  return undefined;
 }
 
 createServer(async (req, res) => {
@@ -103,22 +146,30 @@ createServer(async (req, res) => {
       if (taken) return send(res, 200, { ok: false, error: "That name is taken." });
       const spot = pickSpot(world, [...players.values()].map((p) => [p.home_x, p.home_y] as [number, number]));
       if (spot === null) return send(res, 200, { ok: false, error: "The world is full. Try again later." });
-      const state = newPlayer(rules, world, String(body.name), now(), spot);
+      const state = newPlayer(rules, world, String(body.name), now(), spot, pvp);
       state.castle.troops = { ...START_TROOPS };
       players.set(user, state);
       return send(res, 200, view(user, state));
     }
     if (body.action === "world") {
       const others = [...players.entries()].filter(([id]) => id !== user)
-        .map(([, p]) => ({ name: p.name, home_x: p.home_x, home_y: p.home_y, level: castleLevel(p.castle) }));
+        .map(([, p]) => ({ name: p.name, home_x: p.home_x, home_y: p.home_y, level: castleLevel(p.castle),
+          protected: isProtected(p, pvp, now()) }));
       return send(res, 200, { ok: true, now: now(), error: "", players: others });
     }
-    const stored = players.get(user);
-    if (stored === undefined) return send(res, 200, { ok: false, error: "No castle yet.", needs_join: true });
-    const outcome = act(rules, stored, body, now());
+    if (!players.has(user)) return send(res, 200, { ok: false, error: "No castle yet.", needs_join: true });
+    resolveRaids(user);
+    const found = body.action === "attack_player" || body.action === "spy" ? findTarget(body.target) : undefined;
+    const homecomings = raids.filter((r) => r.attacker === user && r.state === "home" && r.back <= now());
+    for (const r of homecomings) r.state = "done";
+    const t = now();
+    const outcome = act(rules, players.get(user)!, body, t, { pvp, target: found?.target, homecomings });
     players.set(user, outcome.state);
-    for (const r of outcome.reports) reports.push({ id: nextReport++, user, at: r.at, report: r });
-    return send(res, 200, view(user, outcome.state, { error: outcome.error, result: outcome.result ?? null }));
+    for (const r of outcome.reports) report(user, r);
+    if (outcome.raid && found) raids.push({ ...outcome.raid, id: nextRaid++, attacker: user, defender: found.user });
+    let result = outcome.result ?? null;
+    if (body.action === "spy" && outcome.error === "" && found) result = spyReport(rules, pvp, players.get(found.user)!, t);
+    return send(res, 200, view(user, outcome.state, { error: outcome.error, result }));
   }
   send(res, 404, { msg: "Not found" });
 }).listen(PORT, "127.0.0.1", () => console.log(`Local game server on http://127.0.0.1:${PORT}`));
