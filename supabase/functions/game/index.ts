@@ -37,6 +37,8 @@
 // Help for allies is a row in the aid table (aid.ts): carts unload into the
 // ally's castle with the first request after they arrive, and defenders
 // standing in a castle fight beside its garrison when an attack is resolved.
+// Every answer with your castle also lists the timed events on now and next
+// (data/events.json); they change battles as they are resolved.
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
@@ -46,8 +48,10 @@ import barons from "../../../data/barons.json" with { type: "json" };
 import pvpData from "../../../data/pvp.json" with { type: "json" };
 import alliancesData from "../../../data/alliances.json" with { type: "json" };
 import aidData from "../../../data/aid.json" with { type: "json" };
+import eventsData from "../../../data/events.json" with { type: "json" };
 import world from "../../../server/world/world.json" with { type: "json" };
 import { makeRules } from "../../../server/rules/load.ts";
+import { effectAt, eventsView, type EventRules } from "../../../server/rules/events.ts";
 import {
   act, castleLevel, checkName, fightRaid, isProtected, might, newPlayer, pickSpot, spyReport,
   type Homecoming, type PlayerState, type PvpRules, type Raid, type Target, type World,
@@ -62,6 +66,8 @@ const rules = makeRules(buildings, units, barons);
 const pvp = pvpData as PvpRules;
 const allianceRules = alliancesData as AllianceRules;
 const aidRules = aidData as AidRules;
+const eventRules = eventsData as EventRules;
+rules.barons.lootFactor = (t) => effectAt(eventRules, t, "baron_loot");
 const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, {
   auth: { persistSession: false },
 });
@@ -130,7 +136,7 @@ async function activeAid(userId: string) {
 
 async function view(userId: string, state: PlayerState, extra: Record<string, unknown> = {}) {
   const [reports, raids, aid] = await Promise.all([recentReports(userId), activeRaids(userId), activeAid(userId)]);
-  return { ok: true, now: now(), ...extra, player: state, raids, aid, reports };
+  return { ok: true, now: now(), ...extra, player: state, raids, aid, reports, events: eventsView(eventRules, now()) };
 }
 
 /** The columns other players can see, worked out from a player's state. */

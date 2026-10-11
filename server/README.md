@@ -89,6 +89,12 @@ shared in proportion, and spies see them too. Then they march home, or sooner
 with `recall_defenders`. Both sides get a report. Only members of the same
 alliance can help each other.
 
+Timed events (`server/rules/events.ts`) follow a weekly calendar in
+`data/events.json`, in UTC. Whether one is on is worked out from the time, so
+nothing runs on a timer: a battle with a camp uses the bonus of the events on
+at the moment it is fought. Every answer with your castle carries `events`,
+the events on now and the next ones.
+
 To deploy changes with the Supabase CLI, from the repository root:
 
 ```

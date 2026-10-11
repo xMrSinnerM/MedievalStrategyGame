@@ -1,0 +1,16 @@
+{
+	"_comment": "Timed events online, the same for everyone. Each weekly event starts on a day of the week (1 = Monday ... 7 = Sunday) at an hour in UTC and lasts `hours`. Effects: baron_loot multiplies what robber baron camps drop.",
+	"weekly": [
+		{
+			"id": "plunder_weekend",
+			"name": "Plunder Weekend",
+			"description": "Robber barons drop 50% more loot.",
+			"day": 5,
+			"hour": 18,
+			"hours": 54,
+			"effects": {
+				"baron_loot": 1.5
+			}
+		}
+	]
+}
