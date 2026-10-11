@@ -67,6 +67,12 @@ const SVG := {
 		<rect x="14" y="52" width="36" height="6" rx="2" fill="#8a5a2e" stroke="%s" stroke-width="3"/>
 		<path d="M19 12 L45 12 C45 24 36 28 34 32 C36 36 45 40 45 52 L19 52 C19 40 28 36 30 32 C28 28 19 24 19 12 Z" fill="#e8e2d0" stroke="%s" stroke-width="3" stroke-linejoin="round"/>
 		<path d="M24 48 L40 48 C38 42 34 40 32 38 C30 40 26 42 24 48 Z" fill="#e0b048"/>""",
+	# Check boxes: an empty bronze-rimmed box, and one with a gold tick.
+	"box": """
+		<rect x="8" y="8" width="48" height="48" rx="8" fill="#140d06" stroke="#c79a52" stroke-width="5"/>""",
+	"box_ticked": """
+		<rect x="8" y="8" width="48" height="48" rx="8" fill="#140d06" stroke="#c79a52" stroke-width="5"/>
+		<path d="M18 33 L28 43 L47 20" fill="none" stroke="#f5c842" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>""",
 }
 
 static var _cache := {}

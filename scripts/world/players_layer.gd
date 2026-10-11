@@ -1,10 +1,12 @@
 extends Node3D
 ## Online: the other players' castles on the world map, each with its owner's
-## name and castle level. The list comes from the server (Economy.others) and
+## name, alliance tag and castle level, allies' names in green. The list comes
+## from the server (Economy.others) and
 ## is redrawn whenever it changes. Armies sent between players march here too:
 ## yours in gold, and in red the ones coming for your castle.
 
 const LABEL_COLOR := Color(0.62, 0.84, 1.0)
+const ALLY_COLOR := Color(0.55, 0.95, 0.55)
 const LABEL_MAX_ZOOM := 0.9
 const MINE := Color(0.85, 0.7, 0.25)
 const ENEMY := Color(0.8, 0.22, 0.16)
@@ -56,12 +58,12 @@ static func _settlement_data(p: Dictionary) -> Dictionary:
 	var faction: Dictionary = GameData.factions[absi(hash(player_name)) % GameData.factions.size()]
 	return {
 		"id": "player:" + player_name,
-		"name": "%s  Lv %d" % [player_name, int(p.get("level", 1))],
+		"name": ("[%s] " % p.tag if String(p.get("tag", "")) != "" else "") + "%s  Lv %d" % [player_name, int(p.get("level", 1))],
 		"type": "castle",
 		"faction": faction.id,
 		"position": [float(p.home_x), float(p.home_y)],
 		"rotation_deg": float(absi(hash(player_name)) % 360),
-		"label_color": LABEL_COLOR,
+		"label_color": ALLY_COLOR if p.get("ally", false) else LABEL_COLOR,
 	}
 
 

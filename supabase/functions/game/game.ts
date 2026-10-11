@@ -8,6 +8,7 @@ import { CastleState, type CastleData } from "../../../server/rules/castle_state
 import type { Rules } from "../../../server/rules/load.ts";
 import { advanceMarches, sendAttack, type Army, type March, type Report } from "../../../server/rules/marches.ts";
 import { godotHash, type Dict } from "../../../server/rules/util.ts";
+import type { AllianceRules } from "./alliances.ts";
 
 /** A player as stored in the players table (the game columns). */
 export interface PlayerState {
@@ -56,6 +57,8 @@ export interface Target {
   name: string;
   home: [number, number];
   protected: boolean;
+  /** In the same alliance as the player giving the order. */
+  ally?: boolean;
 }
 
 /** A battle between players, as each side's report shows it. */
@@ -78,6 +81,7 @@ export interface Context {
   pvp?: PvpRules;
   target?: Target;
   homecomings?: Raid[];
+  alliances?: AllianceRules;
 }
 
 export interface World {
@@ -227,6 +231,7 @@ export function act(rules: Rules, stored: PlayerState, req: Request, now: number
       const sent = isArmy(req.army) ? req.army : null;
       if (target === undefined) error = "There's no player by that name.";
       else if (target.name === stored.name) error = "That's your own castle.";
+      else if (target.ally) error = "You can't attack a member of your own alliance.";
       else if (target.protected) error = "That castle is under beginner protection.";
       else if (sent === null) error = "Bad army.";
       else error = checkArmy(castle, sent);
@@ -250,8 +255,18 @@ export function act(rules: Rules, stored: PlayerState, req: Request, now: number
       const cost = ctx.pvp?.spy_cost ?? {};
       if (ctx.target === undefined) error = "There's no player by that name.";
       else if (ctx.target.name === stored.name) error = "That's your own castle.";
+      else if (ctx.target.ally) error = "No need to spy on your own alliance.";
       else if (!castle.canAfford(cost)) error = "Not enough gold to send a spy.";
       else for (const r of Object.keys(cost)) castle.resources[r] -= cost[r];
+      break;
+    }
+    case "found_alliance": {
+      // Only the price is paid here; index.ts creates the alliance itself.
+      const a = ctx.alliances;
+      if (a === undefined) error = "Unknown order.";
+      else if (castle.keepLevel() < a.found_keep) error = `Founding an alliance needs keep level ${a.found_keep}.`;
+      else if (!castle.canAfford(a.found_cost)) error = "Not enough gold to found an alliance.";
+      else for (const r of Object.keys(a.found_cost)) castle.resources[r] -= a.found_cost[r];
       break;
     }
     default:

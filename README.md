@@ -357,6 +357,20 @@ training while the game is closed, and nothing is saved on your computer
 except that you're signed in. The warband, lords and diplomacy are single
 player only for now. Single player works offline exactly as before.
 
+### Alliances
+
+Press G (or the Alliance button) online to open the alliance screen. Any
+player with keep level 2 can found an alliance for 300 gold, with a name and
+a tag of 2 to 4 letters; there's nothing to buy. Open alliances let anyone
+join; closed ones take requests, which the leader and officers answer. They
+can also invite players by name. The leader can make members officers, hand
+over the leadership, remove members, change the settings or disband the
+alliance; if the leader leaves, an officer takes over. Alliances hold up to
+30 players (`data/alliances.json`).
+
+Tags show on the map and the leaderboard, and your allies' castles are
+labelled in green. You can't spy on or attack a member of your own alliance.
+
 ## Project layout
 
 ```
@@ -441,7 +455,10 @@ How the parts work:
 - [x] Attack screen: choose your soldiers
 - [x] Server rules in TypeScript, checked against the game
 - [x] Server on Supabase: database, accounts, game server
-- [ ] Play online from the game
+- [x] Play online from the game
+- [x] Alliances
+- [ ] Chat (world and alliance)
+- [ ] Helping allies: sending resources and soldiers
 
 ## Known limitations
 

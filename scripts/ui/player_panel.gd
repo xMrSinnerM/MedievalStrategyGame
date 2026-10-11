@@ -92,11 +92,15 @@ func _refresh() -> void:
 	if p.is_empty():
 		visible = false
 		return
-	_title.text = player_name
+	var tag := String(p.get("tag", ""))
+	var ally: bool = p.get("ally", false)
+	_title.text = ("[%s] " % tag if tag != "" else "") + player_name
 	_level.text = "Player castle, level %d" % int(p.get("level", 1))
 	var lines: PackedStringArray = []
 	var shielded: bool = p.get("protected", false)
-	if shielded:
+	if ally:
+		lines.append("A member of your alliance.")
+	elif shielded:
 		lines.append("Under beginner protection: can't be attacked yet.")
 	lines.append("March: %s each way" % _clock(Economy.march_time_to_player(player_name)))
 	var seen: Dictionary = Economy.spy_reports.get(player_name, {})
@@ -120,8 +124,8 @@ func _refresh() -> void:
 					_clock((float(r.arrive) if out else float(r.back)) - Economy.now())])
 	_details.text = "\n".join(lines)
 	_spy.text = "Send a spy (%s)" % _cost(Economy.spy_cost())
-	_spy.disabled = not Economy.player_castle.can_afford(Economy.spy_cost())
-	_attack.disabled = shielded or Economy.player_castle.troop_count() <= 0
+	_spy.disabled = ally or not Economy.player_castle.can_afford(Economy.spy_cost())
+	_attack.disabled = ally or shielded or Economy.player_castle.troop_count() <= 0
 	_attack.tooltip_text = "Train soldiers first" if Economy.player_castle.troop_count() <= 0 else ""
 
 

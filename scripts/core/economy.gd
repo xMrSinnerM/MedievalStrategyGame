@@ -21,6 +21,9 @@ signal raids_changed
 signal spy_returned(player_name: String)
 ## Online: the server sent the leaderboard (see `leaderboard`).
 signal leaderboard_changed
+## Online: the server sent your alliance's view (see `alliance`); `error` is
+## why the last alliance order was refused, or "".
+signal alliance_changed(error: String)
 
 ## Games are kept in SLOTS save slots under save_dir (slot_1.json ...).
 const SLOTS := 3
@@ -94,6 +97,11 @@ var pvp := {}
 ## Online: the mightiest castles as the server last sent them:
 ## {"players": [{"name", "level", "might", "barons_beaten"}], "me", "rank", "total"}.
 var leaderboard := {}
+## Online: the alliance screen's view from the server: "alliance" (yours, with
+## your "role", or null), "members", "requests", "invited", "invites" (to
+## you), "asked" (alliances you asked to join), "alliances" (all), "rules",
+## "you" (your name).
+var alliance := {}
 
 var _seen_report := 0          ## newest server battle report already shown
 var _poll_timer := 0.0
@@ -695,11 +703,13 @@ func begin_online(answer: Dictionary) -> void:
 	raids = []
 	spy_reports = {}
 	leaderboard = {}
+	alliance = {}
 	protected_until = 0.0
 	if pvp.is_empty():
 		pvp = get_node("/root/GameData").load_json("res://data/pvp.json")
 	_world_timer = WORLD_POLL
 	apply_server(answer)
+	get_node("/root/Online").order({"action": "alliance"})
 
 
 func end_online() -> void:
@@ -796,6 +806,7 @@ func _process_online(delta: float) -> void:
 	if _world_timer >= WORLD_POLL:
 		_world_timer = 0.0
 		get_node("/root/Online").order({"action": "world"})
+		get_node("/root/Online").order({"action": "alliance"})
 
 
 func set_others(players: Array) -> void:
@@ -852,6 +863,8 @@ func check_raid(player_name: String, army: Dictionary) -> String:
 	var target := get_other(player_name)
 	if target.is_empty():
 		return "There's no player by that name."
+	if target.get("ally", false):
+		return "You can't attack a member of your own alliance."
 	if target.get("protected", false):
 		return "That castle is under beginner protection."
 	var total := 0
@@ -892,6 +905,46 @@ func spy(player_name: String) -> String:
 func ask_leaderboard() -> void:
 	## Asks the server for the leaderboard; it arrives with leaderboard_changed.
 	get_node("/root/Online").order({"action": "leaderboard"})
+
+
+# --- Online: alliances ---------------------------------------------------------------
+
+func alliance_order(body: Dictionary) -> void:
+	## Sends an alliance order ({"action": "invite", "target": ...}); the new
+	## view arrives with alliance_changed.
+	get_node("/root/Online").order(body)
+
+
+func my_alliance() -> Dictionary:
+	## Your alliance ({} if you aren't in one): id, name, tag, open, description, role.
+	return alliance.get("alliance") if alliance.get("alliance") is Dictionary else {}
+
+
+func check_found_alliance() -> String:
+	## Why you can't found an alliance now ("" if you can).
+	var rules: Dictionary = alliance.get("rules", {})
+	if not my_alliance().is_empty():
+		return "Leave your alliance first."
+	if player_castle.keep_level() < int(rules.get("found_keep", 1)):
+		return "Founding an alliance needs keep level %d." % int(rules.get("found_keep", 1))
+	if not player_castle.can_afford(rules.get("found_cost", {})):
+		return "Not enough gold to found an alliance."
+	return ""
+
+
+func found_alliance(alliance_name: String, tag: String) -> String:
+	var why := check_found_alliance()
+	if why != "":
+		return why
+	get_node("/root/Online").order({"action": "found_alliance", "name": alliance_name, "tag": tag})
+	return ""
+
+
+func set_alliance(view: Dictionary, error: String) -> void:
+	if not online:
+		return
+	alliance = view
+	alliance_changed.emit(error)
 
 
 func take_order_result(body: Dictionary, answer: Dictionary) -> void:
