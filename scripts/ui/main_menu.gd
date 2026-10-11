@@ -4,6 +4,8 @@ extends CanvasLayer
 ## when game_requested fires.
 
 signal game_requested(slot: int, new_game: bool)
+## You signed in to the multiplayer server; answer is its "state" or "join" reply.
+signal online_requested(answer: Dictionary)
 
 const BACKGROUND := "res://ui/menu_background.jpg"
 
@@ -18,6 +20,7 @@ var _confirm_title: Label
 var _confirm_text: Label
 var _confirm_action := Callable()
 var _settings: PanelContainer
+var _online: PanelContainer
 var _loading: Label
 
 
@@ -58,6 +61,9 @@ func _ready() -> void:
 	_buttons.add_child(MenuStyle.button("New game", _show_slots.bind(true)))
 	_load = MenuStyle.button("Load game", _show_slots.bind(false))
 	_buttons.add_child(_load)
+	_buttons.add_child(MenuStyle.button("Play online", func() -> void:
+		_show(_online)
+		_online.open()))
 	_buttons.add_child(MenuStyle.button("Settings", func() -> void: _show(_settings)))
 	_buttons.add_child(MenuStyle.button("Quit", func() -> void: get_tree().quit()))
 	_loading = MenuStyle.label("Loading the realm...", 20, MenuStyle.GOLD)
@@ -105,6 +111,12 @@ func _ready() -> void:
 	_settings.visible = false
 	_settings.closed.connect(func() -> void: _show(null))
 	column.add_child(_settings)
+
+	_online = preload("res://scripts/ui/online_panel.gd").new()
+	_online.visible = false
+	_online.closed.connect(func() -> void: _show(null))
+	_online.started.connect(_start_online)
+	column.add_child(_online)
 	refresh()
 
 
@@ -124,6 +136,7 @@ func _show(sub_panel: Control) -> void:
 	_confirm.visible = sub_panel == _confirm
 	_slots.visible = sub_panel == _slots
 	_settings.visible = sub_panel == _settings
+	_online.visible = sub_panel == _online
 
 
 func _show_slots(for_new_game: bool) -> void:
@@ -184,3 +197,12 @@ func _start(slot: int, new_game: bool) -> void:
 	await get_tree().process_frame
 	await get_tree().process_frame
 	game_requested.emit(slot, new_game)
+
+
+func _start_online(answer: Dictionary) -> void:
+	_show(_loading)
+	_buttons.get_parent().visible = false
+	_loading.visible = true
+	await get_tree().process_frame
+	await get_tree().process_frame
+	online_requested.emit(answer)

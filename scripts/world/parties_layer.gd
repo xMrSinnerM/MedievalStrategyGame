@@ -69,7 +69,8 @@ var _castle_truce := {}          ## castle id -> no lord sieges before this time
 
 func build() -> void:
 	_rng.seed = 7
-	for data in GameData.parties:
+	# Online there are no lords or warband yet: the map only has your castle and the camps.
+	for data in ([] if Economy.online else GameData.parties):
 		var start := GameData.get_settlement(data.get("start", ""))
 		if start.is_empty():
 			push_warning("Party %s has no valid start settlement" % data.id)
@@ -164,8 +165,6 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _on_click(screen_pos: Vector2) -> void:
-	if player == null:
-		return
 	var cam := get_viewport().get_camera_3d()
 	var clicked := _party_at(cam, screen_pos)
 	if clicked != null and clicked != player:
@@ -188,6 +187,8 @@ func _on_click(screen_pos: Vector2) -> void:
 		EventBus.settlement_selected.emit(settlement.id)
 		return
 	EventBus.settlement_selected.emit("")
+	if player == null:
+		return
 	if not settlement.is_empty():
 		target = Vector2(settlement.position[0], settlement.position[1])
 	_travel(target, settlement)

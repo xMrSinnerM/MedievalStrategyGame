@@ -116,6 +116,7 @@ func upgrade_selected() -> void:
 	if reason != "" or not castle.upgrade(selected, Economy.now()):
 		message.emit(reason if reason != "" else "Can't upgrade that now")
 		return
+	_tell_server({"action": "upgrade", "id": selected})
 	_after_order()
 
 
@@ -125,6 +126,7 @@ func cancel_selected() -> void:
 	var b := castle.get_building(selected)
 	var was_new: bool = not b.is_empty() and b.level == 0
 	if castle.cancel(selected, Economy.now()):
+		_tell_server({"action": "cancel", "id": selected})
 		message.emit("Construction cancelled, %d%% of the cost refunded" % int(CastleState.CANCEL_REFUND * 100.0))
 		if was_new:
 			select(-1)
@@ -138,11 +140,13 @@ func recruit(unit: String, amount: int) -> void:
 	if reason != "" or not castle.recruit(unit, amount, Economy.now()):
 		message.emit(reason if reason != "" else "Can't train them now")
 		return
+	_tell_server({"action": "recruit", "unit": unit, "amount": amount})
 	Economy.changed.emit()
 
 
 func cancel_training(index: int) -> void:
 	if editable and castle.cancel_training(index, Economy.now()):
+		_tell_server({"action": "cancel_training", "index": index})
 		message.emit("Training cancelled, %d%% of the cost refunded" % int(CastleState.CANCEL_REFUND * 100.0))
 		Economy.changed.emit()
 
@@ -150,6 +154,9 @@ func cancel_training(index: int) -> void:
 func move_troops(unit: String, amount: int, to_field: bool) -> void:
 	## Moves soldiers between the garrison and your warband, which must be at the castle.
 	if not editable:
+		return
+	if Economy.online:
+		message.emit("There's no warband in the online game yet.")
 		return
 	if not Economy.warband_home:
 		message.emit("Your warband is away. Bring it to your castle first.")
@@ -203,6 +210,7 @@ func _click(screen_pos: Vector2) -> void:
 				message.emit(reason)
 				return
 			var id := castle.place(placing_type, cell, Economy.now())
+			_tell_server({"action": "place", "type": placing_type, "cell": [cell.x, cell.y]})
 			_set_mode(Mode.SELECT)
 			_after_order()
 			select(id)
@@ -211,11 +219,19 @@ func _click(screen_pos: Vector2) -> void:
 			if not castle.move(selected, cell):
 				message.emit("There's no room there")
 				return
+			_tell_server({"action": "move", "id": selected, "cell": [cell.x, cell.y]})
 			_set_mode(Mode.SELECT)
 			_after_order()
 			select(selected)
 		_:
 			select(building_at(point))
+
+
+func _tell_server(order: Dictionary) -> void:
+	## Online, every order done here is also sent to the server, which
+	## carries it out under the same rules and has the final word.
+	if Economy.online:
+		Online.order(order)
 
 
 func building_at(point: Vector3) -> int:

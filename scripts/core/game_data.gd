@@ -57,6 +57,7 @@ func ensure_loaded() -> bool:
 		own.player = true
 		own.bound_to = null
 		own.first_faction = own.faction
+		own.first_name = own.name
 		settlements.append(own)
 		settlements_by_id[own.id] = own
 
@@ -78,6 +79,7 @@ func reset_settlements() -> void:
 	## mark the castles that changed hands (Economy.sync_castles).
 	for s in settlements:
 		s.faction = s.first_faction
+		s.name = s.get("first_name", s.name)
 		if s.id != Economy.MAIN_CASTLE:
 			s.erase("player")
 

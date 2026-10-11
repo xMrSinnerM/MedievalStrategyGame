@@ -444,6 +444,23 @@ func _desert() -> void:
 		hunger -= leaving * upkeep
 
 
+func copy_from(other: CastleState) -> void:
+	## Takes over another castle's whole state (used when the server sends
+	## yours), keeping this object so everything that shows it stays linked.
+	id = other.id
+	castle_name = other.castle_name
+	owner = other.owner
+	resources = other.resources
+	buildings = other.buildings
+	last_update = other.last_update
+	troops = other.troops
+	training = other.training
+	hunger = other.hunger
+	field = other.field
+	field_ready = other.field_ready
+	_next_id = other._next_id
+
+
 # --- Saving ------------------------------------------------------------------
 
 func to_dict() -> Dictionary:
