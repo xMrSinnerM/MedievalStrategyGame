@@ -33,7 +33,8 @@ godot --headless --path . --script res://tests/dump_server_fixtures.gd
 - `supabase/migrations/`: the database. `players` holds each player's castle,
   robber baron camps and marches as JSON, `reports` their battle reports,
   `raids` the armies players send against each other, `alliances` and
-  `alliance_pending` (invitations and requests to join) the alliances.
+  `alliance_pending` (invitations and requests to join) the alliances, and
+  `chat_messages` the world and alliance chat.
   Players can read their own rows only; nobody but the game server can write.
 - `supabase/functions/game/`: the game server, one Edge Function. `index.ts`
   checks who is signed in, loads their row, and `game.ts` runs their world up
@@ -69,6 +70,13 @@ alliance orders (`alliance`, `join_alliance`, `invite`, `answer_request`,
 `set_role`, `kick`, `leave_alliance`, `disband_alliance` and the rest) answer
 with the alliance screen's view. The map and the leaderboard carry each
 player's tag, and the server refuses spies and attacks on your own alliance.
+
+Chat (`chat.ts`, kept in the database by `chat_store.ts`) has a world channel
+and one per alliance. `chat` returns the messages newer than `after` that you
+may read (the newest 50 at most), and `chat_send` sends one to `world` or
+`alliance` first. Messages are cleaned of line breaks and control
+characters, are at most 200 characters, need 2 seconds between them, and
+are deleted after three days.
 
 To deploy changes with the Supabase CLI, from the repository root:
 

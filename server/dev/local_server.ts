@@ -20,6 +20,7 @@ import {
 import {
   allianceView, checkFound, found, handle, MemoryAllianceStore, type AllianceRules,
 } from "../../supabase/functions/game/alliances.ts";
+import { chatView, MemoryChatStore, send as sendChat, type Speaker } from "../../supabase/functions/game/chat.ts";
 
 const root = new URL("../../", import.meta.url);
 const json = (path: string) => JSON.parse(readFileSync(new URL(path, root), "utf8"));
@@ -47,6 +48,7 @@ const raids: (Raid & { attacker: string; defender: string })[] = [];
 let nextRaid = 1;
 const store = new MemoryAllianceStore(() => new Map([...players].map(([id, p]) => [id,
   { name: p.name, level: castleLevel(p.castle), might: might(p.castle, pvp) }])));
+const chat = new MemoryChatStore();
 const ALLIANCE_ORDERS = new Set([
   "alliance", "join_alliance", "accept_invite", "decline_invite", "cancel_request", "leave_alliance", "disband_alliance",
   "invite", "cancel_invite", "kick", "answer_request", "set_role", "alliance_settings",
@@ -61,6 +63,10 @@ function tagOf(user: string): string {
 function allies(a: string, b: string): boolean {
   const x = store.membership.get(a);
   return x !== undefined && x.alliance_id === store.membership.get(b)?.alliance_id;
+}
+
+function speaker(user: string): Speaker {
+  return { user, name: players.get(user)!.name, tag: tagOf(user), alliance_id: store.membership.get(user)?.alliance_id ?? null };
 }
 
 const now = () => Date.now() / 1000;
@@ -197,6 +203,10 @@ createServer(async (req, res) => {
         result: { players: all.slice(0, 50).map(strip), me: mine ? strip(mine) : null, rank, total: all.length } });
     }
     if (!players.has(user)) return send(res, 200, { ok: false, error: "No castle yet.", needs_join: true });
+    if (body.action === "chat" || body.action === "chat_send") {
+      const error = body.action === "chat_send" ? await sendChat(chat, speaker(user), body, now()) : "";
+      return send(res, 200, { ok: true, now: now(), error, result: await chatView(chat, speaker(user), body.after) });
+    }
     if (typeof body.action === "string" && ALLIANCE_ORDERS.has(body.action)) {
       const error = await handle(store, allianceRules, user, body, now());
       return send(res, 200, { ok: true, now: now(), error, result: await allianceView(store, allianceRules, user) });

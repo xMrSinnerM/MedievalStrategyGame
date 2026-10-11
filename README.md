@@ -371,6 +371,15 @@ alliance; if the leader leaves, an officer takes over. Alliances hold up to
 Tags show on the map and the leaderboard, and your allies' castles are
 labelled in green. You can't spy on or attack a member of your own alliance.
 
+### Chat
+
+Online, the chat box sits in the bottom left corner of the map. Press Enter
+to open it and type, Enter again to send, and Esc to get back to the game.
+The World tab is for everyone; the Alliance tab only for your alliance, and
+it shows the alliance's recent talk when you join. Messages are up to 200
+characters, one every 2 seconds, and are kept for three days. While you type,
+the keys don't move the camera.
+
 ## Project layout
 
 ```
@@ -457,7 +466,7 @@ How the parts work:
 - [x] Server on Supabase: database, accounts, game server
 - [x] Play online from the game
 - [x] Alliances
-- [ ] Chat (world and alliance)
+- [x] Chat (world and alliance)
 - [ ] Helping allies: sending resources and soldiers
 
 ## Known limitations

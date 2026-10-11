@@ -23,6 +23,8 @@
 // POST { "action": "answer_request", "target": "name", "accept": true }
 // POST { "action": "set_role", "target": "name", "role": "leader" | "officer" | "member" }
 // POST { "action": "alliance_settings", "open": true, "description": "..." }
+// POST { "action": "chat", "after": id }         world and alliance messages newer than `after`
+// POST { "action": "chat_send", "channel": "world" | "alliance", "text": "...", "after": id }
 //
 // Armies sent against players are rows in the raids table. Whenever either
 // side sends a request after an army has arrived, the battle is fought on
@@ -45,6 +47,8 @@ import {
 } from "./game.ts";
 import { allianceView, checkFound, found, handle, type AllianceRules } from "./alliances.ts";
 import { DatabaseAllianceStore } from "./alliance_store.ts";
+import { chatView, send, type Speaker } from "./chat.ts";
+import { DatabaseChatStore } from "./chat_store.ts";
 
 const rules = makeRules(buildings, units, barons);
 const pvp = pvpData as PvpRules;
@@ -53,6 +57,7 @@ const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE
   auth: { persistSession: false },
 });
 const store = new DatabaseAllianceStore(admin);
+const chat = new DatabaseChatStore(admin);
 const ALLIANCE_ORDERS = new Set([
   "alliance", "join_alliance", "accept_invite", "decline_invite", "cancel_request", "leave_alliance", "disband_alliance",
   "invite", "cancel_invite", "kick", "answer_request", "set_role", "alliance_settings",
@@ -163,6 +168,14 @@ function tagOf(r: Row): string {
   return r.alliance?.tag ?? "";
 }
 
+/** The player as chat sees them: name, alliance and its tag; null without a castle. */
+async function speaker(userId: string): Promise<Speaker | null> {
+  const me = await store.player(userId);
+  if (me === null) return null;
+  const a = me.alliance_id === null ? null : await store.alliance(me.alliance_id);
+  return { user: userId, name: me.name, tag: a?.tag ?? "", alliance_id: a === null ? null : me.alliance_id };
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method !== "POST") return reply({ ok: false, error: "Use POST." }, 405);
   const token = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "");
@@ -229,6 +242,13 @@ Deno.serve(async (req: Request) => {
     }
     const { count: total } = await admin.from("players").select("user_id", { count: "exact", head: true });
     return reply({ ok: true, now: now(), error: "", result: { players: (data ?? []).map(flat), me, rank, total: total ?? 0 } });
+  }
+
+  if (body.action === "chat" || body.action === "chat_send") {
+    const who = await speaker(userId);
+    if (who === null) return reply({ ok: false, error: "No castle yet.", needs_join: true });
+    const error = body.action === "chat_send" ? await send(chat, who, body, now()) : "";
+    return reply({ ok: true, now: now(), error, result: await chatView(chat, who, body.after) });
   }
 
   if (typeof body.action === "string" && ALLIANCE_ORDERS.has(body.action)) {
