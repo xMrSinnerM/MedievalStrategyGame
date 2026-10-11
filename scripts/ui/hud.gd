@@ -49,6 +49,18 @@ func _ready() -> void:
 	diplomacy_button.pressed.connect(diplomacy.toggle)
 	diplomacy_button.visible = not Economy.online
 	add_child(diplomacy_button)
+	var leaderboard := preload("res://scripts/ui/leaderboard_panel.gd").new()
+	if Economy.online:
+		var leaderboard_button := Button.new()
+		leaderboard_button.text = "Leaderboard (L)"
+		leaderboard_button.focus_mode = Control.FOCUS_NONE
+		leaderboard_button.add_theme_font_size_override("font_size", 15)
+		leaderboard_button.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
+		leaderboard_button.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+		leaderboard_button.offset_top = 12
+		leaderboard_button.offset_right = -150
+		leaderboard_button.pressed.connect(leaderboard.toggle)
+		add_child(leaderboard_button)
 	var info := preload("res://scripts/ui/castle_info_panel.gd").new()
 	info.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
 	info.grow_horizontal = Control.GROW_DIRECTION_BEGIN
@@ -83,6 +95,10 @@ func _ready() -> void:
 	diplomacy.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	diplomacy.grow_vertical = Control.GROW_DIRECTION_BOTH
 	add_child(diplomacy)
+	leaderboard.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	leaderboard.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	leaderboard.grow_vertical = Control.GROW_DIRECTION_BOTH
+	add_child(leaderboard)
 	var attack := preload("res://scripts/ui/attack_panel.gd").new()
 	attack.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 	attack.grow_horizontal = Control.GROW_DIRECTION_BOTH
@@ -184,7 +200,7 @@ func _process(delta: float) -> void:
 		var shield := ""
 		if Economy.is_protected():
 			shield = "    Beginner protection: %s left (ends if you attack a player)" % _hours(Economy.protected_until - Economy.now())
-		_info.text = stock + "\n" + "Online as %s" % Online.email + shield + "\nClick: pick your castle, another player's or a robber baron camp    C: your castle\nWASD / drag: pan    Q E / right-drag: rotate    wheel: zoom\nM: parchment map    Home: recentre    F1: hide    Esc: menu\nzoom %d%%    %d fps" % [int(_zoom_t * 100.0), Engine.get_frames_per_second()]
+		_info.text = stock + "\n" + "Online as %s" % Online.email + shield + "\nClick: pick your castle, another player's or a robber baron camp    C: your castle    L: leaderboard\nWASD / drag: pan    Q E / right-drag: rotate    wheel: zoom\nM: parchment map    Home: recentre    F1: hide    Esc: menu\nzoom %d%%    %d fps" % [int(_zoom_t * 100.0), Engine.get_frames_per_second()]
 		return
 	_info.text = stock + "\n" + "Click: travel there, or pick a castle or party    F: find your party    C: your castle    K: diplomacy\nWASD / drag: pan    Q E / right-drag: rotate    wheel: zoom\nM: parchment map    Home: recentre    F1: hide    Esc: menu\nYour party: %s\nzoom %d%%    %d fps" % [_party_status, int(_zoom_t * 100.0), Engine.get_frames_per_second()]
 

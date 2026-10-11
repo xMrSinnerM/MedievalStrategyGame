@@ -19,6 +19,8 @@ signal others_changed
 signal raids_changed
 ## Online: a spy came back with news of this player (see `spy_reports`).
 signal spy_returned(player_name: String)
+## Online: the server sent the leaderboard (see `leaderboard`).
+signal leaderboard_changed
 
 ## Games are kept in SLOTS save slots under save_dir (slot_1.json ...).
 const SLOTS := 3
@@ -89,6 +91,9 @@ var spy_reports := {}
 var protected_until := 0.0
 ## Fights between players (data/pvp.json).
 var pvp := {}
+## Online: the mightiest castles as the server last sent them:
+## {"players": [{"name", "level", "might", "barons_beaten"}], "me", "rank", "total"}.
+var leaderboard := {}
 
 var _seen_report := 0          ## newest server battle report already shown
 var _poll_timer := 0.0
@@ -689,6 +694,7 @@ func begin_online(answer: Dictionary) -> void:
 	others = []
 	raids = []
 	spy_reports = {}
+	leaderboard = {}
 	protected_until = 0.0
 	if pvp.is_empty():
 		pvp = get_node("/root/GameData").load_json("res://data/pvp.json")
@@ -883,8 +889,17 @@ func spy(player_name: String) -> String:
 	return ""
 
 
+func ask_leaderboard() -> void:
+	## Asks the server for the leaderboard; it arrives with leaderboard_changed.
+	get_node("/root/Online").order({"action": "leaderboard"})
+
+
 func take_order_result(body: Dictionary, answer: Dictionary) -> void:
-	## Extra answers to orders: what a spy saw.
+	## Extra answers to orders: what a spy saw, the leaderboard.
+	if body.get("action", "") == "leaderboard" and answer.get("result") is Dictionary:
+		leaderboard = answer.result
+		leaderboard_changed.emit()
+		return
 	if body.get("action", "") == "spy" and answer.get("result") is Dictionary:
 		var seen: Dictionary = answer.result
 		spy_reports[String(seen.get("name", body.get("target", "")))] = seen

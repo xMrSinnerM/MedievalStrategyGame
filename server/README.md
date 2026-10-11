@@ -38,8 +38,8 @@ godot --headless --path . --script res://tests/dump_server_fixtures.gd
   checks who is signed in, loads their row, and `game.ts` runs their world up
   to the server's clock and carries out the order. Orders: `join`, `state`,
   `place`, `upgrade`, `cancel`, `move`, `recruit`, `cancel_training`, `attack`,
-  `attack_player`, `spy`, and `world` for the other players' castles (see the
-  top of `index.ts`).
+  `attack_player`, `spy`, `world` for the other players' castles and
+  `leaderboard` (see the top of `index.ts`).
 - `world/world.json`: the robber baron camps and the spots where players'
   castles can stand, written by `scripts/tools/export_server_world.gd`
   because the server can't read the terrain.
@@ -55,6 +55,10 @@ a quarter of each resource, as much as the survivors can carry. New players
 are protected for three days or until their keep reaches level 3, and lose
 the protection early if they attack someone (`data/pvp.json`). The battle is
 fought by whichever side's next request comes after the army arrives.
+
+The leaderboard ranks castles by might (10 per building level and 1 per
+soldier at home, in `data/pvp.json`) and shows the robber baron camps each
+player has beaten. The server works both out each time it saves a castle.
 
 To deploy changes with the Supabase CLI, from the repository root:
 
