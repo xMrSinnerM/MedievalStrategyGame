@@ -47,6 +47,7 @@ func _ready() -> void:
 	diplomacy_button.offset_top = 12
 	diplomacy_button.offset_right = -150
 	diplomacy_button.pressed.connect(diplomacy.toggle)
+	diplomacy_button.visible = not Economy.online
 	add_child(diplomacy_button)
 	var info := preload("res://scripts/ui/castle_info_panel.gd").new()
 	info.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
@@ -92,6 +93,11 @@ func _ready() -> void:
 	_news.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	add_child(_news)
 	EventBus.battle_fought.connect(_on_battle)
+	Online.order_failed.connect(func(message: String) -> void:
+		if not is_inside_tree() or not visible:
+			return
+		_news.text = "The server refused that: " + message if message != "" else "The server didn't answer."
+		_news_left = NEWS_TIME)
 	Economy.diplomacy_changed.connect(_on_diplomacy)
 	_alert = Label.new()
 	_alert.add_theme_color_override("font_color", Color(1.0, 0.5, 0.38))
@@ -162,4 +168,7 @@ func _process(delta: float) -> void:
 		stock += "Garrison %d   " % castle.troop_count()
 		if not Economy.marches.is_empty():
 			stock += "Armies away %d (%d soldiers)   " % [Economy.marches.size(), Economy.troops_away()]
+	if Economy.online:
+		_info.text = stock + "\n" + "Online as %s    Click: pick your castle or a robber baron camp    C: your castle\nWASD / drag: pan    Q E / right-drag: rotate    wheel: zoom\nM: parchment map    Home: recentre    F1: hide    Esc: menu\nzoom %d%%    %d fps" % [Online.email, int(_zoom_t * 100.0), Engine.get_frames_per_second()]
+		return
 	_info.text = stock + "\n" + "Click: travel there, or pick a castle or party    F: find your party    C: your castle    K: diplomacy\nWASD / drag: pan    Q E / right-drag: rotate    wheel: zoom\nM: parchment map    Home: recentre    F1: hide    Esc: menu\nYour party: %s\nzoom %d%%    %d fps" % [_party_status, int(_zoom_t * 100.0), Engine.get_frames_per_second()]

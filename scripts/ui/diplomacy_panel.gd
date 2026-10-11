@@ -88,7 +88,7 @@ func _ready() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if not event is InputEventKey or not event.pressed or event.echo:
 		return
-	if event.physical_keycode == KEY_K and not get_tree().paused:
+	if event.physical_keycode == KEY_K and not get_tree().paused and not Economy.online:
 		toggle()
 		get_viewport().set_input_as_handled()
 	elif event.physical_keycode == KEY_ESCAPE and visible:

@@ -41,6 +41,7 @@ var _toast_time := 0.0
 
 
 func _ready() -> void:
+	Online.order_failed.connect(_on_order_failed)
 	_build_top_bar()
 	_build_build_menu()
 	_build_side_panel()
@@ -87,7 +88,7 @@ func show_castle() -> void:
 	view.message.connect(_show_toast, CONNECT_REFERENCE_COUNTED)
 	_build_menu.visible = view.editable
 	# Only your main castle has a warband; castles you capture just hold a garrison.
-	_warband_button.visible = view.editable and view.castle == Economy.player_castle
+	_warband_button.visible = view.editable and view.castle == Economy.player_castle and not Economy.online
 	_warband.visible = false
 	_queue_signature = "?"
 	_on_mode_changed(view.mode)
@@ -415,6 +416,11 @@ func _on_mode_changed(mode: int) -> void:
 		_:
 			_hint.text = "" if view.editable else "You're visiting this castle; only its lord can build here."
 	_build_menu.modulate.a = 0.5 if mode != 0 else 1.0
+
+
+func _on_order_failed(message: String) -> void:
+	if is_inside_tree() and visible:
+		_show_toast("The server refused that: " + message if message != "" else "The server didn't answer.")
 
 
 func _show_toast(text: String) -> void:

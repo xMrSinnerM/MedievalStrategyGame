@@ -53,3 +53,16 @@ supabase link --project-ref acmjrnkgjiggyazarcwx
 supabase db push
 supabase functions deploy game
 ```
+
+## Trying the game against a local server
+
+`dev/local_server.ts` is a stand-in for Supabase on your computer: accounts
+and players are kept in memory, and orders go through the real `game.ts`.
+
+```
+node server/dev/local_server.ts
+godot --path . -- --online-url=http://127.0.0.1:54321
+```
+
+Set `START_TROOPS='{"spearman":60}'` to give new castles soldiers, so you can
+attack a camp straight away.

@@ -1,0 +1,5 @@
+{
+	"_comment": "The multiplayer server. The key is Supabase's publishable key, which is meant to be shipped in the game.",
+	"url": "https://acmjrnkgjiggyazarcwx.supabase.co",
+	"key": "sb_publishable_nZcqxgErgm9psWn_y2R_4w_wvZnn2XW"
+}

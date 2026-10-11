@@ -332,7 +332,14 @@ see `server/README.md`.
 The server is live on Supabase: players sign up with email and password, and
 every order (building, training, attacking a robber baron) goes through the
 `game` function, which runs the player's castle up to the server's clock
-first. The game itself connects to it in the next step.
+first.
+
+To play online, pick **Play online** on the main menu, then create an
+account or sign in (email and password) and name your castle. Online you
+have your castle and the robber baron camps; your castle keeps building and
+training while the game is closed, and nothing is saved on your computer
+except that you're signed in. The warband, lords and diplomacy are single
+player only for now. Single player works offline exactly as before.
 
 ## Project layout
 

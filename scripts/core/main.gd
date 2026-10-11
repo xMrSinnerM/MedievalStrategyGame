@@ -20,6 +20,7 @@ func _ready() -> void:
 	EventBus.world_map_requested.connect(show_world_map)
 	main_menu = preload("res://scripts/ui/main_menu.gd").new()
 	main_menu.game_requested.connect(start_game)
+	main_menu.online_requested.connect(start_online)
 	add_child(main_menu)
 	pause_menu = preload("res://scripts/ui/pause_menu.gd").new()
 	pause_menu.main_menu_requested.connect(show_main_menu)
@@ -43,9 +44,22 @@ func start_game(slot: int, new_game: bool) -> void:
 	main_menu.visible = false
 
 
+func start_online(answer: Dictionary) -> void:
+	## Builds the world map for the online game the server sent.
+	Economy.begin_online(answer)
+	GameData.ensure_loaded()
+	GameData.reset_settlements()
+	GameData.settlements_by_id[Economy.MAIN_CASTLE].name = Economy.player_castle.castle_name
+	world_map = WORLD_SCENE.instantiate()
+	add_child(world_map)
+	main_menu.visible = false
+
+
 func show_main_menu() -> void:
 	## Saves and leaves the game for the title screen.
 	Economy.save_game()
+	if Economy.online:
+		Economy.end_online()
 	_free_screens()
 	main_menu.refresh()
 	main_menu.visible = true

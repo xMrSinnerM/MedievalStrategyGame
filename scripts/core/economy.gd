@@ -60,6 +60,18 @@ var save_dir := "user://saves"
 ## The slot being played (1 .. SLOTS).
 var slot := 1
 
+## Playing online: the server owns your castle, camps and marches, and this
+## only shows them, guessing ahead between the server's answers. There are no
+## NPC castles, lords or diplomacy online yet, and nothing is saved here.
+var online := false
+## Seconds to add to this computer's clock to get the server's.
+static var clock_offset := 0.0
+## How often the online game asks the server for news, in seconds.
+const ONLINE_POLL := 20.0
+
+var _seen_report := 0          ## newest server battle report already shown
+var _poll_timer := 0.0
+var _asked_for := 0.0          ## march time we last asked the server about
 var _tick_timer := 0.0
 var _save_timer := 0.0
 var _diplomacy_timer := 0.0
@@ -172,6 +184,14 @@ func sync_castles(settlements: Array, parties: Array = []) -> void:
 	## party's troops as spearmen.
 	## It also writes each castle's current holder back into the settlement
 	## ("faction", and "player" for yours), so the map shows captured castles.
+	if online:
+		# Online there are no NPC castles or lords yet: only where yours stands.
+		for s in settlements:
+			if s.id == MAIN_CASTLE:
+				castle_positions[s.id] = castle_positions.get(s.id, Vector2(s.position[0], s.position[1]))
+			if s.get("player", false):
+				player_faction = s.get("faction", player_faction)
+		return
 	var added := false
 	for p in parties:
 		if p.get("player", false):
@@ -354,6 +374,8 @@ func send_attack(camp_id: String, army: Dictionary) -> String:
 	marches.append({"id": _next_march, "camp": camp_id, "army": sent, "depart": t,
 			"arrive": t + travel, "back": t + 2.0 * travel, "state": "out", "survivors": {}, "loot": {}})
 	_next_march += 1
+	if online:
+		get_node("/root/Online").order({"action": "attack", "camp": camp_id, "army": sent})
 	save_game()
 	changed.emit()
 	marches_changed.emit()
@@ -510,10 +532,12 @@ func get_castle(castle_id: String) -> CastleState:
 
 
 static func now() -> float:
-	return Time.get_unix_time_from_system()
+	return Time.get_unix_time_from_system() + clock_offset
 
 
 func new_game() -> void:
+	online = false
+	clock_offset = 0.0
 	castles.clear()
 	homes.clear()
 	exiled.clear()
@@ -527,6 +551,8 @@ func new_game() -> void:
 
 
 func load_game() -> bool:
+	online = false
+	clock_offset = 0.0
 	_move_old_save()
 	if not FileAccess.file_exists(save_path()):
 		return false
@@ -563,6 +589,8 @@ func load_game() -> bool:
 
 
 func save_game() -> void:
+	if online:
+		return   # the server keeps the online game
 	var list: Array = []
 	for c in castles:
 		list.append(c.to_dict())
@@ -581,6 +609,9 @@ func save_game() -> void:
 
 func _process(delta: float) -> void:
 	if not _loaded:
+		return
+	if online:
+		_process_online(delta)
 		return
 	_tick_timer += delta
 	if _tick_timer >= TICK:
@@ -607,3 +638,117 @@ func _process(delta: float) -> void:
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_CLOSE_REQUEST and _loaded:
 		save_game()
+
+
+# --- Online ---------------------------------------------------------------------
+
+func begin_online(answer: Dictionary) -> void:
+	## Starts the online game from the server's answer to "state" or "join".
+	rules = BuildingRules.load_default()
+	baron_rules = BaronRules.load_default()
+	online = true
+	_loaded = true
+	slot = 0
+	castles.clear()
+	homes.clear()
+	exiled.clear()
+	castle_positions.clear()
+	diplomacy = Diplomacy.from_data_files(now())
+	player_castle = CastleState.create_new(rules, MAIN_CASTLE, "Your Castle", "player", now())
+	castles.append(player_castle)
+	barons.clear()
+	marches = []
+	warband_home = false
+	_seen_report = 0
+	for r in answer.get("reports", []):
+		_seen_report = maxi(_seen_report, int(r.get("id", 0)))
+	_poll_timer = 0.0
+	_asked_for = 0.0
+	apply_server(answer)
+
+
+func end_online() -> void:
+	online = false
+	_loaded = false
+	clock_offset = 0.0
+
+
+func apply_server(answer: Dictionary) -> void:
+	## Replaces your castle, camps and marches with the server's, and shows
+	## the battle reports that are new.
+	if not online:
+		return
+	if answer.has("now"):
+		clock_offset = float(answer.now) - Time.get_unix_time_from_system()
+	var p = answer.get("player")
+	if not p is Dictionary:
+		return
+	player_castle.copy_from(CastleState.from_dict(rules, p.get("castle", {})))
+	castle_positions[MAIN_CASTLE] = Vector2(float(p.get("home_x", 0.0)), float(p.get("home_y", 0.0)))
+	for c: Dictionary in p.get("camps", []):
+		var fresh := BaronCamp.from_dict(c)
+		var camp := get_baron(fresh.id)
+		if camp == null:
+			barons.append(fresh)
+		else:
+			camp.level = fresh.level
+			camp.defeats = fresh.defeats
+			camp.rebuilt_at = fresh.rebuilt_at
+	marches = p.get("marches", [])
+	_next_march = int(p.get("next_march", _next_march))
+	var fresh_reports: Array = []
+	for r in answer.get("reports", []):
+		if int(r.get("id", 0)) > _seen_report:
+			fresh_reports.push_front(r)
+	for r in fresh_reports:
+		_seen_report = maxi(_seen_report, int(r.id))
+		attack_resolved.emit(_server_report(r.get("report", {})))
+	changed.emit()
+	marches_changed.emit()
+
+
+func _server_report(r: Dictionary) -> Dictionary:
+	## A server battle report in the shape the battle report window expects.
+	if r.get("empty", false):
+		return {"player": "a", "baron": true, "empty": true, "defender": r.get("name", ""),
+				"winner": "a", "a": {}, "b": {}, "loot": 0, "place": ""}
+	var back := float(r.get("at", now()))
+	for m: Dictionary in marches:
+		if int(m.id) == int(r.get("march", -1)):
+			back = float(m.back)
+	return {
+		"player": "a", "baron": true, "attacker": "Your army", "defender": r.get("name", ""),
+		"attacker_faction": player_faction, "defender_faction": "barons", "place": r.get("name", ""),
+		"winner": r.get("winner", "b"), "a": r.get("a", {}), "b": r.get("b", {}), "loot": 0,
+		"spoils": r.get("spoils", {}), "level": int(r.get("level", 1)), "leveled": r.get("leveled", false),
+		"new_level": int(r.get("new_level", 1)), "defeats": int(r.get("defeats", 0)),
+		"needed": int(r.get("needed", 1)), "home_in": maxf(0.0, back - now()),
+	}
+
+
+func _process_online(delta: float) -> void:
+	# Run your castle ahead with the same rules so timers and stock move
+	# smoothly; the server's next answer replaces it.
+	_tick_timer += delta
+	if _tick_timer >= TICK:
+		_tick_timer = 0.0
+		player_castle.advance_to(now())
+		changed.emit()
+	# Ask the server for news now and then, and as soon as an army is due
+	# to fight or come home.
+	_poll_timer += delta
+	var due := _next_march_event()
+	if _poll_timer >= ONLINE_POLL or (due > 0.0 and now() >= due + 0.5 and due > _asked_for):
+		_poll_timer = 0.0
+		if due > 0.0 and now() >= due:
+			_asked_for = due
+		get_node("/root/Online").refresh()
+
+
+func _next_march_event() -> float:
+	var due := 0.0
+	for m: Dictionary in marches:
+		var t := float(m.arrive) if m.state == "out" else float(m.back)
+		if due == 0.0 or t < due:
+			due = t
+	return due
