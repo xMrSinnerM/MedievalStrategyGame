@@ -102,6 +102,18 @@ Settings (fullscreen, vertical sync, shadows, ambient occlusion, 3D
 resolution and interface size) apply at once and are kept in
 `user://settings.cfg` by the `Settings` autoload.
 
+### Look
+
+Menus and panels share one look: dark oak boards with bronze rims, gold
+titles in Cinzel and text in Alegreya Sans (both SIL Open Font License, in
+`assets/fonts/` with their licences). `GameTheme` builds it in code and lays
+it over Godot's default theme at start, so new buttons, sliders, progress
+bars and tooltips pick it up on their own. Along the top of the castle screen
+and the world map a resource bar shows each resource's icon, how much is
+stored out of the storehouse limit, a bar filling as it nears the limit and
+the gain an hour, then builders, defence and soldiers; hover a counter for
+details. The icons are small SVG drawings in `Icons`, made at any size.
+
 ## Castle economy
 
 Your castle produces **wood, stone, food and gold** in real time, including
@@ -350,6 +362,7 @@ player only for now. Single player works offline exactly as before.
 ```
 data/        JSON: terrain config, factions, settlements, roads, parties, buildings, units, player
 world/       heightmap, biome mask, rivers
+assets/      fonts (SIL OFL)
 scenes/      main.tscn -> world_map/world_map.tscn and castle/castle_view.tscn
 scripts/
   core/      main (switches map and castle), GameData, EventBus and Economy autoloads, map style
@@ -358,7 +371,7 @@ scripts/
   terrain/   generator, terrain data and queries, terrain/water/river/tree layers
   world/     world map root, settlements, banners, roads, parchment overlay
   camera/    campaign camera
-  ui/        world map HUD and panels (castle, party, battle report), castle HUD
+  ui/        world map HUD and panels (castle, party, battle report), castle HUD, theme, icons, resource bar
   tools/     command-line tools (world generator, settlements, roads)
 shaders/     terrain, water, river, tree, prop, flag, route, parchment, castle ground (+ shared fog include)
 tests/       headless tests (economy), server fixture writer
@@ -446,4 +459,4 @@ Placeholder primitives stand in for art. These CC0 packs would fit:
 - Castles and walls: Kenney Castle Kit
 - Village and town buildings: Quaternius Medieval Village, KayKit medieval packs
 - Ground and parchment textures: ambientCG, Poly Haven
-- Fonts (SIL OFL): IM Fell English, Cinzel
+- Fonts (SIL OFL): IM Fell English; Cinzel and Alegreya Sans are already in `assets/fonts/`

@@ -1,11 +1,14 @@
 extends CanvasLayer
-## Minimal HUD: controls, what your party is doing, zoom level and frame rate,
-## plus the castle and party panels, battle reports and news of battles
-## between lords. F1 hides it.
+## The world map's HUD: a resource bar along the top with the main buttons,
+## controls, what your party is doing, zoom level and frame rate, plus the
+## castle and party panels, battle reports and news of battles between lords.
+## F1 hides it.
 
 const NEWS_TIME := 7.0
+const TOP := 66.0                ## panels start below the resource bar
 
 var _info: Label
+var _resources: ResourceBar
 var _zoom_t := 0.0
 var _party_status := ""
 var _news: Label
@@ -15,75 +18,57 @@ var _sieges := {}                ## castle id -> {"besieger", "until"} for siege
 
 
 func _ready() -> void:
+	var bar := PanelContainer.new()
+	bar.add_theme_stylebox_override("panel", GameTheme.bar_box())
+	bar.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
+	add_child(bar)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	bar.add_child(row)
+	_resources = ResourceBar.new()
+	_resources.show_builders = false
+	row.add_child(_resources)
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(spacer)
+	var diplomacy := preload("res://scripts/ui/diplomacy_panel.gd").new()
+	var leaderboard := preload("res://scripts/ui/leaderboard_panel.gd").new()
+	if Economy.online:
+		row.add_child(_bar_button("Leaderboard (L)", leaderboard.toggle))
+	else:
+		row.add_child(_bar_button("Diplomacy (K)", diplomacy.toggle))
+	row.add_child(_bar_button("Your castle (C)", func() -> void:
+		EventBus.castle_requested.emit(Economy.player_castle.id)))
 	var panel := PanelContainer.new()
-	panel.position = Vector2(12, 12)
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.12, 0.09, 0.06, 0.65)
-	style.set_corner_radius_all(6)
-	style.set_content_margin_all(10)
-	panel.add_theme_stylebox_override("panel", style)
+	panel.position = Vector2(12, TOP + 2)
+	panel.add_theme_stylebox_override("panel", MenuStyle.panel(0.6, 10))
 	_info = Label.new()
-	_info.add_theme_color_override("font_color", Color(0.95, 0.9, 0.8))
 	_info.add_theme_font_size_override("font_size", 14)
 	panel.add_child(_info)
 	add_child(panel)
-	var castle_button := Button.new()
-	castle_button.text = "Your castle (C)"
-	castle_button.focus_mode = Control.FOCUS_NONE
-	castle_button.add_theme_font_size_override("font_size", 15)
-	castle_button.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
-	castle_button.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	castle_button.offset_top = 12
-	castle_button.offset_right = -12
-	castle_button.pressed.connect(func() -> void: EventBus.castle_requested.emit(Economy.player_castle.id))
-	add_child(castle_button)
-	var diplomacy := preload("res://scripts/ui/diplomacy_panel.gd").new()
-	var diplomacy_button := Button.new()
-	diplomacy_button.text = "Diplomacy (K)"
-	diplomacy_button.focus_mode = Control.FOCUS_NONE
-	diplomacy_button.add_theme_font_size_override("font_size", 15)
-	diplomacy_button.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
-	diplomacy_button.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	diplomacy_button.offset_top = 12
-	diplomacy_button.offset_right = -150
-	diplomacy_button.pressed.connect(diplomacy.toggle)
-	diplomacy_button.visible = not Economy.online
-	add_child(diplomacy_button)
-	var leaderboard := preload("res://scripts/ui/leaderboard_panel.gd").new()
-	if Economy.online:
-		var leaderboard_button := Button.new()
-		leaderboard_button.text = "Leaderboard (L)"
-		leaderboard_button.focus_mode = Control.FOCUS_NONE
-		leaderboard_button.add_theme_font_size_override("font_size", 15)
-		leaderboard_button.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
-		leaderboard_button.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-		leaderboard_button.offset_top = 12
-		leaderboard_button.offset_right = -150
-		leaderboard_button.pressed.connect(leaderboard.toggle)
-		add_child(leaderboard_button)
 	var info := preload("res://scripts/ui/castle_info_panel.gd").new()
 	info.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
 	info.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	info.offset_top = 56
+	info.offset_top = TOP
 	info.offset_right = -12
 	add_child(info)
 	var baron_panel := preload("res://scripts/ui/baron_panel.gd").new()
 	baron_panel.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
 	baron_panel.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	baron_panel.offset_top = 56
+	baron_panel.offset_top = TOP
 	baron_panel.offset_right = -12
 	add_child(baron_panel)
 	if Economy.online:
 		var player_panel := preload("res://scripts/ui/player_panel.gd").new()
 		player_panel.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
 		player_panel.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-		player_panel.offset_top = 56
+		player_panel.offset_top = TOP
 		player_panel.offset_right = -12
 		add_child(player_panel)
 	var party_panel := preload("res://scripts/ui/party_panel.gd").new()
 	party_panel.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
 	party_panel.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	party_panel.offset_top = 56
+	party_panel.offset_top = TOP
 	party_panel.offset_right = -12
 	add_child(party_panel)
 	var report := preload("res://scripts/ui/battle_report.gd").new()
@@ -186,23 +171,24 @@ func _process(delta: float) -> void:
 	_alert.text = "\n".join(alerts)
 	if not visible:
 		return
-	var castle: CastleState = Economy.player_castle
-	var stock := ""
-	if castle:
-		var cap := castle.storage_capacity()
-		var rates := castle.net_per_hour()
-		for r in Economy.rules.resources:
-			stock += "%s %d/%d (%+d/h)   " % [r.capitalize(), int(castle.resources[r]), int(cap), int(rates[r])]
-		stock += "Garrison %d   " % castle.troop_count()
-		if not Economy.marches.is_empty():
-			stock += "Armies away %d (%d soldiers)   " % [Economy.marches.size(), Economy.troops_away()]
+	_resources.show_castle(Economy.player_castle, Economy.troops_away() if not Economy.marches.is_empty() else 0)
 	if Economy.online:
 		var shield := ""
 		if Economy.is_protected():
 			shield = "    Beginner protection: %s left (ends if you attack a player)" % _hours(Economy.protected_until - Economy.now())
-		_info.text = stock + "\n" + "Online as %s" % Online.email + shield + "\nClick: pick your castle, another player's or a robber baron camp    C: your castle    L: leaderboard\nWASD / drag: pan    Q E / right-drag: rotate    wheel: zoom\nM: parchment map    Home: recentre    F1: hide    Esc: menu\nzoom %d%%    %d fps" % [int(_zoom_t * 100.0), Engine.get_frames_per_second()]
+		_info.text = "Online as %s" % Online.email + shield + "\nClick: pick your castle, another player's or a robber baron camp    C: your castle    L: leaderboard\nWASD / drag: pan    Q E / right-drag: rotate    wheel: zoom\nM: parchment map    Home: recentre    F1: hide    Esc: menu\nzoom %d%%    %d fps" % [int(_zoom_t * 100.0), Engine.get_frames_per_second()]
 		return
-	_info.text = stock + "\n" + "Click: travel there, or pick a castle or party    F: find your party    C: your castle    K: diplomacy\nWASD / drag: pan    Q E / right-drag: rotate    wheel: zoom\nM: parchment map    Home: recentre    F1: hide    Esc: menu\nYour party: %s\nzoom %d%%    %d fps" % [_party_status, int(_zoom_t * 100.0), Engine.get_frames_per_second()]
+	_info.text = "Click: travel there, or pick a castle or party    F: find your party    C: your castle    K: diplomacy\nWASD / drag: pan    Q E / right-drag: rotate    wheel: zoom\nM: parchment map    Home: recentre    F1: hide    Esc: menu\nYour party: %s\nzoom %d%%    %d fps" % [_party_status, int(_zoom_t * 100.0), Engine.get_frames_per_second()]
+
+
+func _bar_button(text: String, action: Callable) -> Button:
+	var b := Button.new()
+	b.text = text
+	b.focus_mode = Control.FOCUS_NONE
+	b.add_theme_font_size_override("font_size", 15)
+	b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	b.pressed.connect(action)
+	return b
 
 
 static func _clock(seconds: float) -> String:

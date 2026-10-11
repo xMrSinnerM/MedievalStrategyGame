@@ -15,11 +15,7 @@ var _rows := {}          ## unit -> {name, garrison, field: Label, buttons: Arra
 
 
 func _ready() -> void:
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.12, 0.09, 0.06, 0.92)
-	style.set_corner_radius_all(8)
-	style.set_content_margin_all(14)
-	add_theme_stylebox_override("panel", style)
+	add_theme_stylebox_override("panel", MenuStyle.panel(0.92, 14))
 	visible = false
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 10)

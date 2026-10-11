@@ -20,11 +20,7 @@ var _timer := 0.0
 
 
 func _ready() -> void:
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.12, 0.09, 0.06, 0.85)
-	style.set_corner_radius_all(8)
-	style.set_content_margin_all(12)
-	add_theme_stylebox_override("panel", style)
+	add_theme_stylebox_override("panel", MenuStyle.panel(0.85, 12))
 	custom_minimum_size = Vector2(320, 0)
 	visible = false
 	var box := VBoxContainer.new()
