@@ -27,3 +27,29 @@ run through the game's own rules. After changing a rule or a number in
 ```
 godot --headless --path . --script res://tests/dump_server_fixtures.gd
 ```
+
+## The game server on Supabase
+
+- `supabase/migrations/`: the database. `players` holds each player's castle,
+  robber baron camps and marches as JSON, `reports` their battle reports.
+  Players can read their own rows only; nobody but the game server can write.
+- `supabase/functions/game/`: the game server, one Edge Function. `index.ts`
+  checks who is signed in, loads their row, and `game.ts` runs their world up
+  to the server's clock and carries out the order. Orders: `join`, `state`,
+  `place`, `upgrade`, `cancel`, `move`, `recruit`, `cancel_training`, `attack`
+  (see the top of `index.ts`).
+- `world/world.json`: where the castle stands and the robber baron camps,
+  written by `scripts/tools/export_server_world.gd` because the server can't
+  read the terrain.
+
+Players sign up with email and password (Supabase Auth). Until Phase 8 every
+player gets the same spot on the map and the same camps, each with their own
+camp levels.
+
+To deploy changes with the Supabase CLI, from the repository root:
+
+```
+supabase link --project-ref acmjrnkgjiggyazarcwx
+supabase db push
+supabase functions deploy game
+```

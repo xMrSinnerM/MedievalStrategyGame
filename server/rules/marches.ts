@@ -59,6 +59,7 @@ export function checkAttack(world: Army, campId: string, army: Dict, now: number
   let total = 0;
   for (const unit of Object.keys(army)) {
     const n = army[unit];
+    if (!world.castle.rules.hasUnit(unit)) return "Unknown unit.";
     if (!Number.isInteger(n) || n < 0 || n > (world.castle.troops[unit] ?? 0)) return "Your garrison doesn't have that many soldiers.";
     total += n;
   }

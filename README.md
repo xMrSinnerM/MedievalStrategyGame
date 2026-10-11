@@ -329,6 +329,11 @@ nothing online. A test replays random castle orders, battles and robber baron
 attacks from the game and checks the server gets exactly the same results;
 see `server/README.md`.
 
+The server is live on Supabase: players sign up with email and password, and
+every order (building, training, attacking a robber baron) goes through the
+`game` function, which runs the player's castle up to the server's clock
+first. The game itself connects to it in the next step.
+
 ## Project layout
 
 ```
@@ -346,7 +351,8 @@ scripts/
   tools/     command-line tools (world generator, settlements, roads)
 shaders/     terrain, water, river, tree, prop, flag, route, parchment, castle ground (+ shared fog include)
 tests/       headless tests (economy), server fixture writer
-server/      multiplayer server: game rules in TypeScript, tests (see server/README.md)
+server/      multiplayer server: game rules in TypeScript, tests, world export (see server/README.md)
+supabase/    database migrations and the game server (Edge Function)
 ```
 
 How the parts work:
@@ -410,7 +416,7 @@ How the parts work:
 - [x] Robber baron camps on the map and sent attacks
 - [x] Attack screen: choose your soldiers
 - [x] Server rules in TypeScript, checked against the game
-- [ ] Server on Supabase: database, accounts, game server
+- [x] Server on Supabase: database, accounts, game server
 - [ ] Play online from the game
 
 ## Known limitations
