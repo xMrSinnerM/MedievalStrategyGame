@@ -1,30 +1,49 @@
 extends PanelContainer
 ## The attack screen, opened from a robber baron camp's panel or (online) from
-## another player's: choose how many of each soldier to send, and see your
-## chances, the losses to expect, how much loot they can carry and how long
-## the march takes. Against a player the odds use what your spy last saw.
+## another player's: plan the siege wave by wave, with how many of each
+## soldier storm the left, front and right walls (Battle.siege()), and see
+## your chances, the losses to expect, how much loot they can carry and how
+## long the march takes. Your keep decides how many waves you can send
+## (Battle.waves_for_keep()). "Auto" tries a set of plans and picks the one
+## with the best odds. Against a player the odds use what your spy last saw.
 
 const WIN := Color(0.55, 0.9, 0.45)
 const LOSS := Color(0.95, 0.4, 0.3)
 const SAMPLES := 12
+## The ways Auto tries to spread each wave over the walls (percentages).
+const AUTO_SPLITS := [
+	{"left": 30, "front": 40, "right": 30},
+	{"left": 33, "front": 34, "right": 33},
+	{"left": 50, "front": 0, "right": 50},
+	{"left": 50, "front": 50, "right": 0},
+	{"left": 0, "front": 50, "right": 50},
+	{"left": 100, "front": 0, "right": 0},
+	{"left": 0, "front": 100, "right": 0},
+	{"left": 0, "front": 0, "right": 100},
+]
 
 var camp_id := ""              ## a camp's id, or "player:<name>" for another player's castle
 var _player := ""              ## the other player's name when attacking a player
 
 var _title: Label
+var _tabs: HBoxContainer
+var _tab_buttons: Array[Button] = []
 var _rows: GridContainer
-var _spins := {}               ## unit -> SpinBox
+var _spins := {}               ## wall -> unit -> SpinBox, for the wave on show
+var _spare := {}               ## unit -> Label with the soldiers not yet placed
 var _enemy_title: Label
 var _enemy: Label
 var _summary: Label
 var _send: Button
 var _note: Label
 var _quiet := false            ## true while setting spin boxes from code
+var _plan: Array = []          ## one {wall: {unit: soldiers}} per wave the keep allows
+var _wave := 0                 ## the wave on show
 
 
 func _ready() -> void:
 	add_theme_stylebox_override("panel", MenuStyle.panel(0.95))
-	custom_minimum_size = Vector2(720, 0)
+	custom_minimum_size = Vector2(860, 0)
 	visible = false
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 12)
@@ -46,21 +65,27 @@ func _ready() -> void:
 	box.add_child(columns)
 	var mine := VBoxContainer.new()
 	mine.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	mine.add_child(MenuStyle.label("Your army", 18, MenuStyle.GOLD))
+	mine.add_child(MenuStyle.label("Your battle plan", 18, MenuStyle.GOLD))
+	_tabs = HBoxContainer.new()
+	_tabs.add_theme_constant_override("separation", 6)
+	mine.add_child(_tabs)
 	_rows = GridContainer.new()
-	_rows.columns = 3
-	_rows.add_theme_constant_override("h_separation", 12)
+	_rows.columns = 5
+	_rows.add_theme_constant_override("h_separation", 10)
 	_rows.add_theme_constant_override("v_separation", 6)
 	mine.add_child(_rows)
 	var quick := HBoxContainer.new()
 	quick.add_theme_constant_override("separation", 8)
-	quick.add_child(_small_button("All", func() -> void: _fill(1.0)))
-	quick.add_child(_small_button("Half", func() -> void: _fill(0.5)))
-	quick.add_child(_small_button("None", func() -> void: _fill(0.0)))
+	quick.add_child(_small_button("Auto", func() -> void: _auto(1.0), 90))
+	quick.add_child(_small_button("Auto with half", func() -> void: _auto(0.5), 150))
+	quick.add_child(_small_button("Clear wave", _clear_wave, 120))
+	quick.add_child(_small_button("Clear all", func() -> void:
+		_new_plan()
+		_show_wave(_wave), 100))
 	mine.add_child(quick)
 	columns.add_child(mine)
 	var theirs := VBoxContainer.new()
-	theirs.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	theirs.custom_minimum_size = Vector2(250, 0)
 	_enemy_title = MenuStyle.label("The camp", 18, MenuStyle.GOLD)
 	theirs.add_child(_enemy_title)
 	_enemy = MenuStyle.label("", 15, MenuStyle.TEXT)
@@ -111,12 +136,12 @@ func open_for(id: String) -> void:
 	camp_id = id
 	_note.text = ""
 	_note.visible = false
-	_build_rows()
+	_build_tabs()
 	if _player != "":
 		_describe_player()
 	else:
 		_describe_camp(Economy.get_baron(id))
-	_fill(1.0)
+	_auto(1.0)
 	visible = true
 
 
@@ -124,31 +149,237 @@ func close_panel() -> void:
 	visible = false
 
 
-func _build_rows() -> void:
+# --- The plan ------------------------------------------------------------------------
+
+func _new_plan() -> void:
+	_plan = []
+	for k in Economy.max_waves():
+		_plan.append({"left": {}, "front": {}, "right": {}})
+
+
+func _have(unit: String) -> int:
+	return int(Economy.player_castle.troops.get(unit, 0))
+
+
+func _placed(unit: String, skip_wave := -1, skip_wall := "") -> int:
+	## Soldiers of `unit` already in the plan, leaving out one wave's wall.
+	var n := 0
+	for k in _plan.size():
+		for w: String in Battle.WALLS:
+			if k == skip_wave and w == skip_wall:
+				continue
+			n += int(_plan[k][w].get(unit, 0))
+	return n
+
+
+func plan_waves() -> Array:
+	## The plan as Battle.siege() waves: empty walls, units and waves left out.
+	var out: Array = []
+	for wave: Dictionary in _plan:
+		var clean := {}
+		for w: String in Battle.WALLS:
+			var troops := {}
+			for unit: String in wave[w]:
+				if int(wave[w][unit]) > 0:
+					troops[unit] = int(wave[w][unit])
+			if not troops.is_empty():
+				clean[w] = troops
+		if not clean.is_empty():
+			out.append(clean)
+	return out
+
+
+func _build_tabs() -> void:
+	for child in _tabs.get_children():
+		_tabs.remove_child(child)
+		child.queue_free()
+	_tab_buttons.clear()
+	var allowed := Economy.max_waves()
+	for k in Battle.WAVES_BY_KEEP.size():
+		var b := Button.new()
+		b.focus_mode = Control.FOCUS_NONE
+		b.toggle_mode = true
+		b.custom_minimum_size = Vector2(120, 32)
+		b.add_theme_font_size_override("font_size", 15)
+		var wave := k
+		b.pressed.connect(func() -> void: _show_wave(wave))
+		if k >= allowed:
+			b.disabled = true
+			b.text = "Wave %d (keep %d)" % [k + 1, _keep_for_wave(k + 1)]
+			b.custom_minimum_size.x = 160
+			b.tooltip_text = "Upgrade your keep to level %d to send a wave %d." % [_keep_for_wave(k + 1), k + 1]
+		_tabs.add_child(b)
+		_tab_buttons.append(b)
+
+
+static func _keep_for_wave(n: int) -> int:
+	for row: Array in Battle.WAVES_BY_KEEP:
+		if int(row[1]) >= n:
+			return int(row[0])
+	return 99
+
+
+func _show_wave(k: int) -> void:
+	_wave = clampi(k, 0, _plan.size() - 1)
 	for child in _rows.get_children():
 		_rows.remove_child(child)
 		child.queue_free()
 	_spins.clear()
-	var troops: Dictionary = Economy.player_castle.troops
+	_spare.clear()
+	var units: Array = []
 	for unit: String in Economy.rules.units:
-		var have := int(troops.get(unit, 0))
-		if have <= 0:
-			continue
-		_rows.add_child(MenuStyle.label(Economy.rules.unit_plural(unit), 16, MenuStyle.TEXT))
-		var spin := SpinBox.new()
-		spin.min_value = 0
-		spin.max_value = have
-		spin.step = 1
-		spin.custom_minimum_size = Vector2(110, 0)
-		spin.value_changed.connect(func(_v: float) -> void:
-			if not _quiet:
-				_update())
-		_rows.add_child(spin)
-		_rows.add_child(MenuStyle.label("of %d" % have, 15, MenuStyle.MUTED))
-		_spins[unit] = spin
-	if _spins.is_empty():
+		if _have(unit) > 0:
+			units.append(unit)
+	if units.is_empty():
+		_rows.columns = 1
 		_rows.add_child(MenuStyle.label("Your garrison is empty.", 15, MenuStyle.MUTED))
+		_update()
+		return
+	_rows.columns = 5
+	for text in ["", "Left wall", "Front wall", "Right wall", "Not sent"]:
+		_rows.add_child(MenuStyle.label(text, 14, MenuStyle.MUTED))
+	for w: String in Battle.WALLS:
+		_spins[w] = {}
+	for unit: String in units:
+		_rows.add_child(MenuStyle.label(Economy.rules.unit_plural(unit), 16, MenuStyle.TEXT))
+		for w: String in Battle.WALLS:
+			var spin := SpinBox.new()
+			spin.min_value = 0
+			spin.step = 1
+			spin.custom_minimum_size = Vector2(104, 0)
+			var wall := w
+			var u := unit
+			spin.value_changed.connect(func(v: float) -> void:
+				if _quiet:
+					return
+				_plan[_wave][wall][u] = int(v)
+				_refresh_spins()
+				_update())
+			_rows.add_child(spin)
+			_spins[w][unit] = spin
+		var spare := MenuStyle.label("", 15, MenuStyle.MUTED)
+		_rows.add_child(spare)
+		_spare[unit] = spare
+	_refresh_spins()
+	_update()
 
+
+func _refresh_spins() -> void:
+	## Sets every spin box on show to the plan, each allowed what isn't
+	## placed elsewhere, and the tabs to how many soldiers each wave holds.
+	_quiet = true
+	for w: String in _spins:
+		for unit: String in _spins[w]:
+			var spin: SpinBox = _spins[w][unit]
+			spin.max_value = maxi(0, _have(unit) - _placed(unit, _wave, w))
+			spin.value = int(_plan[_wave][w].get(unit, 0))
+	_quiet = false
+	for unit: String in _spare:
+		_spare[unit].text = "%d of %d" % [_have(unit) - _placed(unit), _have(unit)]
+	for k in _tab_buttons.size():
+		var b := _tab_buttons[k]
+		b.button_pressed = k == _wave
+		for state in ["font_color", "font_pressed_color", "font_hover_color", "font_hover_pressed_color"]:
+			b.add_theme_color_override(state, MenuStyle.GOLD if k == _wave else MenuStyle.TEXT)
+		if k < _plan.size():
+			var n := 0
+			for w: String in Battle.WALLS:
+				for unit: String in _plan[k][w]:
+					n += int(_plan[k][w][unit])
+			b.text = "Wave %d: %d" % [k + 1, n]
+
+
+func _clear_wave() -> void:
+	_plan[_wave] = {"left": {}, "front": {}, "right": {}}
+	_refresh_spins()
+	_update()
+
+
+func _auto(share: float) -> void:
+	## Fills the plan with `share` of the garrison: of a set of plans (every
+	## number of waves the keep allows, each spread over the walls by one of
+	## AUTO_SPLITS), the one with the best odds, then the fewest losses.
+	## Without a spy's report on a player, the army goes in one wave
+	## (Battle.auto_waves()).
+	var army := {}
+	for unit: String in Economy.rules.units:
+		var n := floori(_have(unit) * share)
+		if n > 0:
+			army[unit] = n
+	_new_plan()
+	if not army.is_empty():
+		var best: Array = Battle.auto_waves(army)
+		var foe := _defence()
+		if not foe.is_empty():
+			var best_score := -1.0
+			for n in range(1, _plan.size() + 1):
+				for shares: Dictionary in AUTO_SPLITS:
+					var waves := spread(army, n, shares)
+					var score := _score(waves, foe)
+					if score > best_score + 0.0001:
+						best_score = score
+						best = waves
+		for k in best.size():
+			for w: String in best[k]:
+				_plan[k][w] = best[k][w].duplicate()
+	_show_wave(0)
+
+
+static func spread(army: Dictionary, n: int, shares: Dictionary) -> Array:
+	## The army in `n` waves of nearly equal size, each spread over the walls
+	## by `shares` (Battle.split()).
+	var waves: Array = []
+	var left := army.duplicate()
+	for k in n:
+		var wave := {}
+		for unit: String in army:
+			var part := int(left[unit]) if k == n - 1 else int(army[unit]) / n
+			left[unit] = int(left[unit]) - part
+			if part > 0:
+				wave[unit] = part
+		waves.append(Battle.split(wave, shares, ["left", "right", "front"]))
+	return waves
+
+
+func _score(waves: Array, foe: Dictionary) -> float:
+	## Wins out of SAMPLES, less a sliver for each soldier expected to fall.
+	var r := _simulate(waves, foe)
+	var army := Battle.waves_army(waves)
+	var sent := 0
+	for unit: String in army:
+		sent += int(army[unit])
+	return r.chance - 0.001 * r.lost / maxf(1.0, sent)
+
+
+func _simulate(waves: Array, foe: Dictionary) -> Dictionary:
+	var wins := 0
+	var lost := 0
+	for k in SAMPLES:
+		var result := Battle.siege(Economy.rules, waves, foe.troops, foe.layout, 1000 + k, foe.wall)
+		if result.winner == "a":
+			wins += 1
+		lost += Battle.lost_count(result.a)
+	return {"chance": float(wins) / SAMPLES, "lost": float(lost) / SAMPLES}
+
+
+func _defence() -> Dictionary:
+	## What defends the target: {"troops", "layout", "wall"}, or {} if unknown.
+	if _player != "":
+		var seen: Dictionary = Economy.spy_reports.get(_player, {})
+		if seen.is_empty():
+			return {}
+		var layout: Variant = seen.get("layout", Battle.DEFAULT_LAYOUT)
+		return {"troops": seen.get("troops", {}), "wall": float(seen.get("wall", 1.0)),
+				"layout": layout if Battle.check_layout(layout) == "" else Battle.DEFAULT_LAYOUT}
+	var camp := Economy.get_baron(camp_id)
+	if camp == null:
+		return {}
+	var br := Economy.baron_rules
+	return {"troops": camp.garrison(br), "layout": Battle.DEFAULT_LAYOUT,
+			"wall": Battle.wall_from_defense(br.palisade(camp.level))}
+
+
+# --- The other side --------------------------------------------------------------
 
 func _describe_camp(camp: BaronCamp) -> void:
 	var br := Economy.baron_rules
@@ -158,6 +389,7 @@ func _describe_camp(camp: BaronCamp) -> void:
 		lines.append("%d %s" % [garrison[unit], Economy.rules.unit_plural(unit)])
 	var wall := Battle.wall_from_defense(br.palisade(camp.level))
 	lines.append("Palisade: +%d%% defence" % roundi((wall - 1.0) * 100.0))
+	lines.append_array(_posts(garrison, Battle.DEFAULT_LAYOUT))
 	var loot := Economy.baron_loot(camp.level)
 	var parts: PackedStringArray = []
 	for r: String in loot:
@@ -169,7 +401,7 @@ func _describe_camp(camp: BaronCamp) -> void:
 func _describe_player() -> void:
 	var seen: Dictionary = Economy.spy_reports.get(_player, {})
 	if seen.is_empty():
-		_enemy.text = "You don't know what defends this castle.\nSend a spy first to see their soldiers and walls."
+		_enemy.text = "You don't know what defends this castle.\nSend a spy first to see their soldiers, walls and how they man them."
 		return
 	var lines: PackedStringArray = []
 	var troops: Dictionary = seen.get("troops", {})
@@ -178,113 +410,85 @@ func _describe_player() -> void:
 	if troops.is_empty():
 		lines.append("No soldiers at home")
 	lines.append("Walls: +%d%% defence" % roundi((float(seen.get("wall", 1.0)) - 1.0) * 100.0))
+	if not troops.is_empty():
+		lines.append_array(_posts(troops, _defence().layout))
 	lines.append("Seen %s ago" % _clock(Economy.now() - float(seen.get("at", Economy.now()))))
 	_enemy.text = "\n".join(lines)
 
 
-func _army() -> Dictionary:
-	var army := {}
-	for unit: String in _spins:
-		var n := int(_spins[unit].value)
-		if n > 0:
-			army[unit] = n
-	return army
+static func _posts(troops: Dictionary, layout: Dictionary) -> PackedStringArray:
+	## How many defenders stand on each wall and in the courtyard.
+	var posts := Battle.split(troops, layout, ["left", "right", "courtyard", "front"])
+	var parts: PackedStringArray = []
+	for key: String in ["left", "front", "right", "courtyard"]:
+		var n := 0
+		for unit: String in posts[key]:
+			n += int(posts[key][unit])
+		parts.append("%s %d" % [key.capitalize(), n])
+	return PackedStringArray(["On the walls: " + ", ".join(parts.slice(0, 3)), parts[3] + " in reserve"])
 
 
-func _fill(share: float) -> void:
-	_quiet = true
-	for unit: String in _spins:
-		var spin: SpinBox = _spins[unit]
-		spin.value = floorf(spin.max_value * share)
-	_quiet = false
-	_update()
-
+# --- Summary ---------------------------------------------------------------------
 
 func _update() -> void:
-	if _player != "":
-		_update_player()
-		return
-	var camp := Economy.get_baron(camp_id)
-	if camp == null:
-		return
-	var br := Economy.baron_rules
-	var army := _army()
+	var waves := plan_waves()
+	var army := Battle.waves_army(waves) if not waves.is_empty() else {}
 	var total := 0
 	for unit: String in army:
 		total += int(army[unit])
-	var garrison := camp.garrison(br)
-	var wall := Battle.wall_from_defense(br.palisade(camp.level))
-	var lines: PackedStringArray = []
-	if total == 0:
-		lines.append("Choose some soldiers to send.")
-		_summary.add_theme_color_override("font_color", MenuStyle.TEXT)
-	else:
-		# A handful of simulated battles give the odds and the losses to expect.
-		var wins := 0
-		var lost := 0
-		for k in SAMPLES:
-			var result := Battle.fight(Economy.rules, army, garrison, 1000 + k, wall)
-			if result.winner == "a":
-				wins += 1
-			lost += Battle.lost_count(result.a)
-		var chance := float(wins) / SAMPLES
-		lines.append("Sending %d soldiers: %s (%d%%), losing about %d" % [total, Battle.odds_text(chance),
-				roundi(chance * 100.0), roundi(float(lost) / SAMPLES)])
-		var loot_total := 0
-		var loot := Economy.baron_loot(camp.level)
-		for r: String in loot:
-			loot_total += int(loot[r])
-		var carry := br.carry(army)
-		lines.append("They can carry %d of the camp's %d loot" % [mini(int(carry), loot_total), loot_total]
-				+ ("" if carry >= loot_total else " (send more to carry it all)"))
-		_summary.add_theme_color_override("font_color", LOSS.lerp(WIN, chance))
-	var march := Economy.march_time_to(camp)
-	lines.append("March: %s there, %s back" % [_clock(march), _clock(march)])
-	if not camp.is_ready(Economy.now()):
-		lines.append("The camp is rebuilding for %s." % _clock(camp.rebuilt_at - Economy.now()))
-	_summary.text = "\n".join(lines)
-	_send.disabled = Economy.check_attack(camp_id, army) != ""
-
-
-func _update_player() -> void:
+	var foe := _defence()
 	var br := Economy.baron_rules
-	var army := _army()
-	var total := 0
-	for unit: String in army:
-		total += int(army[unit])
-	var seen: Dictionary = Economy.spy_reports.get(_player, {})
 	var lines: PackedStringArray = []
 	_summary.add_theme_color_override("font_color", MenuStyle.TEXT)
 	if total == 0:
-		lines.append("Choose some soldiers to send.")
-	elif seen.is_empty():
-		lines.append("Sending %d soldiers. Without a spy's report the odds are unknown." % total)
+		lines.append("Put some soldiers on the walls to attack.")
+	elif foe.is_empty():
+		lines.append("Sending %d soldiers in %s. Without a spy's report the odds are unknown." % [total, _waves_text(waves.size())])
 	else:
-		var wins := 0
-		var lost := 0
-		for k in SAMPLES:
-			var result := Battle.fight(Economy.rules, army, seen.get("troops", {}), 1000 + k, float(seen.get("wall", 1.0)))
-			if result.winner == "a":
-				wins += 1
-			lost += Battle.lost_count(result.a)
-		var chance := float(wins) / SAMPLES
-		lines.append("Sending %d soldiers: %s (%d%%), losing about %d" % [total, Battle.odds_text(chance),
-				roundi(chance * 100.0), roundi(float(lost) / SAMPLES)])
-		_summary.add_theme_color_override("font_color", LOSS.lerp(WIN, chance))
-	if total > 0:
-		lines.append("A win carries off up to %d%% of each resource, as much as they can carry (%d)"
-				% [roundi(float(Economy.pvp.get("loot_share", 0.25)) * 100.0), int(br.carry(army))])
-	var march := Economy.march_time_to_player(_player)
-	lines.append("March: %s there, %s back" % [_clock(march), _clock(march)])
-	var why := Economy.check_raid(_player, army)
-	if why != "" and total > 0:
+		var r := _simulate(waves, foe)
+		lines.append("Sending %d soldiers in %s: %s (%d%%), losing about %d" % [total, _waves_text(waves.size()),
+				Battle.odds_text(r.chance), roundi(r.chance * 100.0), roundi(r.lost)])
+		_summary.add_theme_color_override("font_color", LOSS.lerp(WIN, r.chance))
+	var why := ""
+	if _player != "":
+		if total > 0:
+			lines.append("A win carries off up to %d%% of each resource, as much as they can carry (%d)"
+					% [roundi(float(Economy.pvp.get("loot_share", 0.25)) * 100.0), int(br.carry(army))])
+		var march := Economy.march_time_to_player(_player)
+		lines.append("March: %s there, %s back" % [_clock(march), _clock(march)])
+		why = Economy.check_raid(_player, army, waves)
+	else:
+		var camp := Economy.get_baron(camp_id)
+		if camp == null:
+			return
+		if total > 0:
+			var loot_total := 0
+			var loot := Economy.baron_loot(camp.level)
+			for r: String in loot:
+				loot_total += int(loot[r])
+			var carry := br.carry(army)
+			lines.append("They can carry %d of the camp's %d loot" % [mini(int(carry), loot_total), loot_total]
+					+ ("" if carry >= loot_total else " (send more to carry it all)"))
+		var march := Economy.march_time_to(camp)
+		lines.append("March: %s there, %s back" % [_clock(march), _clock(march)])
+		if not camp.is_ready(Economy.now()):
+			lines.append("The camp is rebuilding for %s." % _clock(camp.rebuilt_at - Economy.now()))
+		why = Economy.check_attack(camp_id, army, waves)
+	if why != "" and total > 0 and not lines[lines.size() - 1].begins_with("The camp is rebuilding"):
 		lines.append(why)
 	_summary.text = "\n".join(lines)
 	_send.disabled = why != ""
 
 
+static func _waves_text(n: int) -> String:
+	return "one wave" if n == 1 else "%d waves" % n
+
+
 func _send_army() -> void:
-	var why := Economy.send_raid(_player, _army()) if _player != "" else Economy.send_attack(camp_id, _army())
+	var waves := plan_waves()
+	var why := "Put some soldiers on the walls to attack."
+	if not waves.is_empty():
+		why = Economy.send_raid(_player, {}, waves) if _player != "" else Economy.send_attack(camp_id, {}, waves)
 	if why != "":
 		_note.text = why
 		_note.visible = true
@@ -296,11 +500,11 @@ func _send_army() -> void:
 		EventBus.baron_selected.emit("")
 
 
-func _small_button(text: String, action: Callable) -> Button:
+func _small_button(text: String, action: Callable, width := 80) -> Button:
 	var b := Button.new()
 	b.text = text
 	b.focus_mode = Control.FOCUS_NONE
-	b.custom_minimum_size = Vector2(80, 32)
+	b.custom_minimum_size = Vector2(width, 32)
 	b.add_theme_font_size_override("font_size", 15)
 	b.pressed.connect(action)
 	return b

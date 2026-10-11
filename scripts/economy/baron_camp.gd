@@ -41,13 +41,15 @@ func garrison(rules: BaronRules) -> Dictionary:
 	return rules.garrison(level)
 
 
-func attack(rules: BaronRules, units: BuildingRules, army: Dictionary, seed_value: int, now: float) -> Dictionary:
-	## Fights the camp's garrison behind its palisade. Returns Battle.fight()'s
-	## result plus "level" (before), "leveled" (the camp rose a level),
+func attack(rules: BaronRules, units: BuildingRules, army: Dictionary, seed_value: int, now: float, waves: Array = []) -> Dictionary:
+	## Storms the camp's palisade in `waves`, or with the army spread over its
+	## walls in one wave (Battle.siege(), the garrison in
+	## Battle.DEFAULT_LAYOUT). Returns the
+	## siege result plus "level" (before), "leveled" (the camp rose a level),
 	## "loot" (resource -> amount carried off, empty if the attack failed)
 	## and "survivors" (the attackers coming home).
-	var result := Battle.fight(units, army, garrison(rules), seed_value,
-			Battle.wall_from_defense(rules.palisade(level)))
+	var result := Battle.siege(units, waves if not waves.is_empty() else Battle.auto_waves(army), garrison(rules), Battle.DEFAULT_LAYOUT,
+			seed_value, Battle.wall_from_defense(rules.palisade(level)))
 	result["level"] = level
 	result["leveled"] = false
 	result["survivors"] = Battle.survivors(result.a)

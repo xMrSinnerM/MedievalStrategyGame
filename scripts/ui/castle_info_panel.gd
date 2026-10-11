@@ -123,7 +123,7 @@ func _refresh() -> void:
 		var siege: PackedStringArray = ["Walls: defenders +%d%% defence" % roundi((wall - 1.0) * 100.0),
 				"A siege takes %d s before the assault" % int(Battle.siege_time(castle))]
 		if mine.field_count() > 0:
-			var chance := Battle.odds(castle.rules, mine.field, castle.troops, 1, wall)
+			var chance := Battle.siege_odds(castle.rules, Battle.auto_waves(mine.field), castle.troops, castle.layout, 1, wall)
 			siege.append("Your %d soldiers: %s (%d%%)" % [mine.field_count(), Battle.odds_text(chance), roundi(chance * 100.0)])
 			_siege_info.add_theme_color_override("font_color", Color(0.95, 0.4, 0.3).lerp(Color(0.55, 0.9, 0.45), chance))
 		else:

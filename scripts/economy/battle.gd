@@ -11,6 +11,16 @@ extends RefCounted
 ## walls against the garrison, whose defence the wall multiplies
 ## (wall_bonus()). A castle that falls is captured, except the player's main
 ## castle, which can only be sacked.
+##
+## Siege waves (every attack on a castle or a camp, see siege()): the
+## defenders stand on the left, front and right walls, with a reserve in the
+## courtyard (a layout of percentages). The attackers come in waves, each
+## with soldiers for every wall, and fight each wall's defenders behind the
+## wall. Attackers who lose on a wall go home. Once a wall is broken, the
+## next waves at it walk straight through, and the wall's last defenders fall
+## back into the courtyard. Break at least one wall, then win the courtyard
+## fight to take the castle: there the defenders make their last stand around
+## the keep, with the wall's bonus times COURTYARD_BONUS.
 
 ## Share of an army's attack that lands each round.
 const DAMAGE := 0.3
@@ -30,6 +40,19 @@ const WALL_MAX := 1.5
 const WALL_HALF := 200.0
 ## Share of each resource sacking an uncapturable castle carries off.
 const SACK_SHARE := 0.3
+## The three walls an attack can come at.
+const WALLS: Array[String] = ["left", "front", "right"]
+## Where the defenders stand unless their lord says otherwise (percent).
+const DEFAULT_LAYOUT := {"left": 25, "front": 35, "right": 25, "courtyard": 15}
+## How an army is spread over the walls when nobody chooses (percent).
+const ATTACK_SPLIT := {"left": 30, "front": 40, "right": 30}
+## [keep level, waves an attack from that castle can have], lowest first.
+const WAVES_BY_KEEP := [[1, 1], [2, 2], [4, 3]]
+## Seed offsets for each wall's fights and the courtyard's.
+const WALL_SEED := 101
+const COURTYARD_SEED := 997
+## Extra defence for the last stand in the courtyard, on top of the wall's.
+const COURTYARD_BONUS := 1.5
 
 
 static func fight(rules: BuildingRules, a: Dictionary, b: Dictionary, seed_value: int, wall := 1.0) -> Dictionary:
@@ -111,7 +134,7 @@ static func assault(attacker: CastleState, castle: CastleState, seed_value: int,
 	## Economy.capture) or "sacked" (SACK_SHARE of its stock is carried off
 	## here, up to the attacker's storage); otherwise "held".
 	## "sacked" adds "spoils" (resource -> amount) to the result.
-	var result := fight(attacker.rules, attacker.field, castle.troops, seed_value, wall_bonus(castle))
+	var result := siege(attacker.rules, auto_waves(attacker.field), castle.troops, castle.layout, seed_value, wall_bonus(castle))
 	attacker.field = survivors(result.a)
 	castle.troops = survivors(result.b)
 	var won: bool = result.winner == "a"
@@ -143,6 +166,168 @@ static func odds(rules: BuildingRules, a: Dictionary, b: Dictionary, seed_value 
 		if fight(rules, a, b, seed_value + k, wall).winner == "a":
 			wins += 1
 	return float(wins) / ODDS_SAMPLES
+
+
+static func siege(rules: BuildingRules, waves: Array, defenders: Dictionary, layout: Dictionary, seed_value: int, wall := 1.0) -> Dictionary:
+	## Storms a castle or camp in waves (see the top of this file). `waves` is
+	## an array of {wall: army} (WALLS), `layout` the defenders' percentages
+	## (DEFAULT_LAYOUT's keys). Returns fight()'s keys for the whole siege
+	## ("winner", "rounds", "a" and "b" with every soldier on each side) plus
+	## "walls" (wall -> {"broken", "fights": [{"wave", "open"} or {"wave",
+	## "winner", "a", "b"}]}), "courtyard" ({} if never reached, {"open": true}
+	## if nobody was there, or {"winner", "a", "b"}) and "waves" (how many).
+	var posts := split(defenders, layout, ["left", "right", "courtyard", "front"])
+	var sent := {}
+	var home := {}       # attackers going home
+	var through := {}    # attackers inside the walls
+	var walls := {}
+	var rounds := 0
+	var broken_any := false
+	var yard: Dictionary = posts.courtyard
+	var holding := {}    # defenders still on the walls they held
+	for i in WALLS.size():
+		var w: String = WALLS[i]
+		var held: Dictionary = posts[w]
+		var fights: Array = []
+		var broken := false
+		for k in waves.size():
+			var troops := _ints(waves[k].get(w, {}))
+			if troops.is_empty():
+				continue
+			_add(sent, troops)
+			if broken or held.is_empty():
+				broken = true
+				_add(through, troops)
+				fights.append({"wave": k, "open": true})
+				continue
+			var r := fight(rules, troops, held, seed_value + WALL_SEED * (i + 1) + k, wall)
+			rounds += r.rounds
+			held = survivors(r.b)
+			fights.append({"wave": k, "winner": r.winner, "a": r.a, "b": r.b})
+			if r.winner == "a":
+				broken = true
+				_add(through, survivors(r.a))
+			else:
+				_add(home, survivors(r.a))
+		walls[w] = {"broken": broken, "fights": fights}
+		if broken:
+			broken_any = true
+			_add(yard, held)
+		else:
+			_add(holding, held)
+	var winner := "b"
+	var courtyard := {}
+	if broken_any and not through.is_empty():
+		if yard.is_empty():
+			winner = "a"
+			courtyard = {"open": true}
+			_add(home, through)
+		else:
+			var r := fight(rules, through, yard, seed_value + COURTYARD_SEED, wall * COURTYARD_BONUS)
+			rounds += r.rounds
+			winner = r.winner
+			courtyard = {"winner": r.winner, "a": r.a, "b": r.b}
+			yard = survivors(r.b)
+			_add(home, survivors(r.a))
+	_add(holding, yard)
+	return {"winner": winner, "rounds": rounds, "a": _kept(sent, home), "b": _kept(_ints(defenders), holding),
+			"walls": walls, "courtyard": courtyard, "waves": waves.size()}
+
+
+static func siege_odds(rules: BuildingRules, waves: Array, defenders: Dictionary, layout: Dictionary, seed_value := 1, wall := 1.0) -> float:
+	## Share of simulated sieges the attackers win, 0 .. 1.
+	var any := false
+	for wave: Dictionary in waves:
+		for w: String in wave:
+			if not _ints(wave[w]).is_empty():
+				any = true
+	if not any:
+		return 0.0
+	var wins := 0
+	for k in ODDS_SAMPLES:
+		if siege(rules, waves, defenders, layout, seed_value + k, wall).winner == "a":
+			wins += 1
+	return float(wins) / ODDS_SAMPLES
+
+
+static func auto_waves(army: Dictionary) -> Array:
+	## One wave with the army spread over the walls by ATTACK_SPLIT.
+	return [split(army, ATTACK_SPLIT, ["left", "right", "front"])]
+
+
+static func waves_for_keep(keep: int) -> int:
+	var n := 1
+	for row: Array in WAVES_BY_KEEP:
+		if keep >= int(row[0]):
+			n = int(row[1])
+	return n
+
+
+static func split(army: Dictionary, shares: Dictionary, order: Array) -> Dictionary:
+	## Spreads an army over the keys of `order` by percentage (`shares`),
+	## rounding down; the last key gets what is left. Returns key -> army,
+	## without units that got nobody.
+	var out := {}
+	for key: String in order:
+		out[key] = {}
+	for u: String in army:
+		var n := int(army[u])
+		if n <= 0:
+			continue
+		var left := n
+		for i in order.size():
+			var key: String = order[i]
+			var part := left if i == order.size() - 1 else n * int(shares.get(key, 0)) / 100
+			part = mini(part, left)
+			left -= part
+			if part > 0:
+				out[key][u] = part
+	return out
+
+
+static func check_waves(waves: Variant, max_waves: int, rules: BuildingRules) -> String:
+	## "" if `waves` can be sent from a castle allowing `max_waves`, otherwise
+	## why not. Whether the garrison has the soldiers is checked on their sum
+	## (waves_army()).
+	if not waves is Array or waves.is_empty():
+		return "Bad waves."
+	if waves.size() > max_waves:
+		return "Upgrade your keep to send more than one wave." if max_waves == 1 else "Your keep allows %d waves." % max_waves
+	for wave: Variant in waves:
+		if not wave is Dictionary:
+			return "Bad waves."
+		for w: Variant in wave:
+			if not WALLS.has(w) or not wave[w] is Dictionary:
+				return "Bad waves."
+			for unit: Variant in wave[w]:
+				if not rules.has_unit(String(unit)):
+					return "Unknown unit."
+				var n: Variant = wave[w][unit]
+				if not (n is int or n is float) or n != floorf(n) or n < 0:
+					return "Bad waves."
+	return ""
+
+
+static func waves_army(waves: Array) -> Dictionary:
+	## Every soldier in the waves, by unit.
+	var out := {}
+	for wave: Dictionary in waves:
+		for w: String in wave:
+			_add(out, wave[w])
+	return out
+
+
+static func check_layout(layout: Variant) -> String:
+	## "" if `layout` is a valid defence layout, otherwise why not.
+	if not layout is Dictionary or layout.size() != DEFAULT_LAYOUT.size():
+		return "Bad layout."
+	var sum := 0
+	for key: String in DEFAULT_LAYOUT:
+		var v: Variant = layout.get(key)
+		if not (v is int or v is float) or v != floorf(v) or v < 0 or v > 100:
+			return "Bad layout."
+		sum += int(v)
+	return "" if sum == 100 else "The walls and courtyard must add up to 100%."
 
 
 static func odds_text(chance: float) -> String:
@@ -186,6 +371,28 @@ static func _casualties(rules: BuildingRules, attackers: Dictionary, defenders: 
 				continue
 			var share: float = defenders[t] / total
 			out[t] = out.get(t, 0.0) + power * share * rules.unit_bonus(u, t) / maxf(rules.unit_stat(t, "defense") * wall, 1.0)
+	return out
+
+
+static func _ints(army: Dictionary) -> Dictionary:
+	var out := {}
+	for u: String in army:
+		if int(army[u]) > 0:
+			out[u] = int(army[u])
+	return out
+
+
+static func _add(to: Dictionary, army: Dictionary) -> void:
+	for u: String in army:
+		if int(army[u]) > 0:
+			to[u] = int(to.get(u, 0)) + int(army[u])
+
+
+static func _kept(start: Dictionary, left: Dictionary) -> Dictionary:
+	## {unit: {"start", "lost"}} for soldiers `start` of whom `left` remain.
+	var out := {}
+	for u: String in start:
+		out[u] = {"start": int(start[u]), "lost": int(start[u]) - mini(int(left.get(u, 0)), int(start[u]))}
 	return out
 
 

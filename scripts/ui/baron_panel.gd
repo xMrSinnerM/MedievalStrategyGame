@@ -105,7 +105,7 @@ func _refresh() -> void:
 		_odds.text = "Your garrison is empty. Train soldiers, or bring your warband home and move its soldiers into the garrison."
 		_odds.add_theme_color_override("font_color", TEXT)
 	else:
-		var chance := Battle.odds(Economy.rules, army, garrison, 1, wall)
+		var chance := Battle.siege_odds(Economy.rules, Battle.auto_waves(army), garrison, Battle.DEFAULT_LAYOUT, 1, wall)
 		_odds.text = "Your garrison of %d: %s (%d%%)" % [mine, Battle.odds_text(chance), roundi(chance * 100.0)]
 		_odds.add_theme_color_override("font_color", Color(0.95, 0.4, 0.3).lerp(Color(0.55, 0.9, 0.45), chance))
 	_attack.text = "Prepare attack" if camp.is_ready(now) else "Rebuilding"

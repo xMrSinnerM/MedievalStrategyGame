@@ -25,6 +25,7 @@ func _initialize() -> void:
 	test_warband()
 	test_battle()
 	test_siege()
+	test_siege_waves()
 	test_capture()
 	test_save_slots()
 	test_diplomacy()
@@ -33,6 +34,7 @@ func _initialize() -> void:
 	test_baron_camp()
 	test_baron_placer()
 	test_marches()
+	test_march_waves()
 	print("%d checks, %d failed" % [checks, failures])
 	quit(1 if failures > 0 else 0)
 
@@ -339,6 +341,53 @@ func test_siege() -> void:
 	keep.id = "npc_castle"
 	keep.troops = {"spearman": 20}
 	check(Battle.assault(raider, keep, 7).outcome == "held", "an even fight against walls is lost")
+
+
+func test_siege_waves() -> void:
+	# Spreading soldiers: rounded down, the last key gets the rest.
+	var parts := Battle.split({"spearman": 10, "archer": 1}, Battle.DEFAULT_LAYOUT, ["left", "right", "courtyard", "front"])
+	check(parts.left == {"spearman": 2} and parts.right == {"spearman": 2} and parts.courtyard == {"spearman": 1}
+			and parts.front == {"spearman": 5, "archer": 1}, "layout split")
+	check(Battle.auto_waves({"spearman": 10}) == [{"left": {"spearman": 3}, "right": {"spearman": 3}, "front": {"spearman": 4}}], "auto waves")
+	check(Battle.waves_for_keep(1) == 1 and Battle.waves_for_keep(2) == 2 and Battle.waves_for_keep(3) == 2
+			and Battle.waves_for_keep(5) == 3, "waves by keep")
+	check(Battle.check_layout(Battle.DEFAULT_LAYOUT) == "", "default layout is valid")
+	check(Battle.check_layout({"left": 50, "front": 50, "right": 0, "courtyard": 10}) != "", "layout must add up to 100")
+	check(Battle.check_layout({"left": 50, "front": 50}) != "", "layout needs every post")
+	# Nobody on the left wall: the attackers walk in, and nobody in the courtyard either.
+	var open_left := {"left": 0, "front": 100, "right": 0, "courtyard": 0}
+	var r := Battle.siege(rules, [{"left": {"spearman": 5}}], {"spearman": 50}, open_left, 1, 2.0)
+	check(r.winner == "a" and r.walls.left.broken and r.courtyard.get("open", false), "an empty wall and courtyard fall at once")
+	check(r.a.spearman.lost == 0 and r.b.spearman.lost == 0, "nobody fell")
+	# A wall that holds sends its attackers home; the other walls' defenders never fight.
+	r = Battle.siege(rules, [{"front": {"spearman": 5}}], {"spearman": 100}, Battle.DEFAULT_LAYOUT, 3, 2.0)
+	check(r.winner == "b" and not r.walls.front.broken and r.courtyard.is_empty(), "the front held")
+	check(r.walls.left.fights.is_empty() and r.b.spearman.lost < 35, "only the front fought")
+	# A big wave breaks the front, the next wave walks through it.
+	r = Battle.siege(rules, [{"front": {"swordsman": 200}}, {"front": {"archer": 20}}], {"spearman": 60}, Battle.DEFAULT_LAYOUT, 5, 1.5)
+	check(r.walls.front.broken and r.walls.front.fights.size() == 2 and r.walls.front.fights[1].get("open", false), "second wave walks through")
+	check(r.winner == "a" and r.courtyard.has("winner"), "won in the courtyard")
+	check(r.a.archer.lost == 0 and r.waves == 2, "the second wave lost nobody at the wall")
+	var start := 0
+	for u: String in r.b:
+		start += r.b[u].start
+	check(start == 60, "every defender counted once")
+	# A camp attack is a siege, and the odds use the same rules.
+	var chance := Battle.siege_odds(rules, Battle.auto_waves({"swordsman": 300}), {"spearman": 20}, Battle.DEFAULT_LAYOUT, 1, 1.5)
+	check(chance == 1.0, "a crushing army always wins")
+	check(Battle.siege_odds(rules, [{}], {"spearman": 20}, Battle.DEFAULT_LAYOUT) == 0.0, "no soldiers, no chance")
+	# Waves sent with an attack, and the castle's own layout (saved with it).
+	check(Battle.check_waves([{"left": {"spearman": 3}}], 1, rules) == "", "one wave is fine")
+	check(Battle.check_waves([{}, {}], 1, rules) != "", "the keep limits the waves")
+	check(Battle.check_waves([{"middle": {"spearman": 3}}], 2, rules) != "", "only the three walls")
+	check(Battle.waves_army([{"left": {"spearman": 3}}, {"left": {"spearman": 2}, "front": {"archer": 1}}]) == {"spearman": 5, "archer": 1}, "waves army")
+	var c := fresh()
+	check(c.layout == Battle.DEFAULT_LAYOUT, "castles start with the default layout")
+	c.layout = {"left": 10, "front": 60, "right": 10, "courtyard": 20}
+	check(CastleState.from_dict(rules, c.to_dict()).layout == c.layout, "the layout is saved")
+	var old := c.to_dict()
+	old.erase("layout")
+	check(CastleState.from_dict(rules, old).layout == Battle.DEFAULT_LAYOUT, "old saves get the default layout")
 
 
 func test_capture() -> void:
@@ -677,6 +726,48 @@ func test_marches() -> void:
 	eco.begin_load(1)
 	check(eco.marches.is_empty() and reports.size() == 1, "a trip that ended while away is settled on loading")
 	check(eco.player_castle.troop_count() > 0 and eco.player_castle.troop_count() <= 300, "and the army is home")
+	eco.delete_slot(1)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://test_saves"))
+	eco.free()
+
+
+func test_march_waves() -> void:
+	var eco = load("res://scripts/core/economy.gd").new()
+	eco.save_dir = "user://test_saves"
+	eco.begin_new(1)
+	eco.castle_positions[eco.MAIN_CASTLE] = Vector2(0, 0)
+	eco.sync_barons([{"id": "near", "name": "Near", "position": [60, 0]}])
+	eco.player_castle.troops = {"spearman": 30, "archer": 10}
+	check(eco.max_waves() == 1, "a level 1 keep sends one wave")
+	var two := [{"left": {"spearman": 5}}, {"front": {"spearman": 5}}]
+	check(eco.send_attack("near", {}, two) == "Upgrade your keep to send more than one wave.", "not two")
+	check(eco.send_attack("near", {}, [{"left": {"spearman": 40}}]) != "", "nor more soldiers than the garrison holds")
+	check(eco.send_attack("near", {}, [{"moat": {"spearman": 5}}]) == "Bad waves.", "nor at a wall that isn't there")
+	var reports: Array = []
+	eco.attack_resolved.connect(func(r: Dictionary) -> void: reports.append(r))
+	var waves := [{"left": {"spearman": 25, "archer": 10}}]
+	check(eco.send_attack("near", {}, waves) == "", "one wave at the left wall sets out")
+	var m: Dictionary = eco.marches[0]
+	check(m.army == {"spearman": 25, "archer": 10} and m.waves == waves, "the march keeps the army and its waves")
+	check(eco.player_castle.troops.spearman == 5, "and the soldiers leave the garrison")
+	eco.save_game()
+	eco.begin_load(1)
+	check(eco.marches.size() == 1 and eco.marches[0].waves.size() == 1, "the waves are saved")
+	eco.advance_marches(float(eco.marches[0].arrive) + 1.0)
+	check(reports.size() == 1, "the army fights on arrival")
+	var walls: Dictionary = reports[0].walls
+	check(walls.left.fights.size() == 1 and walls.front.fights.is_empty() and walls.right.fights.is_empty(),
+			"only the left wall is stormed")
+	var panel: GDScript = load("res://scripts/ui/attack_panel.gd")
+	var spread: Array = panel.spread({"spearman": 10, "archer": 3}, 3, Battle.ATTACK_SPLIT)
+	check(spread.size() == 3 and Battle.waves_army(spread) == {"spearman": 10, "archer": 3}, "Auto spreads every soldier over the waves")
+	var report: GDScript = load("res://scripts/ui/battle_report.gd")
+	check(report.wall_result({"broken": false, "fights": []}) == "Not attacked", "an unattacked wall")
+	check(report.wall_result({"broken": true, "fights": [{"wave": 0, "winner": "b"}, {"wave": 1, "winner": "a"}]}) == "Broken in wave 2",
+			"a wall broken by the second wave")
+	check(report.wall_result({"broken": true, "fights": [{"wave": 0, "open": true}]}) == "Undefended", "an empty wall")
+	check(report.courtyard_result({}, true) == "Not reached" and report.courtyard_result({"winner": "b"}, false) == "Held",
+			"the courtyard, seen from either side")
 	eco.delete_slot(1)
 	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://test_saves"))
 	eco.free()

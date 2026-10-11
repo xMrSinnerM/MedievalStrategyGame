@@ -24,6 +24,9 @@ var training: Array[Dictionary] = []    ## batches {unit, remaining: int, unit_t
 var hunger := 0.0              ## food owed to soldiers while the stores are empty
 var field := {}                ## unit -> soldiers away in the lord's warband
 var field_ready := false       ## the warband has been given its starting army
+## Where the garrison stands when the castle is stormed: percent on the left,
+## front and right walls and in the courtyard (Battle.siege()).
+var layout := Battle.DEFAULT_LAYOUT.duplicate()
 
 var _next_id := 1
 
@@ -458,6 +461,7 @@ func copy_from(other: CastleState) -> void:
 	hunger = other.hunger
 	field = other.field
 	field_ready = other.field_ready
+	layout = other.layout
 	_next_id = other._next_id
 
 
@@ -475,7 +479,7 @@ func to_dict() -> Dictionary:
 		"resources": resources.duplicate(), "buildings": list,
 		"last_update": last_update, "next_id": _next_id,
 		"troops": troops.duplicate(), "training": training.duplicate(true), "hunger": hunger,
-		"field": field.duplicate(), "field_ready": field_ready,
+		"field": field.duplicate(), "field_ready": field_ready, "layout": layout.duplicate(),
 	}
 
 
@@ -511,6 +515,10 @@ static func from_dict(p_rules: BuildingRules, data: Dictionary) -> CastleState:
 		if p_rules.has_unit(unit):
 			castle.field[unit] = int(data.field[unit])
 	castle.field_ready = bool(data.get("field_ready", false))
+	var saved: Variant = data.get("layout")
+	if Battle.check_layout(saved) == "":
+		for key: String in Battle.DEFAULT_LAYOUT:
+			castle.layout[key] = int(saved[key])
 	return castle
 
 

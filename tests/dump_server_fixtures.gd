@@ -20,6 +20,7 @@ func _initialize() -> void:
 	var data := {
 		"castles": [],
 		"battles": [],
+		"sieges": [],
 		"barons": [],
 		"camp_attacks": [],
 		"hashes": {},
@@ -28,6 +29,8 @@ func _initialize() -> void:
 		data.castles.append(castle_run(run))
 	for k in 100:
 		data.battles.append(battle_case())
+	for k in 80:
+		data.sieges.append(siege_case())
 	for level in range(1, baron_rules.max_level + 1):
 		data.barons.append({
 			"level": level, "garrison": baron_rules.garrison(level), "palisade": baron_rules.palisade(level),
@@ -124,6 +127,34 @@ func battle_case() -> Dictionary:
 	var wall := 1.0 if rng.randi() % 2 == 0 else Battle.wall_from_defense(rng.randf_range(0.0, 900.0))
 	return {"a": a, "b": b, "seed": seed_value, "wall": wall, "result": Battle.fight(rules, a, b, seed_value, wall),
 			"odds": Battle.odds(rules, a, b, seed_value, wall)}
+
+
+func siege_case() -> Dictionary:
+	## Random waves against a random layout, sometimes with empty walls.
+	var waves: Array = []
+	for k in rng.randi_range(1, 3):
+		var wave := {}
+		for w: String in Battle.WALLS:
+			if rng.randi() % 4 != 0:
+				wave[w] = random_army(rng.randi_range(0, 120))
+		waves.append(wave)
+	var layout := {"left": 0, "front": 0, "right": 0, "courtyard": 0}
+	var left := 100
+	for key: String in ["left", "right", "courtyard"]:
+		layout[key] = rng.randi_range(0, left)
+		left -= layout[key]
+	layout["front"] = left
+	if rng.randi() % 3 == 0:
+		layout = Battle.DEFAULT_LAYOUT
+	var defenders := random_army(rng.randi_range(0, 250))
+	var seed_value := rng.randi_range(0, 2_000_000_000)
+	var wall := Battle.wall_from_defense(rng.randf_range(0.0, 900.0))
+	var army := random_army(rng.randi_range(1, 300))
+	return {"waves": waves, "layout": layout, "defenders": defenders, "seed": seed_value, "wall": wall,
+			"result": Battle.siege(rules, waves, defenders, layout, seed_value, wall),
+			"odds": Battle.siege_odds(rules, waves, defenders, layout, seed_value, wall),
+			"army": army, "auto": Battle.auto_waves(army),
+			"split": Battle.split(defenders, layout, ["left", "right", "courtyard", "front"])}
 
 
 func camp_run(k: int) -> Dictionary:

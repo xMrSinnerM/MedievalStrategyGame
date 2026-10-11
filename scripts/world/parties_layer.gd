@@ -342,7 +342,7 @@ func _storm(castle_id: String) -> void:
 		"attacker_faction": player.faction_id, "defender_faction": castle.owner,
 		"place": castle.castle_name, "winner": result.winner, "a": result.a, "b": result.b,
 		"loot": result.loot, "player": "a", "siege": true, "outcome": result.outcome,
-		"spoils": result.get("spoils", {}),
+		"spoils": result.get("spoils", {}), "walls": result.walls, "courtyard": result.courtyard,
 	}
 	player.truce_until = Time.get_ticks_msec() * 0.001 + TRUCE
 	if result.outcome == "captured":
@@ -568,7 +568,8 @@ func _pick_siege_target(lord: Party) -> Dictionary:
 		var castle := Economy.get_castle(s.id)
 		if d >= best_d or castle == null:
 			continue
-		if Battle.odds(Economy.rules, home.field, castle.troops, 1, Battle.wall_bonus(castle)) >= SIEGE_ODDS:
+		if Battle.siege_odds(Economy.rules, Battle.auto_waves(home.field), castle.troops, castle.layout, 1,
+				Battle.wall_bonus(castle)) >= SIEGE_ODDS:
 			best = s
 			best_d = d
 	return best
@@ -627,6 +628,7 @@ func _lord_storm(lord: Party, castle_id: String) -> void:
 		"place": castle.castle_name, "winner": result.winner, "a": result.a, "b": result.b,
 		"loot": result.loot, "player": "b" if yours else "", "siege": true,
 		"outcome": result.outcome, "spoils": result.get("spoils", {}),
+		"walls": result.walls, "courtyard": result.courtyard,
 	}
 	var now := Time.get_ticks_msec() * 0.001
 	_castle_truce[castle_id] = now + CASTLE_TRUCE

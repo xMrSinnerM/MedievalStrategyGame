@@ -428,13 +428,17 @@ func march_time_to(camp: BaronCamp) -> float:
 	return baron_rules.march_time(home_position().distance_to(camp.position))
 
 
-func check_attack(camp_id: String, army: Dictionary) -> String:
-	## Why this army can't be sent against the camp ("" if it can).
+func check_attack(camp_id: String, army: Dictionary, waves: Array = []) -> String:
+	## Why this army can't be sent against the camp ("" if it can). With
+	## `waves`, the army must be their sum (Battle.waves_army()).
 	var camp := get_baron(camp_id)
 	if camp == null:
 		return "No such camp."
 	if not camp.is_ready(now()):
 		return "The camp is still rebuilding."
+	var bad := _check_waves(waves)
+	if bad != "":
+		return bad
 	var total := 0
 	for unit: String in army:
 		if int(army[unit]) < 0 or int(army[unit]) > int(player_castle.troops.get(unit, 0)):
@@ -445,10 +449,13 @@ func check_attack(camp_id: String, army: Dictionary) -> String:
 	return ""
 
 
-func send_attack(camp_id: String, army: Dictionary) -> String:
-	## Sends soldiers from your main castle's garrison against a camp. They
+func send_attack(camp_id: String, army: Dictionary, waves: Array = []) -> String:
+	## Sends soldiers from your main castle's garrison against a camp, in
+	## `waves` if given (see Battle.siege(); the army is then their sum). They
 	## march there, fight, and come home with what they can carry.
-	var why := check_attack(camp_id, army)
+	if not waves.is_empty():
+		army = Battle.waves_army(waves)
+	var why := check_attack(camp_id, army, waves)
 	if why != "":
 		return why
 	var sent := {}
@@ -458,11 +465,16 @@ func send_attack(camp_id: String, army: Dictionary) -> String:
 			player_castle.troops[unit] = int(player_castle.troops[unit]) - int(army[unit])
 	var t := now()
 	var travel := march_time_to(get_baron(camp_id))
-	marches.append({"id": _next_march, "camp": camp_id, "army": sent, "depart": t,
-			"arrive": t + travel, "back": t + 2.0 * travel, "state": "out", "survivors": {}, "loot": {}})
+	var march := {"id": _next_march, "camp": camp_id, "army": sent, "depart": t,
+			"arrive": t + travel, "back": t + 2.0 * travel, "state": "out", "survivors": {}, "loot": {}}
+	var order := {"action": "attack", "camp": camp_id, "army": sent}
+	if not waves.is_empty():
+		march["waves"] = waves
+		order["waves"] = waves
+	marches.append(march)
 	_next_march += 1
 	if online:
-		get_node("/root/Online").order({"action": "attack", "camp": camp_id, "army": sent})
+		get_node("/root/Online").order(order)
 	save_game()
 	changed.emit()
 	marches_changed.emit()
@@ -516,13 +528,14 @@ func _fight_camp(m: Dictionary) -> void:
 		attack_resolved.emit({"player": "a", "baron": true, "empty": true, "defender": camp.camp_name if camp else "",
 				"winner": "a", "a": {}, "b": {}, "loot": 0, "place": ""})
 		return
-	var result := camp.attack(baron_rules, rules, m.army, int(m.id) * 7919 + hash(m.camp), float(m.arrive))
+	var result := camp.attack(baron_rules, rules, m.army, int(m.id) * 7919 + hash(m.camp), float(m.arrive), m.get("waves", []))
 	m.survivors = result.survivors
 	m.loot = result.loot
 	attack_resolved.emit({
 		"player": "a", "baron": true, "attacker": "Your army", "defender": camp.camp_name,
 		"attacker_faction": player_faction, "defender_faction": "barons", "place": camp.camp_name,
 		"winner": result.winner, "a": result.a, "b": result.b, "loot": 0, "spoils": result.loot,
+		"walls": result.walls, "courtyard": result.courtyard,
 		"level": result.level, "leveled": result.leveled, "new_level": camp.level,
 		"defeats": camp.defeats, "needed": baron_rules.defeats_needed(camp.level),
 		"home_in": maxf(0.0, float(m.back) - now()),
@@ -866,7 +879,8 @@ func _server_report(r: Dictionary) -> Dictionary:
 				"attacker": "Your army" if attacking else other, "defender": other if attacking else "Your castle",
 				"attacker_faction": player_faction, "defender_faction": "", "place": "",
 				"winner": r.get("winner", "b"), "a": r.get("a", {}), "b": r.get("b", {}), "loot": 0,
-				"spoils": r.get("spoils", {}), "wall": float(r.get("wall", 1.0)), "helped_by": r.get("helped_by", [])}
+				"spoils": r.get("spoils", {}), "wall": float(r.get("wall", 1.0)), "helped_by": r.get("helped_by", []),
+				"walls": r.get("walls", {}), "courtyard": r.get("courtyard", {})}
 	if r.get("empty", false):
 		return {"player": "a", "baron": true, "empty": true, "defender": r.get("name", ""),
 				"winner": "a", "a": {}, "b": {}, "loot": 0, "place": ""}
@@ -882,6 +896,7 @@ func _server_report(r: Dictionary) -> Dictionary:
 		"new_level": int(r.get("new_level", 1)), "defeats": int(r.get("defeats", 0)),
 		"needed": int(r.get("needed", 1)), "home_in": maxf(0.0, back - now()),
 		"invader": r.has("event"), "points": int(r.get("points", 0)),
+		"walls": r.get("walls", {}), "courtyard": r.get("courtyard", {}),
 	}
 
 
@@ -968,8 +983,9 @@ func spy_cost() -> Dictionary:
 	return pvp.get("spy_cost", {})
 
 
-func check_raid(player_name: String, army: Dictionary) -> String:
-	## Why this army can't be sent against that player ("" if it can).
+func check_raid(player_name: String, army: Dictionary, waves: Array = []) -> String:
+	## Why this army can't be sent against that player ("" if it can). With
+	## `waves`, the army must be their sum (Battle.waves_army()).
 	var target := get_other(player_name)
 	if target.is_empty():
 		return "There's no player by that name."
@@ -977,6 +993,9 @@ func check_raid(player_name: String, army: Dictionary) -> String:
 		return "You can't attack a member of your own alliance."
 	if target.get("protected", false):
 		return "That castle is under beginner protection."
+	var bad := _check_waves(waves)
+	if bad != "":
+		return bad
 	var total := 0
 	for unit: String in army:
 		var n := int(army[unit])
@@ -986,10 +1005,13 @@ func check_raid(player_name: String, army: Dictionary) -> String:
 	return "" if total > 0 else "Choose some soldiers to send."
 
 
-func send_raid(player_name: String, army: Dictionary) -> String:
-	## Sends soldiers from your garrison against another player's castle. The
-	## server decides; the soldiers leave your garrison here straight away.
-	var why := check_raid(player_name, army)
+func send_raid(player_name: String, army: Dictionary, waves: Array = []) -> String:
+	## Sends soldiers from your garrison against another player's castle, in
+	## `waves` if given. The server decides; the soldiers leave your garrison
+	## here straight away.
+	if not waves.is_empty():
+		army = Battle.waves_army(waves)
+	var why := check_raid(player_name, army, waves)
 	if why != "":
 		return why
 	var sent := {}
@@ -998,9 +1020,21 @@ func send_raid(player_name: String, army: Dictionary) -> String:
 			sent[unit] = int(army[unit])
 			player_castle.troops[unit] = int(player_castle.troops[unit]) - int(army[unit])
 	protected_until = 0.0
-	get_node("/root/Online").order({"action": "attack_player", "target": player_name, "army": sent})
+	var order := {"action": "attack_player", "target": player_name, "army": sent}
+	if not waves.is_empty():
+		order["waves"] = waves
+	get_node("/root/Online").order(order)
 	changed.emit()
 	return ""
+
+
+func max_waves() -> int:
+	## How many waves your keep lets you send in one attack.
+	return Battle.waves_for_keep(player_castle.keep_level())
+
+
+func _check_waves(waves: Array) -> String:
+	return "" if waves.is_empty() else Battle.check_waves(waves, max_waves(), rules)
 
 
 func spy(player_name: String) -> String:
