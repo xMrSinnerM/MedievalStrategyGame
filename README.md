@@ -281,7 +281,16 @@ Empire (`Battle.siege`, ported in `server/rules/battle.ts`):
 - Break at least one wall, then win the courtyard, where the defenders make
   their last stand around the keep (the wall's bonus times 1.5).
 
-Battle reports say which walls broke and how the courtyard went.
+On the attack screen you plan the siege: a tab for every wave your keep
+allows, and for each wave how many of each soldier go to the left, front and
+right walls. **Auto** tries every number of waves you can send with eight ways
+of spreading them over the walls, and picks the plan with the best odds (then
+the fewest losses) against what it knows of the defence: a camp's garrison,
+or what your spy last saw of a player's soldiers, walls and layout.
+
+Battle reports say which walls broke and how the courtyard went, with a row
+for each wall and the courtyard: broken in which wave, held, undefended or not
+attacked, and who fell there.
 
 ## Diplomacy
 
@@ -339,8 +348,8 @@ a countdown while it rebuilds.
 
 Click a camp to see its level and wins towards the next, its garrison,
 palisade and loot, the march time and your chances, then press **Prepare
-attack**. The attack screen lets you pick how many of each soldier to send
-(or All, Half, None) and shows, as you change it, your chances and the losses
+attack**. The attack screen lets you plan which soldiers storm which wall in
+each wave (or let **Auto** do it, see Siege waves) and shows, as you change it, your chances and the losses
 to expect (from a dozen simulated battles), how much of the loot they can carry
 and the march time. As in Empire: Four Kingdoms, the soldiers leave your main
 castle's garrison and march on a timer (6 map units a second, at least 10
@@ -534,7 +543,7 @@ How the parts work:
 - [x] Timed events: weekend loot bonus, baron invasions, event rewards and leaderboard
 - [x] Owner tools: start and stop events, give players resources and soldiers
 - [x] Siege waves: battle rules (walls and courtyard)
-- [ ] Siege waves: choose your waves on the attack screen
+- [x] Siege waves: choose your waves on the attack screen
 - [ ] Siege waves: set your defenders on the walls
 
 ## Known limitations
