@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { makeRules } from "../rules/load.ts";
 import { CastleState } from "../rules/castle_state.ts";
-import { act, castleLevel, checkName, fightRaid, isProtected, newPlayer, pickSpot, spyReport, type PvpRules, type Raid, type World } from "../../supabase/functions/game/game.ts";
+import { act, campsBeaten, castleLevel, checkName, fightRaid, isProtected, might, newPlayer, pickSpot, spyReport, type PvpRules, type Raid, type World } from "../../supabase/functions/game/game.ts";
 
 const root = new URL("../../", import.meta.url);
 const json = (path: string) => JSON.parse(readFileSync(new URL(path, root), "utf8"));
@@ -189,3 +189,19 @@ function CastleStateAt(p: ReturnType<typeof newPlayer>, t: number): Record<strin
   castle.advanceTo(t);
   return castle.resources;
 }
+
+test("the leaderboard counts might and camps beaten", () => {
+  const p = newPlayer(rules, world, "Ranked", T0, world.home, pvp);
+  assert.equal(p.barons_beaten, 0);
+  // Start: keep 1, wall 1, woodcutter 1, farm 1 and no soldiers.
+  assert.equal(might(p.castle, pvp), 4 * pvp.might_per_building_level);
+  p.castle.troops = { spearman: 300, archer: 100 };
+  assert.equal(might(p.castle, pvp), 4 * pvp.might_per_building_level + 400 * pvp.might_per_soldier);
+  const near = p.camps.reduce((a, b) =>
+    Math.hypot(a.position[0] - p.home_x, a.position[1] - p.home_y) < Math.hypot(b.position[0] - p.home_x, b.position[1] - p.home_y) ? a : b);
+  let out = act(rules, p, { action: "attack", camp: near.id, army: { spearman: 300, archer: 100 } }, T0, { pvp });
+  out = act(rules, out.state, { action: "state" }, out.state.marches[0].back + 1, { pvp });
+  assert.equal(out.reports[0].winner, "a");
+  assert.equal(out.state.barons_beaten, 1);
+  assert.equal(campsBeaten([{ ...out.reports[0], empty: true }]), 0);
+});

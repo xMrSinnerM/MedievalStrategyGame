@@ -6,6 +6,7 @@
 // POST { "action": "join", "name": "..." }       create your castle on a free spot
 // POST { "action": "state" }                     your castle, camps, marches, raids and reports
 // POST { "action": "world" }                     other players: name, spot, level, protection
+// POST { "action": "leaderboard" }               the mightiest castles, and your own rank
 // POST { "action": "place", "type", "cell": [x, y] }
 // POST { "action": "upgrade" | "cancel", "id" }
 // POST { "action": "move", "id", "cell": [x, y] }
@@ -29,7 +30,7 @@ import pvpData from "../../../data/pvp.json" with { type: "json" };
 import world from "../../../server/world/world.json" with { type: "json" };
 import { makeRules } from "../../../server/rules/load.ts";
 import {
-  act, castleLevel, checkName, fightRaid, isProtected, newPlayer, pickSpot, spyReport,
+  act, castleLevel, checkName, fightRaid, isProtected, might, newPlayer, pickSpot, spyReport,
   type PlayerState, type PvpRules, type Raid, type Target, type World,
 } from "./game.ts";
 
@@ -38,10 +39,11 @@ const pvp = pvpData as PvpRules;
 const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, {
   auth: { persistSession: false },
 });
-const COLUMNS = "name, home_x, home_y, castle, camps, marches, next_march, protected_until, version";
+const COLUMNS = "name, home_x, home_y, castle, camps, marches, next_march, protected_until, barons_beaten, version";
 const REPORTS_SHOWN = 20;
 const RETRIES = 4;
 const PLAYERS_SHOWN = 500;
+const RANKS_SHOWN = 50;
 
 // deno-lint-ignore no-explicit-any
 type Row = Record<string, any>;
@@ -84,6 +86,11 @@ async function view(userId: string, state: PlayerState, extra: Record<string, un
   return { ok: true, now: now(), ...extra, player: state, raids, reports };
 }
 
+/** The columns other players can see, worked out from a player's state. */
+function publicColumns(state: PlayerState) {
+  return { level: castleLevel(state.castle), might: might(state.castle, pvp) };
+}
+
 async function saveReports(userId: string, reports: unknown[]) {
   if (reports.length === 0) return;
   // deno-lint-ignore no-explicit-any
@@ -106,7 +113,7 @@ async function resolveRaids(userId: string) {
       const { version, ...stored } = target as PlayerState & { version: number };
       const outcome = fightRaid(rules, pvp, stored, raid);
       const { data: saved } = await admin.from("players")
-        .update({ ...outcome.defender, level: castleLevel(outcome.defender.castle), version: version + 1, updated_at: new Date().toISOString() })
+        .update({ ...outcome.defender, ...publicColumns(outcome.defender), version: version + 1, updated_at: new Date().toISOString() })
         .eq("user_id", row.defender).eq("version", version).select("version");
       if (!saved || saved.length === 0) continue;
       await saveReports(row.defender, [...outcome.campReports, outcome.defenderReport]);
@@ -155,7 +162,7 @@ Deno.serve(async (req: Request) => {
       const spot = pickSpot(world as World, (homes ?? []).map((h) => [h.home_x, h.home_y] as [number, number]));
       if (spot === null) return reply({ ok: false, error: "The world is full. Try again later." });
       const state = newPlayer(rules, world as World, String(body.name), now(), spot, pvp);
-      const { error } = await admin.from("players").insert({ user_id: userId, ...state, level: castleLevel(state.castle), version: 1 });
+      const { error } = await admin.from("players").insert({ user_id: userId, ...state, ...publicColumns(state), version: 1 });
       if (!error) return reply(await view(userId, state));
       if (error.code !== "23505") return reply({ ok: false, error: "The server couldn't create your castle." }, 500);
       if (error.message.includes("players_home_key")) continue;
@@ -175,6 +182,21 @@ Deno.serve(async (req: Request) => {
       protected: p.protected_until > t && p.level < pvp.protection_until_keep,
     }));
     return reply({ ok: true, now: t, error: "", players });
+  }
+
+  if (body.action === "leaderboard") {
+    const { data, error } = await admin.from("players").select("name, level, might, barons_beaten")
+      .order("might", { ascending: false }).order("barons_beaten", { ascending: false }).order("name")
+      .limit(RANKS_SHOWN);
+    const { data: me } = await admin.from("players").select("name, level, might, barons_beaten").eq("user_id", userId).maybeSingle();
+    if (error) return reply({ ok: false, error: "The server couldn't load the leaderboard." }, 500);
+    let rank = 0;
+    if (me) {
+      const { count } = await admin.from("players").select("user_id", { count: "exact", head: true }).gt("might", me.might);
+      rank = (count ?? 0) + 1;
+    }
+    const { count: total } = await admin.from("players").select("user_id", { count: "exact", head: true });
+    return reply({ ok: true, now: now(), error: "", result: { players: data ?? [], me, rank, total: total ?? 0 } });
   }
 
   await resolveRaids(userId);
@@ -199,7 +221,7 @@ Deno.serve(async (req: Request) => {
     const outcome = act(rules, stored, body, t, { pvp, target: found?.target, homecomings });
     // Save only if nobody else changed the row meanwhile; otherwise start over.
     const { data: saved, error: saveError } = await admin.from("players")
-      .update({ ...outcome.state, level: castleLevel(outcome.state.castle), version: version + 1, updated_at: new Date().toISOString() })
+      .update({ ...outcome.state, ...publicColumns(outcome.state), version: version + 1, updated_at: new Date().toISOString() })
       .eq("user_id", userId).eq("version", version).select("version");
     if (saveError) return reply({ ok: false, error: "The server couldn't save your castle." }, 500);
     if (!saved || saved.length === 0) continue;

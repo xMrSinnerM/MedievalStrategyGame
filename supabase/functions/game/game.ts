@@ -20,6 +20,8 @@ export interface PlayerState {
   next_march: number;
   /** Unix time until which nobody can attack you (see isProtected). */
   protected_until: number;
+  /** Robber baron camps your armies have beaten, for the leaderboard. */
+  barons_beaten: number;
 }
 
 /** The numbers for fights between players, from data/pvp.json. */
@@ -28,6 +30,9 @@ export interface PvpRules {
   protection_until_keep: number;
   loot_share: number;
   spy_cost: Dict;
+  /** Leaderboard might: points per building level and per soldier at home. */
+  might_per_building_level: number;
+  might_per_soldier: number;
 }
 
 /** An army one player sent against another (a row of the raids table). */
@@ -128,6 +133,20 @@ export function castleLevel(castle: CastleData): number {
   return castle.buildings.find((b) => b.type === "keep")?.level ?? 1;
 }
 
+/** A castle's might on the leaderboard: its buildings' levels and its garrison. */
+export function might(castle: CastleData, pvp: PvpRules): number {
+  let levels = 0;
+  for (const b of castle.buildings) levels += b.level;
+  let soldiers = 0;
+  for (const unit of Object.keys(castle.troops)) soldiers += castle.troops[unit];
+  return Math.round(levels * pvp.might_per_building_level + soldiers * pvp.might_per_soldier);
+}
+
+/** How many of these battle reports are camps beaten. */
+export function campsBeaten(reports: Report[]): number {
+  return reports.filter((r) => r.winner === "a" && !r.empty).length;
+}
+
 /** Whether nobody may attack this player now: new, small, and peaceful so far. */
 export function isProtected(state: Pick<PlayerState, "protected_until" | "castle">, pvp: PvpRules, now: number): boolean {
   return state.protected_until > now && castleLevel(state.castle) < pvp.protection_until_keep;
@@ -148,6 +167,7 @@ export function newPlayer(rules: Rules, world: World, name: string, now: number,
     marches: [],
     next_march: 1,
     protected_until: pvp ? now + pvp.protection_hours * 3600 : 0,
+    barons_beaten: 0,
   };
 }
 
@@ -245,6 +265,7 @@ export function act(rules: Rules, stored: PlayerState, req: Request, now: number
       marches: army.marches,
       next_march: army.nextMarch,
       protected_until: protectedUntil,
+      barons_beaten: (stored.barons_beaten ?? 0) + campsBeaten(reports),
     },
     reports,
     error,
@@ -335,6 +356,7 @@ export function fightRaid(rules: Rules, pvp: PvpRules, stored: PlayerState, raid
       camps: world.camps,
       marches: world.marches,
       next_march: world.nextMarch,
+      barons_beaten: (stored.barons_beaten ?? 0) + campsBeaten(campReports),
     },
     campReports,
     attackerReport: report("attacker", raid.defender_name),

@@ -13,7 +13,7 @@ import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { makeRules } from "../rules/load.ts";
 import {
-  act, castleLevel, checkName, fightRaid, isProtected, newPlayer, pickSpot, spyReport,
+  act, castleLevel, checkName, fightRaid, isProtected, might, newPlayer, pickSpot, spyReport,
   type PlayerState, type PvpRules, type Raid, type Target, type World,
 } from "../../supabase/functions/game/game.ts";
 
@@ -156,6 +156,16 @@ createServer(async (req, res) => {
         .map(([, p]) => ({ name: p.name, home_x: p.home_x, home_y: p.home_y, level: castleLevel(p.castle),
           protected: isProtected(p, pvp, now()) }));
       return send(res, 200, { ok: true, now: now(), error: "", players: others });
+    }
+    if (body.action === "leaderboard") {
+      const all = [...players.entries()].map(([id, p]) => ({ id, name: p.name, level: castleLevel(p.castle),
+        might: might(p.castle, pvp), barons_beaten: p.barons_beaten ?? 0 }))
+        .sort((a, b) => b.might - a.might || b.barons_beaten - a.barons_beaten || a.name.localeCompare(b.name));
+      const strip = ({ id: _id, ...row }: (typeof all)[number]) => row;
+      const mine = all.find((r) => r.id === user);
+      const rank = mine ? all.filter((r) => r.might > mine.might).length + 1 : 0;
+      return send(res, 200, { ok: true, now: now(), error: "",
+        result: { players: all.slice(0, 50).map(strip), me: mine ? strip(mine) : null, rank, total: all.length } });
     }
     if (!players.has(user)) return send(res, 200, { ok: false, error: "No castle yet.", needs_join: true });
     resolveRaids(user);
