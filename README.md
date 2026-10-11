@@ -320,6 +320,15 @@ Marches carry on while the game is closed and are settled when you load it.
 Your warband's soldiers can join the garrison when it is home (the warband
 panel).
 
+## Multiplayer (in progress)
+
+The multiplayer server runs on Supabase. It uses the same rules as the game,
+ported to TypeScript in `server/rules/`, and decides everything itself on
+server time, so changing your computer's clock or the save file changes
+nothing online. A test replays random castle orders, battles and robber baron
+attacks from the game and checks the server gets exactly the same results;
+see `server/README.md`.
+
 ## Project layout
 
 ```
@@ -336,7 +345,8 @@ scripts/
   ui/        world map HUD and panels (castle, party, battle report), castle HUD
   tools/     command-line tools (world generator, settlements, roads)
 shaders/     terrain, water, river, tree, prop, flag, route, parchment, castle ground (+ shared fog include)
-tests/       headless tests (economy)
+tests/       headless tests (economy), server fixture writer
+server/      multiplayer server: game rules in TypeScript, tests (see server/README.md)
 ```
 
 How the parts work:
@@ -399,6 +409,9 @@ How the parts work:
 - [x] Robber baron rules: levels, garrisons, loot, rebuilding
 - [x] Robber baron camps on the map and sent attacks
 - [x] Attack screen: choose your soldiers
+- [x] Server rules in TypeScript, checked against the game
+- [ ] Server on Supabase: database, accounts, game server
+- [ ] Play online from the game
 
 ## Known limitations
 
