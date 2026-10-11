@@ -54,6 +54,9 @@ func _ready() -> void:
 	EventBus.settlement_selected.connect(func(id: String) -> void:
 		if id != "":
 			show_camp(""))
+	EventBus.player_selected.connect(func(who: String) -> void:
+		if who != "":
+			show_camp(""))
 	Economy.changed.connect(_refresh)
 
 

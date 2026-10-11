@@ -15,6 +15,10 @@ signal attack_resolved(report: Dictionary)
 signal marches_changed
 ## Online: the other players' castles changed (see `others`).
 signal others_changed
+## Online: armies sent against players set out, fought or came home (see `raids`).
+signal raids_changed
+## Online: a spy came back with news of this player (see `spy_reports`).
+signal spy_returned(player_name: String)
 
 ## Games are kept in SLOTS save slots under save_dir (slot_1.json ...).
 const SLOTS := 3
@@ -73,8 +77,18 @@ const ONLINE_POLL := 20.0
 ## How often it asks where the other players' castles are.
 const WORLD_POLL := 60.0
 
-## Online: the other players' castles, [{"name", "home_x", "home_y", "level"}].
+## Online: the other players' castles, [{"name", "home_x", "home_y", "level", "protected"}].
 var others: Array = []
+## Online: armies you sent against players, and theirs coming for you, as the
+## server lists them ({"id", "attacker_name", "defender_name", "from", "to",
+## "depart", "arrive", "back", "state", "mine", "army"}).
+var raids: Array = []
+## Online: what your spies last saw, by player name (see spy()).
+var spy_reports := {}
+## Online: you can't be attacked before this (Unix time), while your keep is small.
+var protected_until := 0.0
+## Fights between players (data/pvp.json).
+var pvp := {}
 
 var _seen_report := 0          ## newest server battle report already shown
 var _poll_timer := 0.0
@@ -673,6 +687,11 @@ func begin_online(answer: Dictionary) -> void:
 	_poll_timer = 0.0
 	_asked_for = 0.0
 	others = []
+	raids = []
+	spy_reports = {}
+	protected_until = 0.0
+	if pvp.is_empty():
+		pvp = get_node("/root/GameData").load_json("res://data/pvp.json")
 	_world_timer = WORLD_POLL
 	apply_server(answer)
 
@@ -680,6 +699,7 @@ func begin_online(answer: Dictionary) -> void:
 func end_online() -> void:
 	online = false
 	others = []
+	raids = []
 	_loaded = false
 	clock_offset = 0.0
 
@@ -707,6 +727,10 @@ func apply_server(answer: Dictionary) -> void:
 			camp.rebuilt_at = fresh.rebuilt_at
 	marches = p.get("marches", [])
 	_next_march = int(p.get("next_march", _next_march))
+	protected_until = float(p.get("protected_until", 0.0))
+	if answer.has("raids"):
+		raids = answer.raids
+		raids_changed.emit()
 	var fresh_reports: Array = []
 	for r in answer.get("reports", []):
 		if int(r.get("id", 0)) > _seen_report:
@@ -720,6 +744,14 @@ func apply_server(answer: Dictionary) -> void:
 
 func _server_report(r: Dictionary) -> Dictionary:
 	## A server battle report in the shape the battle report window expects.
+	if r.get("kind", "") == "raid":
+		var attacking: bool = r.get("role", "") == "attacker"
+		var other := String(r.get("name", ""))
+		return {"player": "a" if attacking else "b", "raid": true, "role": r.get("role", ""), "name": other,
+				"attacker": "Your army" if attacking else other, "defender": other if attacking else "Your castle",
+				"attacker_faction": player_faction, "defender_faction": "", "place": "",
+				"winner": r.get("winner", "b"), "a": r.get("a", {}), "b": r.get("b", {}), "loot": 0,
+				"spoils": r.get("spoils", {}), "wall": float(r.get("wall", 1.0))}
 	if r.get("empty", false):
 		return {"player": "a", "baron": true, "empty": true, "defender": r.get("name", ""),
 				"winner": "a", "a": {}, "b": {}, "loot": 0, "place": ""}
@@ -774,4 +806,86 @@ func _next_march_event() -> float:
 		var t := float(m.arrive) if m.state == "out" else float(m.back)
 		if due == 0.0 or t < due:
 			due = t
+	for r: Dictionary in raids:
+		var t := float(r.arrive) if r.state == "out" else (float(r.back) if r.get("mine", false) else 0.0)
+		if t > 0.0 and (due == 0.0 or t < due):
+			due = t
 	return due
+
+
+# --- Online: other players --------------------------------------------------------
+
+func get_other(player_name: String) -> Dictionary:
+	## The other player with this name, as the server last listed them ({} if none).
+	for p: Dictionary in others:
+		if String(p.name) == player_name:
+			return p
+	return {}
+
+
+func other_position(player_name: String) -> Vector2:
+	var p := get_other(player_name)
+	return Vector2(float(p.home_x), float(p.home_y)) if not p.is_empty() else Vector2.ZERO
+
+
+func march_time_to_player(player_name: String) -> float:
+	return baron_rules.march_time(home_position().distance_to(other_position(player_name)))
+
+
+func is_protected() -> bool:
+	## Whether you are still under beginner protection.
+	return protected_until > now() and player_castle.keep_level() < int(pvp.get("protection_until_keep", 3))
+
+
+func spy_cost() -> Dictionary:
+	return pvp.get("spy_cost", {})
+
+
+func check_raid(player_name: String, army: Dictionary) -> String:
+	## Why this army can't be sent against that player ("" if it can).
+	var target := get_other(player_name)
+	if target.is_empty():
+		return "There's no player by that name."
+	if target.get("protected", false):
+		return "That castle is under beginner protection."
+	var total := 0
+	for unit: String in army:
+		var n := int(army[unit])
+		if n < 0 or n > int(player_castle.troops.get(unit, 0)):
+			return "Your garrison doesn't have that many soldiers."
+		total += n
+	return "" if total > 0 else "Choose some soldiers to send."
+
+
+func send_raid(player_name: String, army: Dictionary) -> String:
+	## Sends soldiers from your garrison against another player's castle. The
+	## server decides; the soldiers leave your garrison here straight away.
+	var why := check_raid(player_name, army)
+	if why != "":
+		return why
+	var sent := {}
+	for unit: String in army:
+		if int(army[unit]) > 0:
+			sent[unit] = int(army[unit])
+			player_castle.troops[unit] = int(player_castle.troops[unit]) - int(army[unit])
+	protected_until = 0.0
+	get_node("/root/Online").order({"action": "attack_player", "target": player_name, "army": sent})
+	changed.emit()
+	return ""
+
+
+func spy(player_name: String) -> String:
+	## Sends a spy to another player's castle; the news comes with the
+	## server's answer (spy_returned).
+	if not player_castle.can_afford(spy_cost()):
+		return "Not enough gold to send a spy."
+	get_node("/root/Online").order({"action": "spy", "target": player_name})
+	return ""
+
+
+func take_order_result(body: Dictionary, answer: Dictionary) -> void:
+	## Extra answers to orders: what a spy saw.
+	if body.get("action", "") == "spy" and answer.get("result") is Dictionary:
+		var seen: Dictionary = answer.result
+		spy_reports[String(seen.get("name", body.get("target", "")))] = seen
+		spy_returned.emit(String(seen.get("name", "")))

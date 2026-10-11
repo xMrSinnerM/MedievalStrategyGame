@@ -34,5 +34,8 @@ signal siege_ended(castle_id: String)
 signal war_declaration_requested(faction_id: String, then: Callable)
 ## A robber baron camp was clicked on the map ("" clears the selection).
 signal baron_selected(camp_id: String)
-## Open the attack screen against this robber baron camp.
+## Open the attack screen against this robber baron camp, or against another
+## player's castle online ("player:" + their name).
 signal attack_screen_requested(camp_id: String)
+## Online: another player's castle was clicked (their name; "" clears the selection).
+signal player_selected(player_name: String)

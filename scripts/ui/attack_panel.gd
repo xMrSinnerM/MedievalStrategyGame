@@ -1,17 +1,20 @@
 extends PanelContainer
-## The attack screen, opened from a robber baron camp's panel: choose how many
-## of each soldier to send, and see your chances, the losses to expect, how
-## much of the loot they can carry and how long the march takes.
+## The attack screen, opened from a robber baron camp's panel or (online) from
+## another player's: choose how many of each soldier to send, and see your
+## chances, the losses to expect, how much loot they can carry and how long
+## the march takes. Against a player the odds use what your spy last saw.
 
 const WIN := Color(0.55, 0.9, 0.45)
 const LOSS := Color(0.95, 0.4, 0.3)
 const SAMPLES := 12
 
-var camp_id := ""
+var camp_id := ""              ## a camp's id, or "player:<name>" for another player's castle
+var _player := ""              ## the other player's name when attacking a player
 
 var _title: Label
 var _rows: GridContainer
 var _spins := {}               ## unit -> SpinBox
+var _enemy_title: Label
 var _enemy: Label
 var _summary: Label
 var _send: Button
@@ -58,7 +61,8 @@ func _ready() -> void:
 	columns.add_child(mine)
 	var theirs := VBoxContainer.new()
 	theirs.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	theirs.add_child(MenuStyle.label("The camp", 18, MenuStyle.GOLD))
+	_enemy_title = MenuStyle.label("The camp", 18, MenuStyle.GOLD)
+	theirs.add_child(_enemy_title)
 	_enemy = MenuStyle.label("", 15, MenuStyle.TEXT)
 	theirs.add_child(_enemy)
 	columns.add_child(theirs)
@@ -76,6 +80,10 @@ func _ready() -> void:
 	_note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(_note)
 	EventBus.attack_screen_requested.connect(open_for)
+	Economy.spy_returned.connect(func(who: String) -> void:
+		if visible and who == _player:
+			_describe_player()
+			_update())
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -86,15 +94,28 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func open_for(id: String) -> void:
-	var camp := Economy.get_baron(id)
-	if camp == null:
-		return
+	if id.begins_with("player:"):
+		var other := Economy.get_other(id.trim_prefix("player:"))
+		if other.is_empty():
+			return
+		_player = String(other.name)
+		_title.text = "Attack %s (level %d)" % [_player, int(other.get("level", 1))]
+		_enemy_title.text = "Their castle"
+	else:
+		var camp := Economy.get_baron(id)
+		if camp == null:
+			return
+		_player = ""
+		_title.text = "Attack %s (level %d)" % [camp.camp_name, camp.level]
+		_enemy_title.text = "The camp"
 	camp_id = id
-	_title.text = "Attack %s (level %d)" % [camp.camp_name, camp.level]
 	_note.text = ""
 	_note.visible = false
 	_build_rows()
-	_describe_camp(camp)
+	if _player != "":
+		_describe_player()
+	else:
+		_describe_camp(Economy.get_baron(id))
 	_fill(1.0)
 	visible = true
 
@@ -145,6 +166,22 @@ func _describe_camp(camp: BaronCamp) -> void:
 	_enemy.text = "\n".join(lines)
 
 
+func _describe_player() -> void:
+	var seen: Dictionary = Economy.spy_reports.get(_player, {})
+	if seen.is_empty():
+		_enemy.text = "You don't know what defends this castle.\nSend a spy first to see their soldiers and walls."
+		return
+	var lines: PackedStringArray = []
+	var troops: Dictionary = seen.get("troops", {})
+	for unit: String in troops:
+		lines.append("%d %s" % [int(troops[unit]), Economy.rules.unit_plural(unit)])
+	if troops.is_empty():
+		lines.append("No soldiers at home")
+	lines.append("Walls: +%d%% defence" % roundi((float(seen.get("wall", 1.0)) - 1.0) * 100.0))
+	lines.append("Seen %s ago" % _clock(Economy.now() - float(seen.get("at", Economy.now()))))
+	_enemy.text = "\n".join(lines)
+
+
 func _army() -> Dictionary:
 	var army := {}
 	for unit: String in _spins:
@@ -164,6 +201,9 @@ func _fill(share: float) -> void:
 
 
 func _update() -> void:
+	if _player != "":
+		_update_player()
+		return
 	var camp := Economy.get_baron(camp_id)
 	if camp == null:
 		return
@@ -206,14 +246,54 @@ func _update() -> void:
 	_send.disabled = Economy.check_attack(camp_id, army) != ""
 
 
+func _update_player() -> void:
+	var br := Economy.baron_rules
+	var army := _army()
+	var total := 0
+	for unit: String in army:
+		total += int(army[unit])
+	var seen: Dictionary = Economy.spy_reports.get(_player, {})
+	var lines: PackedStringArray = []
+	_summary.add_theme_color_override("font_color", MenuStyle.TEXT)
+	if total == 0:
+		lines.append("Choose some soldiers to send.")
+	elif seen.is_empty():
+		lines.append("Sending %d soldiers. Without a spy's report the odds are unknown." % total)
+	else:
+		var wins := 0
+		var lost := 0
+		for k in SAMPLES:
+			var result := Battle.fight(Economy.rules, army, seen.get("troops", {}), 1000 + k, float(seen.get("wall", 1.0)))
+			if result.winner == "a":
+				wins += 1
+			lost += Battle.lost_count(result.a)
+		var chance := float(wins) / SAMPLES
+		lines.append("Sending %d soldiers: %s (%d%%), losing about %d" % [total, Battle.odds_text(chance),
+				roundi(chance * 100.0), roundi(float(lost) / SAMPLES)])
+		_summary.add_theme_color_override("font_color", LOSS.lerp(WIN, chance))
+	if total > 0:
+		lines.append("A win carries off up to %d%% of each resource, as much as they can carry (%d)"
+				% [roundi(float(Economy.pvp.get("loot_share", 0.25)) * 100.0), int(br.carry(army))])
+	var march := Economy.march_time_to_player(_player)
+	lines.append("March: %s there, %s back" % [_clock(march), _clock(march)])
+	var why := Economy.check_raid(_player, army)
+	if why != "" and total > 0:
+		lines.append(why)
+	_summary.text = "\n".join(lines)
+	_send.disabled = why != ""
+
+
 func _send_army() -> void:
-	var why := Economy.send_attack(camp_id, _army())
+	var why := Economy.send_raid(_player, _army()) if _player != "" else Economy.send_attack(camp_id, _army())
 	if why != "":
 		_note.text = why
 		_note.visible = true
 		return
 	close_panel()
-	EventBus.baron_selected.emit("")
+	if _player != "":
+		EventBus.player_selected.emit("")
+	else:
+		EventBus.baron_selected.emit("")
 
 
 func _small_button(text: String, action: Callable) -> Button:

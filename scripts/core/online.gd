@@ -142,6 +142,8 @@ func _run_queue() -> void:
 			latest = answer
 		if answer.has("players"):
 			Economy.set_others(answer.players)
+		if not refused:
+			Economy.take_order_result(body, answer)
 		if not latest.is_empty() and (refused or _queue.is_empty()):
 			Economy.apply_server(latest)
 			latest = {}
