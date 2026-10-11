@@ -32,7 +32,10 @@ export function attackCamp(camp: CampData, rules: BaronRules, units: BuildingRul
   const result = fight(units, army, rules.garrison(camp.level), seed, wallFromDefense(rules.palisade(camp.level)));
   const out: CampAttack = { ...result, level: camp.level, leveled: false, survivors: survivors(result.a), loot: {} };
   if (result.winner !== "a") return out;
-  out.loot = carried(rules.loot(camp.level), rules.carry(out.survivors));
+  const factor = rules.lootFactor(now);
+  const stock: Dict = {};
+  for (const [r, n] of Object.entries(rules.loot(camp.level))) stock[r] = Math.floor(n * factor);
+  out.loot = carried(stock, rules.carry(out.survivors));
   camp.rebuilt_at = now + rules.rebuildTime(camp.level);
   camp.defeats += 1;
   if (camp.defeats >= rules.defeatsNeeded(camp.level) && camp.level < rules.maxLevel) {

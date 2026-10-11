@@ -21,6 +21,8 @@ export class BaronRules {
   rebuildBase = 300;
   rebuildPerLevel = 30;
   marchSpeed = 6;
+  /** Multiplies camp loot at a given time: timed events online (server/rules/events.ts). */
+  lootFactor: (t: number) => number = () => 1;
 
   constructor(data: Json) {
     this.maxLevel = Number(data.max_level ?? this.maxLevel);

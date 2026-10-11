@@ -16,6 +16,7 @@ var _party_status := ""
 var _news: Label
 var _news_left := 0.0
 var _alert: Label
+var _event: Label                ## online: the timed event on now, or the next one
 var _sieges := {}                ## castle id -> {"besieger", "until"} for sieges of your castles
 
 
@@ -125,7 +126,7 @@ func _ready() -> void:
 	_news.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
 	_news.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	_news.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	_news.offset_bottom = -24
+	_news.offset_bottom = -64 if Economy.online else -24
 	_news.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	add_child(_news)
 	EventBus.battle_fought.connect(_on_battle)
@@ -135,6 +136,19 @@ func _ready() -> void:
 		_news.text = "The server refused that: " + message if message != "" else "The server didn't answer."
 		_news_left = NEWS_TIME)
 	Economy.diplomacy_changed.connect(_on_diplomacy)
+	if Economy.online:
+		var banner := PanelContainer.new()
+		banner.add_theme_stylebox_override("panel", MenuStyle.panel(0.8, 10))
+		banner.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
+		banner.grow_horizontal = Control.GROW_DIRECTION_BOTH
+		banner.grow_vertical = Control.GROW_DIRECTION_BEGIN
+		banner.offset_bottom = -12
+		banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_event = Label.new()
+		_event.add_theme_font_size_override("font_size", 15)
+		_event.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		banner.add_child(_event)
+		add_child(banner)
 	_alert = Label.new()
 	_alert.add_theme_color_override("font_color", Color(1.0, 0.5, 0.38))
 	_alert.add_theme_color_override("font_outline_color", Color(0.12, 0.05, 0.03))
@@ -197,6 +211,8 @@ func _process(delta: float) -> void:
 				alerts.append("%s's army reaches your castle in %s" % [r.attacker_name,
 						_clock(float(r.arrive) - Economy.now())])
 	_alert.text = "\n".join(alerts)
+	if _event != null:
+		_show_event()
 	if not visible:
 		return
 	_resources.show_castle(Economy.player_castle, Economy.troops_away() if not Economy.marches.is_empty() or not Economy.aid.is_empty() else 0)
@@ -207,6 +223,23 @@ func _process(delta: float) -> void:
 		_info.text = "Online as %s" % Online.email + shield + "\nClick: pick your castle, another player's or a robber baron camp    C: your castle    L: leaderboard    G: alliance    Enter: chat\nWASD / drag: pan    Q E / right-drag: rotate    wheel: zoom\nM: parchment map    Home: recentre    F1: hide    Esc: menu\nzoom %d%%    %d fps" % [int(_zoom_t * 100.0), Engine.get_frames_per_second()]
 		return
 	_info.text = "Click: travel there, or pick a castle or party    F: find your party    C: your castle    K: diplomacy\nWASD / drag: pan    Q E / right-drag: rotate    wheel: zoom\nM: parchment map    Home: recentre    F1: hide    Esc: menu\nYour party: %s\nzoom %d%%    %d fps" % [_party_status, int(_zoom_t * 100.0), Engine.get_frames_per_second()]
+
+
+func _show_event() -> void:
+	## The banner: the timed event on now and how long it lasts, else the next one.
+	var on := Economy.events_on()
+	var banner := _event.get_parent() as Control
+	if not on.is_empty():
+		var e: Dictionary = on[0]
+		_event.text = "%s: %s  Ends in %s" % [e.name, e.description, _days(float(e.end) - Economy.now())]
+		_event.add_theme_color_override("font_color", MenuStyle.GOLD)
+		banner.visible = true
+		return
+	var next := Economy.next_event()
+	banner.visible = not next.is_empty()
+	if not next.is_empty():
+		_event.text = "Next event: %s in %s" % [next.name, _days(float(next.start) - Economy.now())]
+		_event.add_theme_color_override("font_color", MenuStyle.MUTED)
 
 
 func _update_alliance_button() -> void:
@@ -228,6 +261,13 @@ func _bar_button(text: String, action: Callable) -> Button:
 static func _clock(seconds: float) -> String:
 	var s := maxi(0, ceili(seconds))
 	return "%d:%02d" % [s / 60, s % 60]
+
+
+static func _days(seconds: float) -> String:
+	var m := maxi(0, ceili(seconds / 60.0))
+	if m >= 1440:
+		return "%dd %02dh" % [m / 1440, (m % 1440) / 60]
+	return _hours(seconds)
 
 
 static func _hours(seconds: float) -> String:

@@ -85,11 +85,11 @@ func _refresh() -> void:
 		lines.append("    %d %s" % [garrison[unit], Economy.rules.unit_plural(unit)])
 	var wall := Battle.wall_from_defense(br.palisade(camp.level))
 	lines.append("Palisade: defenders +%d%% defence" % roundi((wall - 1.0) * 100.0))
-	var loot := br.loot(camp.level)
+	var loot := Economy.baron_loot(camp.level)
 	var parts: PackedStringArray = []
 	for r: String in loot:
 		parts.append("%d %s" % [loot[r], r])
-	lines.append("Loot: " + ", ".join(parts))
+	lines.append("Loot: " + ", ".join(parts) + Economy.loot_bonus_note())
 	lines.append("March: %s each way" % _clock(Economy.march_time_to(camp)))
 	if not camp.is_ready(now):
 		lines.append("Rebuilding for %s" % _clock(camp.rebuilt_at - now))

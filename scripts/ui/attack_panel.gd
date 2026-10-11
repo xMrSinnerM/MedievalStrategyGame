@@ -158,11 +158,11 @@ func _describe_camp(camp: BaronCamp) -> void:
 		lines.append("%d %s" % [garrison[unit], Economy.rules.unit_plural(unit)])
 	var wall := Battle.wall_from_defense(br.palisade(camp.level))
 	lines.append("Palisade: +%d%% defence" % roundi((wall - 1.0) * 100.0))
-	var loot := br.loot(camp.level)
+	var loot := Economy.baron_loot(camp.level)
 	var parts: PackedStringArray = []
 	for r: String in loot:
 		parts.append("%d %s" % [loot[r], r])
-	lines.append("Loot: " + ", ".join(parts))
+	lines.append("Loot: " + ", ".join(parts) + Economy.loot_bonus_note())
 	_enemy.text = "\n".join(lines)
 
 
@@ -231,7 +231,7 @@ func _update() -> void:
 		lines.append("Sending %d soldiers: %s (%d%%), losing about %d" % [total, Battle.odds_text(chance),
 				roundi(chance * 100.0), roundi(float(lost) / SAMPLES)])
 		var loot_total := 0
-		var loot := br.loot(camp.level)
+		var loot := Economy.baron_loot(camp.level)
 		for r: String in loot:
 			loot_total += int(loot[r])
 		var carry := br.carry(army)

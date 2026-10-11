@@ -30,6 +30,8 @@ signal chat_changed(error: String)
 signal aid_changed
 ## Online: news about help between allies, as a sentence (a cart arrived, your defenders fought).
 signal aid_news(text: String)
+## Online: the server sent the timed events on now and next (see `events`).
+signal events_changed
 
 ## Games are kept in SLOTS save slots under save_dir (slot_1.json ...).
 const SLOTS := 3
@@ -129,6 +131,10 @@ const CHAT_KEPT := 150
 var aid: Array = []
 ## Helping allies (data/aid.json): carry_per_keep_level, station_hours.
 var aid_rules := {}
+## Online: timed events as the server last sent them: {"active": [...],
+## "upcoming": [...]}, each {"id", "name", "description", "effects", "start",
+## "end"} in Unix seconds (data/events.json).
+var events := {}
 
 var _seen_report := 0          ## newest server battle report already shown
 var _poll_timer := 0.0
@@ -741,6 +747,7 @@ func begin_online(answer: Dictionary) -> void:
 	chat_loaded = false
 	_chat_timer = 0.0
 	aid = []
+	events = {}
 	protected_until = 0.0
 	if pvp.is_empty():
 		pvp = get_node("/root/GameData").load_json("res://data/pvp.json")
@@ -791,6 +798,9 @@ func apply_server(answer: Dictionary) -> void:
 	if answer.has("aid"):
 		aid = answer.aid
 		aid_changed.emit()
+	if answer.get("events") is Dictionary:
+		events = answer.events
+		events_changed.emit()
 	var fresh_reports: Array = []
 	for r in answer.get("reports", []):
 		if int(r.get("id", 0)) > _seen_report:
@@ -1010,6 +1020,60 @@ func set_alliance(view: Dictionary, error: String) -> void:
 		get_node("/root/Online").order({"action": "chat", "after": 0})
 		chat_changed.emit("")
 	alliance_changed.emit(error)
+
+
+# --- Online: timed events ---------------------------------------------------------------
+
+func events_on() -> Array:
+	## The timed events on now (by the server's clock), even if one began
+	## since the server's last answer.
+	var t := now()
+	var out: Array = []
+	for e: Dictionary in events.get("active", []) + events.get("upcoming", []):
+		if float(e.get("start", 0.0)) <= t and t < float(e.get("end", 0.0)):
+			out.append(e)
+	return out
+
+
+func next_event() -> Dictionary:
+	## The next timed event to begin ({} if none is known).
+	var t := now()
+	var best := {}
+	for e: Dictionary in events.get("upcoming", []):
+		if float(e.start) > t and (best.is_empty() or float(e.start) < float(best.start)):
+			best = e
+	return best
+
+
+func event_effect(effect: String) -> float:
+	## The product of an effect over the events on now (1.0 when none, and offline).
+	var factor := 1.0
+	if online:
+		for e: Dictionary in events_on():
+			factor *= float(e.get("effects", {}).get(effect, 1.0))
+	return factor
+
+
+func baron_loot(level: int) -> Dictionary:
+	## What a camp of this level drops now, with any event bonus (as the server works it out).
+	var loot := baron_rules.loot(level)
+	var factor := event_effect("baron_loot")
+	if factor != 1.0:
+		for r: String in loot:
+			loot[r] = floori(int(loot[r]) * factor)
+	return loot
+
+
+func loot_bonus_note() -> String:
+	## " (+50% Plunder Weekend)" while an event raises baron loot, else "".
+	var factor := event_effect("baron_loot")
+	if factor == 1.0:
+		return ""
+	var names: PackedStringArray = []
+	for e: Dictionary in events_on():
+		if e.get("effects", {}).has("baron_loot"):
+			names.append(String(e.name))
+	return " (%+d%% %s)" % [roundi((factor - 1.0) * 100.0), ", ".join(names)]
 
 
 # --- Online: helping allies ------------------------------------------------------------

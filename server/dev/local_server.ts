@@ -7,12 +7,14 @@
 //   START_TROOPS='{"spearman":60}' node server/dev/local_server.ts   (castles start with soldiers)
 //   PROTECTION_HOURS=0 node server/dev/local_server.ts              (no beginner protection)
 //   START_KEEP=2 START_RESOURCES='{"gold":1000}' node server/dev/local_server.ts   (bigger starting castles)
+//   EVENTS_OFFSET_HOURS=30 node server/dev/local_server.ts         (timed events as if 30 hours later)
 //   godot --path . -- --online-url=http://127.0.0.1:54321
 
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { makeRules } from "../rules/load.ts";
+import { effectAt, eventsView, type EventRules } from "../rules/events.ts";
 import {
   act, castleLevel, checkName, fightRaid, isProtected, might, newPlayer, pickSpot, spyReport,
   type PlayerState, type PvpRules, type Raid, type Target, type World,
@@ -30,6 +32,10 @@ const world: World = json("server/world/world.json");
 const pvp: PvpRules = json("data/pvp.json");
 const allianceRules: AllianceRules = json("data/alliances.json");
 const aidRules: AidRules = json("data/aid.json");
+const eventRules: EventRules = json("data/events.json");
+// For testing: run the event calendar this many hours ahead, to see an event on.
+const EVENTS_OFFSET = Number(process.env.EVENTS_OFFSET_HOURS ?? 0) * 3600;
+rules.barons.lootFactor = (t) => effectAt(eventRules, t + EVENTS_OFFSET, "baron_loot");
 // For testing: hours of beginner protection for new castles (data/pvp.json's by default).
 if (process.env.PROTECTION_HOURS !== undefined) pvp.protection_hours = Number(process.env.PROTECTION_HOURS);
 const PORT = Number(process.env.PORT ?? 54321);
@@ -110,7 +116,14 @@ function view(user: string, state: PlayerState, extra: Record<string, unknown> =
     });
   const helping = aid.filter((a) => (a.sender === user || a.receiver === user) && a.state === "out")
     .sort((a, b) => a.arrive - b.arrive).map(({ sender, receiver: _r, state: _s, ...a }) => ({ ...a, mine: sender === user }));
-  return { ok: true, now: now(), ...extra, player: state, raids: moving, aid: helping, reports: mine };
+  return { ok: true, now: now(), ...extra, player: state, raids: moving, aid: helping, reports: mine,
+    events: shifted(eventsView(eventRules, now() + EVENTS_OFFSET)) };
+}
+
+/** The event view with times moved back from the shifted calendar to the real clock. */
+function shifted(v: ReturnType<typeof eventsView>) {
+  const back = (e: { start: number; end: number }) => ({ ...e, start: e.start - EVENTS_OFFSET, end: e.end - EVENTS_OFFSET });
+  return { active: v.active.map(back), upcoming: v.upcoming.map(back) };
 }
 
 function report(user: string, r: { at: number }) {

@@ -391,6 +391,14 @@ Allied defenders in your own castle show when you click it, and a battle
 report says when they fought for you. Helping costs only what you send, so
 it can't be bought.
 
+### Timed events
+
+Online, a banner at the bottom of the map shows the event that's on and how
+long it lasts, or the next one. Events follow a weekly calendar in UTC, the
+same for everyone (`data/events.json`). The first is the Plunder Weekend,
+Friday 18:00 to Monday 00:00 UTC: robber barons drop 50% more loot, and the
+camp and attack panels show the bonus.
+
 ## Project layout
 
 ```
@@ -479,6 +487,7 @@ How the parts work:
 - [x] Alliances
 - [x] Chat (world and alliance)
 - [x] Helping allies: sending resources and soldiers
+- [ ] Timed events: weekend loot bonus (done), baron invasions, event rewards
 
 ## Known limitations
 
