@@ -1,0 +1,6 @@
+{
+	"_comment": "Alliances online. Founding one costs found_cost and needs your keep at found_keep or higher; an alliance holds up to max_members players. Names are 3 to 24 characters, tags 2 to 4 letters or numbers. Members can't attack or spy on each other.",
+	"found_cost": { "gold": 300 },
+	"found_keep": 2,
+	"max_members": 30
+}

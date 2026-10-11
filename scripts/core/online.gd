@@ -142,6 +142,10 @@ func _run_queue() -> void:
 			latest = answer
 		if answer.has("players"):
 			Economy.set_others(answer.players)
+		if answer.get("result") is Dictionary and answer.result.has("alliances"):
+			Economy.set_alliance(answer.result, String(answer.get("error", "")))
+		if answer.get("result") is Dictionary and answer.result.get("chat") is Dictionary:
+			Economy.set_chat(answer.result.chat, String(answer.get("error", "")))
 		if not refused:
 			Economy.take_order_result(body, answer)
 		if not latest.is_empty() and (refused or _queue.is_empty()):

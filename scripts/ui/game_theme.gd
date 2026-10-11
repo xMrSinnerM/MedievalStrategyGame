@@ -149,6 +149,11 @@ static func build() -> Theme:
 	for type in ["CheckBox", "CheckButton"]:
 		for state in ["normal", "hover", "pressed", "hover_pressed", "focus"]:
 			t.set_stylebox(state, type, StyleBoxEmpty.new())
+	t.set_icon("unchecked", "CheckBox", Icons.get_icon("box", 20))
+	t.set_icon("checked", "CheckBox", Icons.get_icon("box_ticked", 20))
+	t.set_icon("unchecked_disabled", "CheckBox", Icons.get_icon("box", 20))
+	t.set_icon("checked_disabled", "CheckBox", Icons.get_icon("box_ticked", 20))
+	t.set_constant("h_separation", "CheckBox", 8)
 	return t
 
 

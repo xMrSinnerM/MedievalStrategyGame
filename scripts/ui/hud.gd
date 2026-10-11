@@ -5,10 +5,12 @@ extends CanvasLayer
 ## F1 hides it.
 
 const NEWS_TIME := 7.0
+const ChatBox := preload("res://scripts/ui/chat_box.gd")
 const TOP := 66.0                ## panels start below the resource bar
 
 var _info: Label
 var _resources: ResourceBar
+var _alliance_button: Button
 var _zoom_t := 0.0
 var _party_status := ""
 var _news: Label
@@ -33,7 +35,10 @@ func _ready() -> void:
 	row.add_child(spacer)
 	var diplomacy := preload("res://scripts/ui/diplomacy_panel.gd").new()
 	var leaderboard := preload("res://scripts/ui/leaderboard_panel.gd").new()
+	var alliance := preload("res://scripts/ui/alliance_panel.gd").new()
 	if Economy.online:
+		_alliance_button = _bar_button("Alliance (G)", alliance.toggle)
+		row.add_child(_alliance_button)
 		row.add_child(_bar_button("Leaderboard (L)", leaderboard.toggle))
 	else:
 		row.add_child(_bar_button("Diplomacy (K)", diplomacy.toggle))
@@ -84,6 +89,20 @@ func _ready() -> void:
 	leaderboard.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	leaderboard.grow_vertical = Control.GROW_DIRECTION_BOTH
 	add_child(leaderboard)
+	alliance.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	alliance.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	alliance.grow_vertical = Control.GROW_DIRECTION_BOTH
+	add_child(alliance)
+	if Economy.online:
+		Economy.alliance_changed.connect(func(_error: String) -> void: _update_alliance_button())
+	var chat: ChatBox = null
+	if Economy.online:
+		chat = ChatBox.new()
+		chat.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
+		chat.grow_vertical = Control.GROW_DIRECTION_BEGIN
+		chat.offset_left = 12
+		chat.offset_bottom = -12
+		add_child(chat)
 	var attack := preload("res://scripts/ui/attack_panel.gd").new()
 	attack.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 	attack.grow_horizontal = Control.GROW_DIRECTION_BOTH
@@ -102,7 +121,7 @@ func _ready() -> void:
 	add_child(_news)
 	EventBus.battle_fought.connect(_on_battle)
 	Online.order_failed.connect(func(message: String) -> void:
-		if not is_inside_tree() or not visible:
+		if not is_inside_tree() or not visible or alliance.visible or (chat != null and chat.is_open()):
 			return
 		_news.text = "The server refused that: " + message if message != "" else "The server didn't answer."
 		_news_left = NEWS_TIME)
@@ -176,9 +195,15 @@ func _process(delta: float) -> void:
 		var shield := ""
 		if Economy.is_protected():
 			shield = "    Beginner protection: %s left (ends if you attack a player)" % _hours(Economy.protected_until - Economy.now())
-		_info.text = "Online as %s" % Online.email + shield + "\nClick: pick your castle, another player's or a robber baron camp    C: your castle    L: leaderboard\nWASD / drag: pan    Q E / right-drag: rotate    wheel: zoom\nM: parchment map    Home: recentre    F1: hide    Esc: menu\nzoom %d%%    %d fps" % [int(_zoom_t * 100.0), Engine.get_frames_per_second()]
+		_info.text = "Online as %s" % Online.email + shield + "\nClick: pick your castle, another player's or a robber baron camp    C: your castle    L: leaderboard    G: alliance    Enter: chat\nWASD / drag: pan    Q E / right-drag: rotate    wheel: zoom\nM: parchment map    Home: recentre    F1: hide    Esc: menu\nzoom %d%%    %d fps" % [int(_zoom_t * 100.0), Engine.get_frames_per_second()]
 		return
 	_info.text = "Click: travel there, or pick a castle or party    F: find your party    C: your castle    K: diplomacy\nWASD / drag: pan    Q E / right-drag: rotate    wheel: zoom\nM: parchment map    Home: recentre    F1: hide    Esc: menu\nYour party: %s\nzoom %d%%    %d fps" % [_party_status, int(_zoom_t * 100.0), Engine.get_frames_per_second()]
+
+
+func _update_alliance_button() -> void:
+	## Invitations to you, or players asking to join your alliance, show as a count.
+	var waiting: int = Economy.alliance.get("invites", []).size() + Economy.alliance.get("requests", []).size()
+	_alliance_button.text = "Alliance (G)" if waiting == 0 else "Alliance (G)  %d new" % waiting
 
 
 func _bar_button(text: String, action: Callable) -> Button:

@@ -32,14 +32,18 @@ godot --headless --path . --script res://tests/dump_server_fixtures.gd
 
 - `supabase/migrations/`: the database. `players` holds each player's castle,
   robber baron camps and marches as JSON, `reports` their battle reports,
-  `raids` the armies players send against each other.
+  `raids` the armies players send against each other, `alliances` and
+  `alliance_pending` (invitations and requests to join) the alliances, and
+  `chat_messages` the world and alliance chat.
   Players can read their own rows only; nobody but the game server can write.
 - `supabase/functions/game/`: the game server, one Edge Function. `index.ts`
   checks who is signed in, loads their row, and `game.ts` runs their world up
   to the server's clock and carries out the order. Orders: `join`, `state`,
   `place`, `upgrade`, `cancel`, `move`, `recruit`, `cancel_training`, `attack`,
   `attack_player`, `spy`, `world` for the other players' castles and
-  `leaderboard` (see the top of `index.ts`).
+  `leaderboard`, and the alliance orders (see the top of `index.ts`).
+  `alliances.ts` holds the alliance rules behind a store, and
+  `alliance_store.ts` keeps them in the database.
 - `world/world.json`: the robber baron camps and the spots where players'
   castles can stand, written by `scripts/tools/export_server_world.gd`
   because the server can't read the terrain.
@@ -60,6 +64,20 @@ The leaderboard ranks castles by might (10 per building level and 1 per
 soldier at home, in `data/pvp.json`) and shows the robber baron camps each
 player has beaten. The server works both out each time it saves a castle.
 
+Alliances cost gold to found (`found_alliance`, paid from the castle like any
+other order) and need keep level 2 (`data/alliances.json`). The other
+alliance orders (`alliance`, `join_alliance`, `invite`, `answer_request`,
+`set_role`, `kick`, `leave_alliance`, `disband_alliance` and the rest) answer
+with the alliance screen's view. The map and the leaderboard carry each
+player's tag, and the server refuses spies and attacks on your own alliance.
+
+Chat (`chat.ts`, kept in the database by `chat_store.ts`) has a world channel
+and one per alliance. `chat` returns the messages newer than `after` that you
+may read (the newest 50 at most), and `chat_send` sends one to `world` or
+`alliance` first. Messages are cleaned of line breaks and control
+characters, are at most 200 characters, need 2 seconds between them, and
+are deleted after three days.
+
 To deploy changes with the Supabase CLI, from the repository root:
 
 ```
@@ -79,4 +97,6 @@ godot --path . -- --online-url=http://127.0.0.1:54321
 ```
 
 Set `START_TROOPS='{"spearman":60}'` to give new castles soldiers, so you can
-attack a camp straight away.
+attack a camp straight away. `START_RESOURCES='{"gold":800}'` and
+`START_KEEP=2` do the same for resources and the keep's level, for trying
+alliances.
