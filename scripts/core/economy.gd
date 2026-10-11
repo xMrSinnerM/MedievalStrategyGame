@@ -1028,6 +1028,23 @@ func send_raid(player_name: String, army: Dictionary, waves: Array = []) -> Stri
 	return ""
 
 
+func set_layout(castle: CastleState, layout: Dictionary) -> String:
+	## Sets how a castle's defenders spread over its walls and courtyard
+	## (percentages, see Battle.siege()). Returns "" or why not.
+	var why := Battle.check_layout(layout)
+	if why != "":
+		return why
+	var clean := {}
+	for key: String in Battle.DEFAULT_LAYOUT:
+		clean[key] = int(layout[key])
+	castle.layout = clean
+	if online and castle == player_castle:
+		get_node("/root/Online").order({"action": "set_layout", "layout": clean})
+	save_game()
+	changed.emit()
+	return ""
+
+
 func max_waves() -> int:
 	## How many waves your keep lets you send in one attack.
 	return Battle.waves_for_keep(player_castle.keep_level())
