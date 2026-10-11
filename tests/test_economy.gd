@@ -34,6 +34,7 @@ func _initialize() -> void:
 	test_baron_camp()
 	test_baron_placer()
 	test_marches()
+	test_march_waves()
 	print("%d checks, %d failed" % [checks, failures])
 	quit(1 if failures > 0 else 0)
 
@@ -725,6 +726,48 @@ func test_marches() -> void:
 	eco.begin_load(1)
 	check(eco.marches.is_empty() and reports.size() == 1, "a trip that ended while away is settled on loading")
 	check(eco.player_castle.troop_count() > 0 and eco.player_castle.troop_count() <= 300, "and the army is home")
+	eco.delete_slot(1)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://test_saves"))
+	eco.free()
+
+
+func test_march_waves() -> void:
+	var eco = load("res://scripts/core/economy.gd").new()
+	eco.save_dir = "user://test_saves"
+	eco.begin_new(1)
+	eco.castle_positions[eco.MAIN_CASTLE] = Vector2(0, 0)
+	eco.sync_barons([{"id": "near", "name": "Near", "position": [60, 0]}])
+	eco.player_castle.troops = {"spearman": 30, "archer": 10}
+	check(eco.max_waves() == 1, "a level 1 keep sends one wave")
+	var two := [{"left": {"spearman": 5}}, {"front": {"spearman": 5}}]
+	check(eco.send_attack("near", {}, two) == "Upgrade your keep to send more than one wave.", "not two")
+	check(eco.send_attack("near", {}, [{"left": {"spearman": 40}}]) != "", "nor more soldiers than the garrison holds")
+	check(eco.send_attack("near", {}, [{"moat": {"spearman": 5}}]) == "Bad waves.", "nor at a wall that isn't there")
+	var reports: Array = []
+	eco.attack_resolved.connect(func(r: Dictionary) -> void: reports.append(r))
+	var waves := [{"left": {"spearman": 25, "archer": 10}}]
+	check(eco.send_attack("near", {}, waves) == "", "one wave at the left wall sets out")
+	var m: Dictionary = eco.marches[0]
+	check(m.army == {"spearman": 25, "archer": 10} and m.waves == waves, "the march keeps the army and its waves")
+	check(eco.player_castle.troops.spearman == 5, "and the soldiers leave the garrison")
+	eco.save_game()
+	eco.begin_load(1)
+	check(eco.marches.size() == 1 and eco.marches[0].waves.size() == 1, "the waves are saved")
+	eco.advance_marches(float(eco.marches[0].arrive) + 1.0)
+	check(reports.size() == 1, "the army fights on arrival")
+	var walls: Dictionary = reports[0].walls
+	check(walls.left.fights.size() == 1 and walls.front.fights.is_empty() and walls.right.fights.is_empty(),
+			"only the left wall is stormed")
+	var panel: GDScript = load("res://scripts/ui/attack_panel.gd")
+	var spread: Array = panel.spread({"spearman": 10, "archer": 3}, 3, Battle.ATTACK_SPLIT)
+	check(spread.size() == 3 and Battle.waves_army(spread) == {"spearman": 10, "archer": 3}, "Auto spreads every soldier over the waves")
+	var report: GDScript = load("res://scripts/ui/battle_report.gd")
+	check(report.wall_result({"broken": false, "fights": []}) == "Not attacked", "an unattacked wall")
+	check(report.wall_result({"broken": true, "fights": [{"wave": 0, "winner": "b"}, {"wave": 1, "winner": "a"}]}) == "Broken in wave 2",
+			"a wall broken by the second wave")
+	check(report.wall_result({"broken": true, "fights": [{"wave": 0, "open": true}]}) == "Undefended", "an empty wall")
+	check(report.courtyard_result({}, true) == "Not reached" and report.courtyard_result({"winner": "b"}, false) == "Held",
+			"the courtyard, seen from either side")
 	eco.delete_slot(1)
 	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://test_saves"))
 	eco.free()

@@ -10,6 +10,7 @@ const LOSS := Color(0.95, 0.45, 0.35)
 var _title: Label
 var _place: Label
 var _grid: GridContainer
+var _walls: GridContainer      ## how each wall and the courtyard went, for sieges in waves
 var _footer: Label
 
 
@@ -31,6 +32,11 @@ func _ready() -> void:
 	_grid.add_theme_constant_override("h_separation", 18)
 	_grid.add_theme_constant_override("v_separation", 4)
 	box.add_child(_grid)
+	_walls = GridContainer.new()
+	_walls.columns = 4
+	_walls.add_theme_constant_override("h_separation", 18)
+	_walls.add_theme_constant_override("v_separation", 4)
+	box.add_child(_walls)
 	_footer = _label(15, TEXT)
 	_footer.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(_footer)
@@ -132,6 +138,7 @@ func show_baron_report(report: Dictionary) -> void:
 		_title.add_theme_color_override("font_color", MUTED)
 		_place.text = "%s was still in ashes when your army arrived." % report.defender
 		_clear_grid()
+		_fill_walls({}, true)
 		_footer.text = "Your army is marching home."
 		visible = true
 		return
@@ -185,6 +192,66 @@ func _add_siege_line(report: Dictionary, attacking: bool) -> void:
 	var line := siege_line(report, attacking)
 	if line != "":
 		_footer.text = line + "\n" + _footer.text
+	_fill_walls(report, attacking)
+
+
+func _fill_walls(report: Dictionary, attacking: bool) -> void:
+	## One row per wall and the courtyard: what happened there and who fell.
+	for child in _walls.get_children():
+		_walls.remove_child(child)
+		child.queue_free()
+	var walls: Dictionary = report.get("walls", {})
+	_walls.visible = not walls.is_empty()
+	if walls.is_empty():
+		return
+	var me := "a" if attacking else "b"
+	var them := "b" if attacking else "a"
+	for text in ["", "", "Yours fell", "Theirs fell"]:
+		_walls.add_child(_label(14, MUTED, text))
+	for w: String in Battle.WALLS:
+		var wall: Dictionary = walls.get(w, {})
+		var lost := [0, 0]
+		for f: Dictionary in wall.get("fights", []):
+			if f.has("winner"):
+				lost[0] += Battle.lost_count(f[me])
+				lost[1] += Battle.lost_count(f[them])
+		_wall_row("%s wall" % w.capitalize(), wall_result(wall), lost)
+	var yard: Dictionary = report.get("courtyard", {})
+	var lost := [0, 0]
+	if yard.has("winner"):
+		lost = [Battle.lost_count(yard[me]), Battle.lost_count(yard[them])]
+	_wall_row("Courtyard", courtyard_result(yard, attacking), lost)
+
+
+func _wall_row(place: String, result: String, lost: Array) -> void:
+	_walls.add_child(_label(15, TEXT, place))
+	_walls.add_child(_label(15, MUTED, result))
+	for k in 2:
+		_walls.add_child(_cell(int(lost[k]), true))
+
+
+static func wall_result(wall: Dictionary) -> String:
+	var fights: Array = wall.get("fights", [])
+	if fights.is_empty():
+		return "Not attacked"
+	if not wall.get("broken", false):
+		return "Held"
+	for f: Dictionary in fights:
+		if f.get("open", false):
+			return "Undefended" if f == fights[0] else "Broken in wave %d" % (int(f.wave) + 1)
+		if f.get("winner", "") == "a":
+			return "Broken in wave %d" % (int(f.wave) + 1)
+	return "Broken"
+
+
+static func courtyard_result(yard: Dictionary, attacking: bool) -> String:
+	if yard.is_empty():
+		return "Not reached"
+	if yard.get("open", false):
+		return "Empty"
+	if yard.get("winner", "") == "a":
+		return "Won" if attacking else "Lost"
+	return "Lost" if attacking else "Held"
 
 
 static func siege_line(report: Dictionary, attacking: bool) -> String:
