@@ -5,7 +5,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { makeRules } from "../rules/load.ts";
-import { act, checkName, newPlayer, type World } from "../../supabase/functions/game/game.ts";
+import { act, castleLevel, checkName, newPlayer, pickSpot, type World } from "../../supabase/functions/game/game.ts";
 
 const root = new URL("../../", import.meta.url);
 const json = (path: string) => JSON.parse(readFileSync(new URL(path, root), "utf8"));
@@ -82,4 +82,28 @@ test("an attack goes out, comes back and is reported once", () => {
   assert.equal(out.state.marches.length, 0);
   out = act(rules, out.state, { action: "state" }, back + 2);
   assert.equal(out.reports.length, 0, "no second report");
+});
+
+test("new players get free spots, and camp levels count from their spot", () => {
+  assert.deepEqual(world.spots[0], world.home);
+  assert.ok(world.spots.length > 100);
+  // At the game's own castle spot the camps start at the levels the game gives them.
+  const first = newPlayer(rules, world, "First", T0);
+  assert.deepEqual(first.camps.map((c) => c.level), world.camps.map((c) => c.level));
+  const taken: [number, number][] = [];
+  for (let i = 0; i < world.spots.length; i++) {
+    const spot = pickSpot(world, taken);
+    assert.ok(spot !== null);
+    assert.ok(!taken.some(([x, y]) => x === spot[0] && y === spot[1]));
+    taken.push(spot);
+  }
+  assert.equal(pickSpot(world, taken), null);
+  const far = world.spots.reduce((a, b) => (Math.hypot(b[0] - world.home[0], b[1] - world.home[1]) >
+    Math.hypot(a[0] - world.home[0], a[1] - world.home[1]) ? b : a));
+  const p = newPlayer(rules, world, "Faraway", T0, far);
+  assert.deepEqual([p.home_x, p.home_y], far);
+  const nearest = p.camps.reduce((a, b) => (Math.hypot(b.position[0] - far[0], b.position[1] - far[1]) <
+    Math.hypot(a.position[0] - far[0], a.position[1] - far[1]) ? b : a));
+  assert.equal(nearest.level, 1);
+  assert.equal(castleLevel(p.castle), 1);
 });

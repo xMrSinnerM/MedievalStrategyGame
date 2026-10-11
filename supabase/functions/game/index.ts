@@ -3,8 +3,9 @@
 // runs their world up to the server's clock, carries out the order and saves
 // the result, so the game never decides anything itself.
 //
-// POST { "action": "join", "name": "..." }       create your castle
+// POST { "action": "join", "name": "..." }       create your castle on a free spot
 // POST { "action": "state" }                     your castle, camps, marches and reports
+// POST { "action": "world" }                     other players: name, spot and level
 // POST { "action": "place", "type", "cell": [x, y] }
 // POST { "action": "upgrade" | "cancel", "id" }
 // POST { "action": "move", "id", "cell": [x, y] }
@@ -19,7 +20,7 @@ import units from "../../../data/units.json" with { type: "json" };
 import barons from "../../../data/barons.json" with { type: "json" };
 import world from "../../../server/world/world.json" with { type: "json" };
 import { makeRules } from "../../../server/rules/load.ts";
-import { act, checkName, newPlayer, type PlayerState, type World } from "./game.ts";
+import { act, castleLevel, checkName, newPlayer, pickSpot, type PlayerState, type World } from "./game.ts";
 
 const rules = makeRules(buildings, units, barons);
 const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, {
@@ -28,6 +29,7 @@ const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE
 const COLUMNS = "name, home_x, home_y, castle, camps, marches, next_march, version";
 const REPORTS_SHOWN = 20;
 const RETRIES = 4;
+const PLAYERS_SHOWN = 500;
 
 function reply(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -65,16 +67,28 @@ Deno.serve(async (req: Request) => {
   if (body.action === "join") {
     const why = checkName(body.name);
     if (why !== "") return reply({ ok: false, error: why });
-    const state = newPlayer(rules, world as World, String(body.name), now());
-    const { error } = await admin.from("players").insert({ user_id: userId, ...state, version: 1 });
-    if (error) {
-      if (error.code === "23505") {
-        const taken = error.message.includes("name");
-        return reply({ ok: false, error: taken ? "That name is taken." : "You already have a castle." });
-      }
-      return reply({ ok: false, error: "The server couldn't create your castle." }, 500);
+    // Another player may take the same spot at the same moment; then try another.
+    for (let attempt = 0; attempt < RETRIES; attempt++) {
+      const { data: homes, error: homesError } = await admin.from("players").select("home_x, home_y");
+      if (homesError) return reply({ ok: false, error: "The server couldn't create your castle." }, 500);
+      const spot = pickSpot(world as World, (homes ?? []).map((h) => [h.home_x, h.home_y] as [number, number]));
+      if (spot === null) return reply({ ok: false, error: "The world is full. Try again later." });
+      const state = newPlayer(rules, world as World, String(body.name), now(), spot);
+      const { error } = await admin.from("players").insert({ user_id: userId, ...state, level: castleLevel(state.castle), version: 1 });
+      if (!error) return reply(await view(userId, state));
+      if (error.code !== "23505") return reply({ ok: false, error: "The server couldn't create your castle." }, 500);
+      if (error.message.includes("players_home_key")) continue;
+      const taken = error.message.includes("name");
+      return reply({ ok: false, error: taken ? "That name is taken." : "You already have a castle." });
     }
-    return reply(await view(userId, state));
+    return reply({ ok: false, error: "The server is busy, try again." }, 503);
+  }
+
+  if (body.action === "world") {
+    const { data, error } = await admin.from("players").select("name, home_x, home_y, level")
+      .neq("user_id", userId).limit(PLAYERS_SHOWN);
+    if (error) return reply({ ok: false, error: "The server couldn't load the map." }, 500);
+    return reply({ ok: true, now: now(), error: "", players: data ?? [] });
   }
 
   for (let attempt = 0; attempt < RETRIES; attempt++) {
@@ -85,7 +99,7 @@ Deno.serve(async (req: Request) => {
     const outcome = act(rules, stored, body, now());
     // Save only if nobody else changed the row meanwhile; otherwise start over.
     const { data: saved, error: saveError } = await admin.from("players")
-      .update({ ...outcome.state, version: version + 1, updated_at: new Date().toISOString() })
+      .update({ ...outcome.state, level: castleLevel(outcome.state.castle), version: version + 1, updated_at: new Date().toISOString() })
       .eq("user_id", userId).eq("version", version).select("version");
     if (saveError) return reply({ ok: false, error: "The server couldn't save your castle." }, 500);
     if (!saved || saved.length === 0) continue;

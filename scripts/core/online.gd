@@ -131,14 +131,20 @@ func refresh() -> void:
 
 func _run_queue() -> void:
 	_busy = true
+	var latest := {}   # the newest answer carrying your castle, not applied yet
 	while not _queue.is_empty():
 		var body: Dictionary = _queue.pop_front()
 		var answer := await call_game(body)
 		var refused: bool = not answer.get("ok", false) or String(answer.get("error", "")) != ""
 		if refused:
 			order_failed.emit(String(answer.get("error", "")))
-		if answer.has("player") and (refused or _queue.is_empty()):
-			Economy.apply_server(answer)
+		if answer.has("player"):
+			latest = answer
+		if answer.has("players"):
+			Economy.set_others(answer.players)
+		if not latest.is_empty() and (refused or _queue.is_empty()):
+			Economy.apply_server(latest)
+			latest = {}
 	_busy = false
 
 

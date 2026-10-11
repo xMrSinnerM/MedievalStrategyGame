@@ -13,6 +13,8 @@ signal diplomacy_changed(news: Array)
 signal attack_resolved(report: Dictionary)
 ## An army set out, fought or came home.
 signal marches_changed
+## Online: the other players' castles changed (see `others`).
+signal others_changed
 
 ## Games are kept in SLOTS save slots under save_dir (slot_1.json ...).
 const SLOTS := 3
@@ -68,9 +70,15 @@ var online := false
 static var clock_offset := 0.0
 ## How often the online game asks the server for news, in seconds.
 const ONLINE_POLL := 20.0
+## How often it asks where the other players' castles are.
+const WORLD_POLL := 60.0
+
+## Online: the other players' castles, [{"name", "home_x", "home_y", "level"}].
+var others: Array = []
 
 var _seen_report := 0          ## newest server battle report already shown
 var _poll_timer := 0.0
+var _world_timer := 0.0
 var _asked_for := 0.0          ## march time we last asked the server about
 var _tick_timer := 0.0
 var _save_timer := 0.0
@@ -664,11 +672,14 @@ func begin_online(answer: Dictionary) -> void:
 		_seen_report = maxi(_seen_report, int(r.get("id", 0)))
 	_poll_timer = 0.0
 	_asked_for = 0.0
+	others = []
+	_world_timer = WORLD_POLL
 	apply_server(answer)
 
 
 func end_online() -> void:
 	online = false
+	others = []
 	_loaded = false
 	clock_offset = 0.0
 
@@ -743,6 +754,18 @@ func _process_online(delta: float) -> void:
 		if due > 0.0 and now() >= due:
 			_asked_for = due
 		get_node("/root/Online").refresh()
+	_world_timer += delta
+	if _world_timer >= WORLD_POLL:
+		_world_timer = 0.0
+		get_node("/root/Online").order({"action": "world"})
+
+
+func set_others(players: Array) -> void:
+	## The server's list of the other players' castles.
+	if not online:
+		return
+	others = players
+	others_changed.emit()
 
 
 func _next_march_event() -> float:
