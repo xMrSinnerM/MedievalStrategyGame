@@ -106,6 +106,12 @@ start). When the invasion is over, its camps leave once no army is marching
 to or from them. New castles are placed on spots with room for every
 invader camp first.
 
+`claim_reward` gives the invasion's next reward tier (`rewards` in
+`data/events.json`) when the player has its points; `event_claimed` counts
+the tiers taken. Points count for the invasion on now, or the last one until
+the next starts. `event_board` lists the players with the most points in
+that invasion and the asking player's rank.
+
 To deploy changes with the Supabase CLI, from the repository root:
 
 ```

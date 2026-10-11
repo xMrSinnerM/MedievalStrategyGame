@@ -404,8 +404,14 @@ invader camps (red banners) appear near every castle, the first at level 1
 plus 2 per keep level above 1 and each next one a level higher. Every win
 raises an invader camp a level and gives 10 event points per level it had,
 and a beaten camp is back after two minutes. The banner, the camp panel and
-the battle report show your points. The camps leave when the event ends;
-your points count for the event's rewards and leaderboard (next step).
+the battle report show your points. The camps leave when the event ends.
+
+The event screen (V, or the Events button) shows the week's events, the
+invasion's reward tiers and the players with the most points. Reach a tier's
+points to claim its resources or soldiers, in order, until the next invasion
+starts: 50, 150, 300, 600, 1000 and 2000 points. Rewards are earned only by
+playing; nothing can be bought. Resources go into your storage, and what
+doesn't fit is lost.
 
 ## Project layout
 
@@ -495,7 +501,7 @@ How the parts work:
 - [x] Alliances
 - [x] Chat (world and alliance)
 - [x] Helping allies: sending resources and soldiers
-- [ ] Timed events: weekend loot bonus (done), baron invasions (done), event rewards
+- [x] Timed events: weekend loot bonus, baron invasions, event rewards and leaderboard
 
 ## Known limitations
 

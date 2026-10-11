@@ -34,6 +34,8 @@ signal aid_news(text: String)
 signal events_changed
 ## Online: robber baron camps came or went (invader camps of a Baron Invasion).
 signal barons_changed
+## Online: the server sent the event leaderboard (see `event_board`).
+signal event_board_changed
 
 ## Games are kept in SLOTS save slots under save_dir (slot_1.json ...).
 const SLOTS := 3
@@ -140,6 +142,11 @@ var events := {}
 ## Online: the start of the last Baron Invasion you played in, and your event points in it.
 var event_key := 0.0
 var event_points := 0
+## Online: how many of that invasion's reward tiers you have claimed.
+var event_claimed := 0
+## Online: the event leaderboard as the server last sent it: {"event", "players":
+## [{"name", "points", "tag"}], "me", "rank", "total"}.
+var event_board := {}
 
 var _seen_report := 0          ## newest server battle report already shown
 var _poll_timer := 0.0
@@ -755,6 +762,8 @@ func begin_online(answer: Dictionary) -> void:
 	events = {}
 	event_key = 0.0
 	event_points = 0
+	event_claimed = 0
+	event_board = {}
 	protected_until = 0.0
 	if pvp.is_empty():
 		pvp = get_node("/root/GameData").load_json("res://data/pvp.json")
@@ -807,6 +816,7 @@ func apply_server(answer: Dictionary) -> void:
 		camps_moved = true
 	event_key = float(p.get("event_key", 0.0))
 	event_points = int(p.get("event_points", 0))
+	event_claimed = int(p.get("event_claimed", 0))
 	marches = p.get("marches", [])
 	_next_march = int(p.get("next_march", _next_march))
 	protected_until = float(p.get("protected_until", 0.0))
@@ -1099,6 +1109,71 @@ func invasion_points() -> int:
 	return event_points if not e.is_empty() and float(e.start) == event_key else 0
 
 
+func last_invasion() -> Dictionary:
+	## The Baron Invasion on now, or else the last one ({} if none is known).
+	var on := invasion()
+	if not on.is_empty():
+		return on
+	for e: Dictionary in events.get("upcoming", []):
+		if e.has("invasion"):
+			var last := e.duplicate()
+			last.start = float(e.start) - 7 * 86400.0
+			last.end = float(e.end) - 7 * 86400.0
+			return last
+	return {}
+
+
+func reward_tiers() -> Array:
+	## The Baron Invasion's reward tiers: [{"points", "resources", "troops"}].
+	return last_invasion().get("invasion", {}).get("rewards", [])
+
+
+func my_event_points() -> int:
+	## Your points in the last Baron Invasion (0 if you didn't play in it).
+	var last := last_invasion()
+	return event_points if not last.is_empty() and float(last.start) == event_key else 0
+
+
+func check_reward(tier: int) -> String:
+	## Why this reward tier can't be claimed now ("" if it can).
+	var tiers := reward_tiers()
+	if tier < 0 or tier >= tiers.size():
+		return "There's no such reward."
+	var claimed := event_claimed if my_event_points() > 0 else 0
+	if tier < claimed:
+		return "You already have that reward."
+	if tier > claimed:
+		return "Claim the rewards in order."
+	if my_event_points() < int(tiers[tier].points):
+		return "That reward needs %d event points." % int(tiers[tier].points)
+	return ""
+
+
+func claim_reward(tier: int) -> String:
+	## Asks the server for a reward tier; the castle shows it with the server's answer.
+	var why := check_reward(tier)
+	if why == "":
+		get_node("/root/Online").order({"action": "claim_reward", "tier": tier})
+	return why
+
+
+func ask_event_board() -> void:
+	## Asks the server for the event leaderboard; it arrives with event_board_changed.
+	get_node("/root/Online").order({"action": "event_board"})
+
+
+func reward_text(tier: Dictionary) -> String:
+	## "300 wood, 300 stone" or "20 Spearmen".
+	var parts: PackedStringArray = []
+	var res: Dictionary = tier.get("resources", {})
+	for r: String in res:
+		parts.append("%d %s" % [int(res[r]), r])
+	var troops: Dictionary = tier.get("troops", {})
+	for unit: String in troops:
+		parts.append("%d %s" % [int(troops[unit]), rules.unit_plural(unit) if rules.has_unit(unit) else unit])
+	return ", ".join(parts)
+
+
 func loot_bonus_note() -> String:
 	## " (+50% Plunder Weekend)" while an event raises baron loot, else "".
 	var factor := event_effect("baron_loot")
@@ -1281,10 +1356,14 @@ func set_chat(view: Dictionary, error: String) -> void:
 
 
 func take_order_result(body: Dictionary, answer: Dictionary) -> void:
-	## Extra answers to orders: what a spy saw, the leaderboard.
+	## Extra answers to orders: what a spy saw, the leaderboards.
 	if body.get("action", "") == "leaderboard" and answer.get("result") is Dictionary:
 		leaderboard = answer.result
 		leaderboard_changed.emit()
+		return
+	if body.get("action", "") == "event_board" and answer.get("result") is Dictionary:
+		event_board = answer.result
+		event_board_changed.emit()
 		return
 	if body.get("action", "") == "spy" and answer.get("result") is Dictionary:
 		var seen: Dictionary = answer.result

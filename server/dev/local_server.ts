@@ -14,7 +14,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { makeRules } from "../rules/load.ts";
-import { effectAt, eventsView, type EventRules } from "../rules/events.ts";
+import { effectAt, eventsView, lastInvasion, type EventRules } from "../rules/events.ts";
 import {
   act, castleLevel, checkName, fightRaid, isProtected, might, newPlayer, pickSpot, spyReport,
   type PlayerState, type PvpRules, type Raid, type Target, type World,
@@ -252,6 +252,19 @@ createServer(async (req, res) => {
       const rank = mine ? all.filter((r) => r.might > mine.might).length + 1 : 0;
       return send(res, 200, { ok: true, now: now(), error: "",
         result: { players: all.slice(0, 50).map(strip), me: mine ? strip(mine) : null, rank, total: all.length } });
+    }
+    if (body.action === "event_board") {
+      const inv = lastInvasion(eventRules, now() + EVENTS_OFFSET);
+      const key = inv === undefined ? -1 : inv.start - EVENTS_OFFSET;
+      const all = [...players.entries()].filter(([, p]) => p.event_key === key && (p.event_points ?? 0) > 0)
+        .map(([id, p]) => ({ id, name: p.name, points: p.event_points, tag: tagOf(id) }))
+        .sort((a, b) => b.points - a.points || a.name.localeCompare(b.name));
+      const strip = ({ id: _id, ...row }: (typeof all)[number]) => row;
+      const mine = all.find((r) => r.id === user);
+      const rank = mine ? all.filter((r) => r.points > mine.points).length + 1 : 0;
+      return send(res, 200, { ok: true, now: now(), error: "", result: {
+        event: inv === undefined ? null : shifted({ active: [inv], upcoming: [] }).active[0],
+        players: all.slice(0, 50).map(strip), me: mine ? strip(mine) : null, rank, total: all.length } });
     }
     if (!players.has(user)) return send(res, 200, { ok: false, error: "No castle yet.", needs_join: true });
     if (body.action === "chat" || body.action === "chat_send") {

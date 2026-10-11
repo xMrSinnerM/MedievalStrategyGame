@@ -10,8 +10,8 @@ import { advanceMarches, sendAttack, type Army, type March, type Report } from "
 import { godotHash, type Dict } from "../../../server/rules/util.ts";
 import type { AllianceRules } from "./alliances.ts";
 import { checkShipment, type Aid, type AidRules } from "./aid.ts";
-import type { EventRules } from "../../../server/rules/events.ts";
-import { eventPoints, invade } from "./invasion.ts";
+import { lastInvasion, type EventRules } from "../../../server/rules/events.ts";
+import { claimReward, eventPoints, invade, rewardTiers } from "./invasion.ts";
 
 /** A player as stored in the players table (the game columns). */
 export interface PlayerState {
@@ -29,6 +29,8 @@ export interface PlayerState {
   /** The start of the last Baron Invasion you played in, and your event points in it. */
   event_key: number;
   event_points: number;
+  /** How many of that invasion's reward tiers you have claimed. */
+  event_claimed: number;
 }
 
 /** The numbers for fights between players, from data/pvp.json. */
@@ -210,6 +212,7 @@ export function newPlayer(rules: Rules, world: World, name: string, now: number,
     barons_beaten: 0,
     event_key: 0,
     event_points: 0,
+    event_claimed: 0,
   };
 }
 
@@ -233,6 +236,7 @@ export function act(rules: Rules, given: PlayerState, req: Request, now: number,
   let raid: Omit<Raid, "id"> | undefined;
   let aid: Omit<Aid, "id"> | undefined;
   let protectedUntil = stored.protected_until ?? 0;
+  let claimed = stored.event_claimed ?? 0;
   switch (req.action) {
     case "state":
       break;
@@ -338,6 +342,15 @@ export function act(rules: Rules, given: PlayerState, req: Request, now: number,
         leave, back: troops ? leave + travel : now + travel };
       break;
     }
+    case "claim_reward": {
+      // Points count for the invasion on now, or the last one until the next begins.
+      const last = ev ? lastInvasion(ev.rules, now + (ev.offset ?? 0)) : undefined;
+      const current = last !== undefined && stored.event_key === last.start - (ev?.offset ?? 0);
+      error = claimReward(castle, current ? stored.event_points ?? 0 : 0, current ? claimed : 0,
+        ev ? rewardTiers(ev.rules) : [], req.tier);
+      if (error === "") claimed = (current ? claimed : 0) + 1;
+      break;
+    }
     default:
       error = "Unknown order.";
   }
@@ -349,6 +362,7 @@ export function act(rules: Rules, given: PlayerState, req: Request, now: number,
       marches: army.marches,
       next_march: army.nextMarch,
       protected_until: protectedUntil,
+      event_claimed: claimed,
       ...scored(stored, reports),
     },
     reports,
