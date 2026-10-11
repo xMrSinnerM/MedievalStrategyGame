@@ -36,6 +36,8 @@ signal events_changed
 signal barons_changed
 ## Online: the server sent the event leaderboard (see `event_board`).
 signal event_board_changed
+## Online: the server sent the game owner's panel (see `admin_view`), or refused an owner's order.
+signal admin_changed(error: String)
 
 ## Games are kept in SLOTS save slots under save_dir (slot_1.json ...).
 const SLOTS := 3
@@ -147,6 +149,10 @@ var event_claimed := 0
 ## Online: the event leaderboard as the server last sent it: {"event", "players":
 ## [{"name", "points", "tag"}], "me", "rank", "total"}.
 var event_board := {}
+## Online: true when your account has the game owner's tools (the server decides).
+var is_admin := false
+## Online, for the owner: {"events": [{id, name, hours, on, start, end}], "players": [names], "log": [{at, action, details}]}.
+var admin_view := {}
 
 var _seen_report := 0          ## newest server battle report already shown
 var _poll_timer := 0.0
@@ -764,6 +770,8 @@ func begin_online(answer: Dictionary) -> void:
 	event_points = 0
 	event_claimed = 0
 	event_board = {}
+	is_admin = false
+	admin_view = {}
 	protected_until = 0.0
 	if pvp.is_empty():
 		pvp = get_node("/root/GameData").load_json("res://data/pvp.json")
@@ -773,6 +781,7 @@ func begin_online(answer: Dictionary) -> void:
 	apply_server(answer)
 	get_node("/root/Online").order({"action": "alliance"})
 	get_node("/root/Online").order({"action": "chat", "after": 0})
+	get_node("/root/Online").order({"action": "admin"})
 
 
 func end_online() -> void:
@@ -838,6 +847,8 @@ func apply_server(answer: Dictionary) -> void:
 		var report: Dictionary = r.get("report", {})
 		if report.get("kind", "") == "aid":
 			aid_news.emit(aid_text(report))
+		elif report.get("kind", "") == "gift":
+			aid_news.emit(gift_text(report))
 		else:
 			attack_resolved.emit(_server_report(report))
 	if camps_moved:
@@ -1303,6 +1314,31 @@ func aid_text(r: Dictionary) -> String:
 			return ("Your defenders helped %s hold off %s, %s." if held else "%s's castle fell to %s. Your defenders fought, %s.") \
 					% [other, String(r.get("attacker", "")), losses]
 	return ""
+
+
+func gift_text(r: Dictionary) -> String:
+	## A gift from the game owner as one sentence.
+	var parts: PackedStringArray = []
+	if not (r.get("resources", {}) as Dictionary).is_empty():
+		parts.append(_amounts(r.get("resources", {})))
+	if not (r.get("troops", {}) as Dictionary).is_empty():
+		parts.append(_amounts(r.get("troops", {}), true))
+	return "The game owner sent you a gift: %s." % ", ".join(parts)
+
+
+func set_admin(view: Dictionary, error: String) -> void:
+	## The server's answer to an owner's order (or to the check whether you are the owner).
+	is_admin = bool(view.get("is_admin", false))
+	admin_view = view if is_admin else {}
+	admin_changed.emit(error)
+
+
+func admin_order(body: Dictionary) -> void:
+	## Sends one of the owner's orders: admin_start_event, admin_stop_event, admin_give.
+	## The server checks that you are the owner; the panel updates with its answer.
+	get_node("/root/Online").order(body)
+	if body.get("action", "") == "admin_give":
+		get_node("/root/Online").order({"action": "state"})
 
 
 func _amounts(d: Dictionary, units := false) -> String:

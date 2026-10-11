@@ -8,13 +8,15 @@
 //   PROTECTION_HOURS=0 node server/dev/local_server.ts              (no beginner protection)
 //   START_KEEP=2 START_RESOURCES='{"gold":1000}' node server/dev/local_server.ts   (bigger starting castles)
 //   EVENTS_OFFSET_HOURS=30 node server/dev/local_server.ts         (timed events as if 30 hours later)
+//   ADMINS=me@example.com node server/dev/local_server.ts           (these accounts get the owner's tools)
 //   godot --path . -- --online-url=http://127.0.0.1:54321
 
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { makeRules } from "../rules/load.ts";
-import { effectAt, eventsView, lastInvasion, type EventRules } from "../rules/events.ts";
+import { effectAt, eventsView, lastInvasion, withOverrides, type EventOverride, type EventRules } from "../rules/events.ts";
+import { CastleState } from "../rules/castle_state.ts";
 import {
   act, castleLevel, checkName, fightRaid, isProtected, might, newPlayer, pickSpot, spyReport,
   type PlayerState, type PvpRules, type Raid, type Target, type World,
@@ -25,6 +27,9 @@ import {
 import { chatView, MemoryChatStore, send as sendChat, type Speaker } from "../../supabase/functions/game/chat.ts";
 import { deliver, recall, type Aid, type AidRules } from "../../supabase/functions/game/aid.ts";
 import { invade } from "../../supabase/functions/game/invasion.ts";
+import {
+  adminEvents, checkGift, giftReport, giveCastle, NOT_ADMIN, startEvent, stopEvent, type AdminLogEntry,
+} from "../../supabase/functions/game/admin.ts";
 
 const root = new URL("../../", import.meta.url);
 const json = (path: string) => JSON.parse(readFileSync(new URL(path, root), "utf8"));
@@ -33,10 +38,15 @@ const world: World = json("server/world/world.json");
 const pvp: PvpRules = json("data/pvp.json");
 const allianceRules: AllianceRules = json("data/alliances.json");
 const aidRules: AidRules = json("data/aid.json");
-const eventRules: EventRules = json("data/events.json");
+const eventRules0: EventRules = json("data/events.json");
+// The calendar with the owner's changes (kept on the shifted clock below).
+let eventRules: EventRules = eventRules0;
 // For testing: run the event calendar this many hours ahead, to see an event on.
 const EVENTS_OFFSET = Number(process.env.EVENTS_OFFSET_HOURS ?? 0) * 3600;
 rules.barons.lootFactor = (t) => effectAt(eventRules, t + EVENTS_OFFSET, "baron_loot");
+// For testing: accounts (by email) that get the owner's tools, comma separated.
+const ADMINS = new Set((process.env.ADMINS ?? "").split(",").map((e) => e.trim().toLowerCase()).filter((e) => e !== ""));
+const adminLog: AdminLogEntry[] = [];
 // For testing: hours of beginner protection for new castles (data/pvp.json's by default).
 if (process.env.PROTECTION_HOURS !== undefined) pvp.protection_hours = Number(process.env.PROTECTION_HOURS);
 const PORT = Number(process.env.PORT ?? 54321);
@@ -48,6 +58,7 @@ const START_KEEP = Number(process.env.START_KEEP ?? 0);
 const START_RESOURCES = JSON.parse(process.env.START_RESOURCES ?? "{}");
 
 const users = new Map<string, { id: string; password: string }>();
+const isAdmin = (user: string) => [...users].some(([email, u]) => u.id === user && ADMINS.has(email));
 const tokens = new Map<string, { user: string; expires: number }>();
 const refreshTokens = new Map<string, string>();
 const players = new Map<string, PlayerState>();
@@ -125,6 +136,47 @@ function view(user: string, state: PlayerState, extra: Record<string, unknown> =
 function shifted(v: ReturnType<typeof eventsView>) {
   const back = (e: { start: number; end: number }) => ({ ...e, start: e.start - EVENTS_OFFSET, end: e.end - EVENTS_OFFSET });
   return { active: v.active.map(back), upcoming: v.upcoming.map(back) };
+}
+
+/** The same as adminOrder in index.ts, on the shifted calendar. */
+function adminOrder(user: string, body: Record<string, unknown>) {
+  if (!isAdmin(user)) {
+    return body.action === "admin"
+      ? { ok: true, now: now(), error: "", result: { admin: { is_admin: false } } }
+      : { ok: true, now: now(), error: NOT_ADMIN };
+  }
+  const t = now() + EVENTS_OFFSET;
+  let error = "";
+  let details: Record<string, unknown> | null = null;
+  if (body.action === "admin_start_event" || body.action === "admin_stop_event") {
+    const o = body.action === "admin_start_event" ? startEvent(eventRules, body.event, body.hours, t) : stopEvent(eventRules, body.event, t);
+    if (typeof o === "string") error = o;
+    else {
+      eventRules = withOverrides(eventRules0,
+        [...(eventRules.overrides ?? []).filter((x: EventOverride) => x.event !== o.event || x.start !== o.start), o]);
+      details = { event: o.event, start: o.start - EVENTS_OFFSET, end: o.end - EVENTS_OFFSET };
+    }
+  } else if (body.action === "admin_give") {
+    const gift = checkGift(rules.buildings.resources, (u) => rules.buildings.hasUnit(u), body.resources, body.troops);
+    const name = typeof body.target === "string" ? body.target.trim().toLowerCase() : "";
+    const targets = [...players.entries()].filter(([, p]) => body.target === "*" || p.name.toLowerCase() === name);
+    if (typeof gift === "string") error = gift;
+    else if (targets.length === 0) error = body.target === "*" ? "There are no players yet." : "There's no player by that name.";
+    else {
+      for (const [id, p] of targets) {
+        const castle = CastleState.fromDict(rules.buildings, p.castle);
+        giveCastle(castle, gift);
+        players.set(id, { ...p, castle: castle.toDict() });
+        report(id, giftReport(gift, now()));
+      }
+      details = { target: body.target === "*" ? "everyone" : targets[0][1].name, castles: targets.length, ...gift };
+    }
+  } else if (body.action !== "admin") error = "Unknown order.";
+  if (details !== null) adminLog.unshift({ at: now(), action: String(body.action), details });
+  const events = adminEvents(eventRules, now() + EVENTS_OFFSET)
+    .map((e) => e.on ? { ...e, start: e.start - EVENTS_OFFSET, end: e.end - EVENTS_OFFSET } : e);
+  return { ok: true, now: now(), error, result: { admin: { is_admin: true, events,
+    players: [...players.values()].map((p) => p.name).sort(), log: adminLog.slice(0, 20) } } };
 }
 
 function report(user: string, r: { at: number }) {
@@ -220,6 +272,7 @@ createServer(async (req, res) => {
     const auth = tokens.get(token);
     if (auth === undefined || auth.expires < now()) return send(res, 401, { code: 401, message: "Invalid JWT" });
     const user = auth.user;
+    if (typeof body.action === "string" && body.action.startsWith("admin")) return send(res, 200, adminOrder(user, body));
     if (body.action === "join") {
       const why = checkName(body.name);
       if (why !== "") return send(res, 200, { ok: false, error: why });
