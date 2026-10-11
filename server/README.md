@@ -33,8 +33,9 @@ godot --headless --path . --script res://tests/dump_server_fixtures.gd
 - `supabase/migrations/`: the database. `players` holds each player's castle,
   robber baron camps and marches as JSON, `reports` their battle reports,
   `raids` the armies players send against each other, `alliances` and
-  `alliance_pending` (invitations and requests to join) the alliances, and
-  `chat_messages` the world and alliance chat.
+  `alliance_pending` (invitations and requests to join) the alliances,
+  `chat_messages` the world and alliance chat, and `aid` the carts and
+  defenders sent between allies.
   Players can read their own rows only; nobody but the game server can write.
 - `supabase/functions/game/`: the game server, one Edge Function. `index.ts`
   checks who is signed in, loads their row, and `game.ts` runs their world up
@@ -77,6 +78,16 @@ may read (the newest 50 at most), and `chat_send` sends one to `world` or
 `alliance` first. Messages are cleaned of line breaks and control
 characters, are at most 200 characters, need 2 seconds between them, and
 are deleted after three days.
+
+Allies can help each other (`aid.ts`, rows of the `aid` table).
+`send_resources` loads a cart with up to 500 resources per keep level of the
+sender (`data/aid.json`); it takes as long as a march and unloads into the
+ally's storage when it arrives, and whatever their storage can't hold is lost.
+`send_defenders` sends soldiers to stand in the ally's castle for 8 hours: if
+the castle is attacked meanwhile they fight beside its garrison, losses are
+shared in proportion, and spies see them too. Then they march home, or sooner
+with `recall_defenders`. Both sides get a report. Only members of the same
+alliance can help each other.
 
 To deploy changes with the Supabase CLI, from the repository root:
 

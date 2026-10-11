@@ -21,6 +21,7 @@ import {
   allianceView, checkFound, found, handle, MemoryAllianceStore, type AllianceRules,
 } from "../../supabase/functions/game/alliances.ts";
 import { chatView, MemoryChatStore, send as sendChat, type Speaker } from "../../supabase/functions/game/chat.ts";
+import { deliver, recall, type Aid, type AidRules } from "../../supabase/functions/game/aid.ts";
 
 const root = new URL("../../", import.meta.url);
 const json = (path: string) => JSON.parse(readFileSync(new URL(path, root), "utf8"));
@@ -28,6 +29,7 @@ const rules = makeRules(json("data/buildings.json"), json("data/units.json"), js
 const world: World = json("server/world/world.json");
 const pvp: PvpRules = json("data/pvp.json");
 const allianceRules: AllianceRules = json("data/alliances.json");
+const aidRules: AidRules = json("data/aid.json");
 // For testing: hours of beginner protection for new castles (data/pvp.json's by default).
 if (process.env.PROTECTION_HOURS !== undefined) pvp.protection_hours = Number(process.env.PROTECTION_HOURS);
 const PORT = Number(process.env.PORT ?? 54321);
@@ -46,6 +48,8 @@ const reports: { id: number; user: string; at: number; report: unknown }[] = [];
 let nextReport = 1;
 const raids: (Raid & { attacker: string; defender: string })[] = [];
 let nextRaid = 1;
+const aid: (Aid & { sender: string; receiver: string; state: "out" | "done" })[] = [];
+let nextAid = 1;
 const store = new MemoryAllianceStore(() => new Map([...players].map(([id, p]) => [id,
   { name: p.name, level: castleLevel(p.castle), might: might(p.castle, pvp) }])));
 const chat = new MemoryChatStore();
@@ -104,11 +108,32 @@ function view(user: string, state: PlayerState, extra: Record<string, unknown> =
       const own = attacker === user;
       return { ...r, mine: own, army: own ? r.army : {}, survivors: own ? r.survivors : {}, loot: own ? r.loot : {} };
     });
-  return { ok: true, now: now(), ...extra, player: state, raids: moving, reports: mine };
+  const helping = aid.filter((a) => (a.sender === user || a.receiver === user) && a.state === "out")
+    .sort((a, b) => a.arrive - b.arrive).map(({ sender, receiver: _r, state: _s, ...a }) => ({ ...a, mine: sender === user }));
+  return { ok: true, now: now(), ...extra, player: state, raids: moving, aid: helping, reports: mine };
 }
 
 function report(user: string, r: { at: number }) {
   reports.push({ id: nextReport++, user, at: r.at, report: r });
+}
+
+// The same as resolveAid() in index.ts, without the database.
+function resolveAid(user: string) {
+  for (const cart of aid.filter((a) => a.kind === "resources" && a.state === "out" && a.arrive <= now() &&
+    (a.sender === user || a.receiver === user)).sort((a, b) => a.arrive - b.arrive)) {
+    cart.state = "done";
+    const receiver = players.get(cart.receiver);
+    if (receiver === undefined) continue;
+    const out = deliver(rules, receiver, cart);
+    players.set(cart.receiver, out.receiver);
+    for (const r of out.campReports) report(cart.receiver, r);
+    report(cart.receiver, out.receiverReport);
+    report(cart.sender, out.senderReport);
+  }
+}
+
+function helpersAt(user: string, t: number) {
+  return aid.filter((a) => a.receiver === user && a.kind === "troops" && a.state === "out" && a.arrive <= t && t < a.leave);
 }
 
 // The same as resolveRaids() in index.ts, without the database.
@@ -117,12 +142,23 @@ function resolveRaids(user: string) {
     .sort((a, b) => a.arrive - b.arrive)) {
     const defender = players.get(raid.defender);
     if (defender === undefined) continue;
-    const outcome = fightRaid(rules, pvp, defender, raid);
+    const helpers = helpersAt(raid.defender, raid.arrive);
+    const outcome = fightRaid(rules, pvp, defender, raid, helpers.map((h) => h.army));
     players.set(raid.defender, outcome.defender);
     for (const r of outcome.campReports) report(raid.defender, r);
+    if (helpers.length > 0) outcome.defenderReport.helped_by = [...new Set(helpers.map((h) => h.sender_name))];
     report(raid.defender, outcome.defenderReport);
     report(raid.attacker, outcome.attackerReport);
     Object.assign(raid, { state: "home", survivors: outcome.survivors, loot: outcome.loot });
+    for (const [i, h] of helpers.entries()) {
+      const left = outcome.helpers[i];
+      const lost: Record<string, number> = {};
+      for (const unit of Object.keys(h.army)) if (h.army[unit] - (left[unit] ?? 0) > 0) lost[unit] = h.army[unit] - (left[unit] ?? 0);
+      h.army = left;
+      if (Object.keys(left).length === 0) h.state = "done";
+      report(h.sender, { kind: "aid", event: "defended", name: h.receiver_name, at: raid.arrive, attacker: raid.attacker_name,
+        held: outcome.attackerReport.winner === "b", lost } as { at: number });
+    }
   }
 }
 
@@ -221,22 +257,42 @@ createServer(async (req, res) => {
       }
       founded = made;
     }
+    // The same as recall_defenders in index.ts.
+    let recalled = "";
+    if (body.action === "recall_defenders") {
+      const a = aid.find((x) => x.id === Number(body.id) && x.sender === user && x.kind === "troops" && x.state === "out");
+      const times = a === undefined ? "There are no such defenders." : recall(a, now());
+      if (typeof times === "string") recalled = times;
+      else Object.assign(a!, times);
+      body.action = "state";
+    }
+    resolveAid(user);
     resolveRaids(user);
-    const target = body.action === "attack_player" || body.action === "spy" ? findTarget(body.target, user) : undefined;
-    const homecomings = raids.filter((r) => r.attacker === user && r.state === "home" && r.back <= now());
-    for (const r of homecomings) r.state = "done";
+    const target = ["attack_player", "spy", "send_resources", "send_defenders"].includes(String(body.action))
+      ? findTarget(body.target, user) : undefined;
+    const homecomings = [
+      ...raids.filter((r) => r.attacker === user && r.state === "home" && r.back <= now()),
+      ...aid.filter((a) => a.sender === user && a.kind === "troops" && a.state === "out" && a.back <= now())
+        .map((a) => ({ ...a, survivors: a.army, loot: {} })),
+    ];
+    for (const r of raids) if (r.attacker === user && r.state === "home" && r.back <= now()) r.state = "done";
+    for (const a of aid) if (a.sender === user && a.kind === "troops" && a.state === "out" && a.back <= now()) a.state = "done";
     const t = now();
-    const outcome = act(rules, players.get(user)!, body, t, { pvp, target: target?.target, homecomings, alliances: allianceRules });
+    const outcome = act(rules, players.get(user)!, body, t,
+      { pvp, target: target?.target, homecomings, alliances: allianceRules, aid: aidRules });
     players.set(user, outcome.state);
     for (const r of outcome.reports) report(user, r);
     if (outcome.raid && target) raids.push({ ...outcome.raid, id: nextRaid++, attacker: user, defender: target.user });
+    if (outcome.aid && target) aid.push({ ...outcome.aid, id: nextAid++, sender: user, receiver: target.user, state: "out" });
     let result = outcome.result ?? null;
-    if (body.action === "spy" && outcome.error === "" && target) result = spyReport(rules, pvp, players.get(target.user)!, t);
+    if (body.action === "spy" && outcome.error === "" && target) {
+      result = spyReport(rules, pvp, players.get(target.user)!, t, helpersAt(target.user, t).map((h) => h.army));
+    }
     if (founded !== null) {
       if (outcome.error !== "") await store.remove(founded);
       result = await allianceView(store, allianceRules, user);
     }
-    return send(res, 200, view(user, outcome.state, { error: outcome.error, result }));
+    return send(res, 200, view(user, outcome.state, { error: recalled || outcome.error, result }));
   }
   send(res, 404, { msg: "Not found" });
 }).listen(PORT, "127.0.0.1", () => console.log(`Local game server on http://127.0.0.1:${PORT}`));

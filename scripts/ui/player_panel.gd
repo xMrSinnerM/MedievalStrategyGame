@@ -2,7 +2,8 @@ extends PanelContainer
 ## Online: shown on the world map when you click another player's castle: who
 ## they are, their castle level, whether beginner protection still shelters
 ## them, what your spy last saw there, and buttons to send a spy or open the
-## attack screen.
+## attack screen. For members of your alliance: buttons to send them resources
+## or defenders, what you have on the way, and a button to call defenders home.
 
 const TEXT := Color(0.95, 0.9, 0.8)
 const MUTED := Color(0.78, 0.72, 0.62)
@@ -16,6 +17,8 @@ var _details: Label
 var _note: Label
 var _spy: Button
 var _attack: Button
+var _help_buttons: HBoxContainer
+var _recall: Button
 var _timer := 0.0
 
 
@@ -58,6 +61,21 @@ func _ready() -> void:
 	_attack.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_attack.pressed.connect(func() -> void: EventBus.attack_screen_requested.emit("player:" + player_name))
 	buttons.add_child(_attack)
+	_help_buttons = HBoxContainer.new()
+	_help_buttons.add_theme_constant_override("separation", 8)
+	box.add_child(_help_buttons)
+	for kind: String in ["resources", "troops"]:
+		var b := Button.new()
+		b.text = "Send resources" if kind == "resources" else "Send defenders"
+		b.focus_mode = Control.FOCUS_NONE
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.pressed.connect(func() -> void: EventBus.help_screen_requested.emit(player_name, kind))
+		_help_buttons.add_child(b)
+	_recall = Button.new()
+	_recall.text = "Call your defenders home"
+	_recall.focus_mode = Control.FOCUS_NONE
+	_recall.pressed.connect(_call_home)
+	box.add_child(_recall)
 	EventBus.player_selected.connect(show_player)
 	for clears in [EventBus.party_selected, EventBus.settlement_selected, EventBus.baron_selected]:
 		clears.connect(func(id: String) -> void:
@@ -65,6 +83,7 @@ func _ready() -> void:
 				show_player(""))
 	Economy.changed.connect(_refresh)
 	Economy.others_changed.connect(_refresh)
+	Economy.aid_changed.connect(_refresh)
 	Economy.spy_returned.connect(func(who: String) -> void:
 		if who == player_name:
 			_note.text = ""
@@ -104,7 +123,9 @@ func _refresh() -> void:
 		lines.append("Under beginner protection: can't be attacked yet.")
 	lines.append("March: %s each way" % _clock(Economy.march_time_to_player(player_name)))
 	var seen: Dictionary = Economy.spy_reports.get(player_name, {})
-	if seen.is_empty():
+	if ally:
+		pass
+	elif seen.is_empty():
 		lines.append("You haven't spied on this castle yet.")
 	else:
 		lines.append("Your spy saw, %s ago:" % _clock(Economy.now() - float(seen.get("at", Economy.now()))))
@@ -122,11 +143,33 @@ func _refresh() -> void:
 			var out: bool = r.state == "out"
 			lines.append("Your army: %s %s" % ["arrives in" if out else "home in",
 					_clock((float(r.arrive) if out else float(r.back)) - Economy.now())])
+	var now := Economy.now()
+	var standing := -1
+	for a: Dictionary in Economy.aid_to(player_name):
+		if a.kind == "resources":
+			lines.append("Your cart: arrives in %s" % _clock(float(a.arrive) - now))
+		elif now < float(a.arrive):
+			lines.append("Your defenders: arrive in %s" % _clock(float(a.arrive) - now))
+			standing = int(a.id)
+		elif now < float(a.leave):
+			lines.append("Your defenders: in their castle for %s more" % _clock(float(a.leave) - now))
+			standing = int(a.id)
+		else:
+			lines.append("Your defenders: home in %s" % _clock(float(a.back) - now))
 	_details.text = "\n".join(lines)
+	_spy.get_parent().visible = not ally
+	_help_buttons.visible = ally
+	_recall.visible = standing >= 0
+	_recall.set_meta("aid", standing)
 	_spy.text = "Send a spy (%s)" % _cost(Economy.spy_cost())
 	_spy.disabled = ally or not Economy.player_castle.can_afford(Economy.spy_cost())
 	_attack.disabled = ally or shielded or Economy.player_castle.troop_count() <= 0
 	_attack.tooltip_text = "Train soldiers first" if Economy.player_castle.troop_count() <= 0 else ""
+
+
+func _call_home() -> void:
+	Economy.recall_defenders(int(_recall.get_meta("aid", -1)))
+	_note.text = "Your defenders are coming home."
 
 
 func _send_spy() -> void:
