@@ -38,6 +38,19 @@ export interface RewardTier {
 
 export interface EventRules {
   weekly: WeeklyEvent[];
+  /** Changes the game owner made to the calendar (see withOverrides). */
+  overrides?: EventOverride[];
+}
+
+/**
+ * The game owner's change to the calendar: the weekly event `event` runs from
+ * `start` to `end`. With the start of a scheduled run it moves that run's end
+ * (stopping it early); any other start adds an extra run.
+ */
+export interface EventOverride {
+  event: string;
+  start: number;
+  end: number;
 }
 
 /** An event on the calendar, with its start and end (Unix seconds). */
@@ -70,9 +83,32 @@ function at(e: WeeklyEvent, start: number): EventTime {
   return out;
 }
 
+/** The calendar with the game owner's overrides. */
+export function withOverrides(rules: EventRules, overrides: EventOverride[]): EventRules {
+  return { ...rules, overrides };
+}
+
+/** The runs of every event that started at or before `t` and may still matter: the last scheduled one and the owner's. */
+function runs(rules: EventRules, t: number): EventTime[] {
+  const overrides = rules.overrides ?? [];
+  const out: EventTime[] = [];
+  for (const e of rules.weekly) {
+    const start = lastStart(e, t);
+    const run = at(e, start);
+    const moved = overrides.find((o) => o.event === e.id && o.start === start);
+    if (moved !== undefined) run.end = moved.end;
+    out.push(run);
+    for (const o of overrides) {
+      if (o.event !== e.id || o.start === start || o.start > t) continue;
+      out.push({ ...at(e, o.start), end: o.end });
+    }
+  }
+  return out;
+}
+
 /** The events that are on at `t`. */
 export function activeEvents(rules: EventRules, t: number): EventTime[] {
-  return rules.weekly.map((e) => at(e, lastStart(e, t))).filter((e) => t < e.end);
+  return runs(rules, t).filter((e) => e.start <= t && t < e.end);
 }
 
 /** The events that start after `t`, soonest first (one per weekly event). */
@@ -83,9 +119,8 @@ export function upcomingEvents(rules: EventRules, t: number): EventTime[] {
 /** The Baron Invasion on at `t`, or else the last one to have started (undefined if there is none on the calendar). */
 export function lastInvasion(rules: EventRules, t: number): EventTime | undefined {
   let best: EventTime | undefined;
-  for (const e of rules.weekly) {
-    if (e.invasion === undefined) continue;
-    const time = at(e, lastStart(e, t));
+  for (const time of runs(rules, t)) {
+    if (time.invasion === undefined || time.start > t) continue;
     if (best === undefined || time.start > best.start) best = time;
   }
   return best;

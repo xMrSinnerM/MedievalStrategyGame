@@ -413,6 +413,17 @@ starts: 50, 150, 300, 600, 1000 and 2000 points. Rewards are earned only by
 playing; nothing can be bought. Resources go into your storage, and what
 doesn't fit is lost.
 
+### Owner tools
+
+The game owner's account gets an Owner button (O) on the world map. Its panel
+starts or stops any event right away, for as many hours as you choose, and
+gives resources and soldiers to one player or to everyone (gifts may go over
+the storage limit). Players see a message when a gift arrives. The server
+checks every order and writes it to an admin log, which the panel shows.
+Other players never see the panel, and no account can make itself the owner
+from the game: owners are added by hand in the database (see
+`server/README.md`).
+
 ## Project layout
 
 ```
@@ -502,6 +513,7 @@ How the parts work:
 - [x] Chat (world and alliance)
 - [x] Helping allies: sending resources and soldiers
 - [x] Timed events: weekend loot bonus, baron invasions, event rewards and leaderboard
+- [x] Owner tools: start and stop events, give players resources and soldiers
 
 ## Known limitations
 

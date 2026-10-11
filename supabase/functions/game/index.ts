@@ -30,6 +30,9 @@
 // POST { "action": "send_resources", "target": "name", "resources": { wood: n } }   to an ally (data/aid.json)
 // POST { "action": "send_defenders", "target": "name", "army": { unit: count } }
 // POST { "action": "recall_defenders", "id" }
+// POST { "action": "admin" }                     the owner's panel: events, player names, admin log (owner only)
+// POST { "action": "admin_start_event" | "admin_stop_event", "event": "id", "hours": n }   (owner only)
+// POST { "action": "admin_give", "target": "name" | "*", "resources": { wood: n }, "troops": { unit: n } }   (owner only)
 //
 // Armies sent against players are rows in the raids table. Whenever either
 // side sends a request after an army has arrived, the battle is fought on
@@ -53,7 +56,8 @@ import aidData from "../../../data/aid.json" with { type: "json" };
 import eventsData from "../../../data/events.json" with { type: "json" };
 import world from "../../../server/world/world.json" with { type: "json" };
 import { makeRules } from "../../../server/rules/load.ts";
-import { effectAt, eventsView, lastInvasion, type EventRules } from "../../../server/rules/events.ts";
+import { effectAt, eventsView, lastInvasion, withOverrides, type EventOverride, type EventRules } from "../../../server/rules/events.ts";
+import { CastleState } from "../../../server/rules/castle_state.ts";
 import {
   act, castleLevel, checkName, fightRaid, isProtected, might, newPlayer, pickSpot, spyReport,
   type Homecoming, type PlayerState, type PvpRules, type Raid, type Target, type World,
@@ -64,13 +68,18 @@ import { chatView, send, type Speaker } from "./chat.ts";
 import { DatabaseChatStore } from "./chat_store.ts";
 import { deliver, recall, type Aid, type AidRules } from "./aid.ts";
 import { invade } from "./invasion.ts";
+import {
+  adminEvents, checkGift, giftReport, giveCastle, NOT_ADMIN, OVERRIDES_KEPT, startEvent, stopEvent, type Gift,
+} from "./admin.ts";
 
 const rules = makeRules(buildings, units, barons);
 const pvp = pvpData as PvpRules;
 const allianceRules = alliancesData as AllianceRules;
 const aidRules = aidData as AidRules;
 const eventRules = eventsData as EventRules;
-rules.barons.lootFactor = (t) => effectAt(eventRules, t, "baron_loot");
+// The calendar with the game owner's changes (admin.ts), loaded with every request.
+let calendar: EventRules = eventRules;
+rules.barons.lootFactor = (t) => effectAt(calendar, t, "baron_loot");
 const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, {
   auth: { persistSession: false },
 });
@@ -139,7 +148,7 @@ async function activeAid(userId: string) {
 
 async function view(userId: string, state: PlayerState, extra: Record<string, unknown> = {}) {
   const [reports, raids, aid] = await Promise.all([recentReports(userId), activeRaids(userId), activeAid(userId)]);
-  return { ok: true, now: now(), ...extra, player: state, raids, aid, reports, events: eventsView(eventRules, now()) };
+  return { ok: true, now: now(), ...extra, player: state, raids, aid, reports, events: eventsView(calendar, now()) };
 }
 
 /** The columns other players can see, worked out from a player's state. */
@@ -264,6 +273,110 @@ async function speaker(userId: string): Promise<Speaker | null> {
   return { user: userId, name: me.name, tag: a?.tag ?? "", alliance_id: a === null ? null : me.alliance_id };
 }
 
+// --- The game owner's tools (admin.ts) --------------------------------------
+
+async function loadCalendar(): Promise<EventRules> {
+  const { data } = await admin.from("event_overrides").select("event, starts_at, ends_at").gt("ends_at", now() - OVERRIDES_KEPT);
+  return withOverrides(eventRules, (data ?? []).map((r: Row): EventOverride =>
+    ({ event: r.event, start: Number(r.starts_at), end: Number(r.ends_at) })));
+}
+
+async function isAdmin(userId: string): Promise<boolean> {
+  const { data } = await admin.from("admins").select("user_id").eq("user_id", userId).maybeSingle();
+  return data !== null;
+}
+
+async function adminView() {
+  const [{ data: names }, { data: log }] = await Promise.all([
+    admin.from("players").select("name").order("name").limit(PLAYERS_SHOWN),
+    admin.from("admin_log").select("at, action, details").order("id", { ascending: false }).limit(REPORTS_SHOWN),
+  ]);
+  return {
+    admin: { is_admin: true, events: adminEvents(calendar, now()), players: (names ?? []).map((r: Row) => r.name), log: log ?? [] },
+  };
+}
+
+/** Puts a gift in one player's castle and leaves them a report; false if their castle kept changing. */
+async function giveTo(userId: string, gift: Gift): Promise<boolean> {
+  for (let attempt = 0; attempt < RETRIES; attempt++) {
+    const { data: row } = await admin.from("players").select(COLUMNS).eq("user_id", userId).maybeSingle();
+    if (!row) return false;
+    const { version, ...stored } = row as Row;
+    const castle = CastleState.fromDict(rules.buildings, stored.castle);
+    giveCastle(castle, gift);
+    const state = { ...stored, castle: castle.toDict() } as PlayerState;
+    const { data: saved } = await admin.from("players")
+      .update({ castle: state.castle, ...publicColumns(state), version: version + 1, updated_at: new Date().toISOString() })
+      .eq("user_id", userId).eq("version", version).select("version");
+    if (!saved || saved.length === 0) continue;
+    await saveReports(userId, [giftReport(gift, now())]);
+    return true;
+  }
+  return false;
+}
+
+async function adminOrder(userId: string, body: Record<string, unknown>) {
+  if (!(await isAdmin(userId))) {
+    return body.action === "admin"
+      ? { ok: true, now: now(), error: "", result: { admin: { is_admin: false } } }
+      : { ok: true, now: now(), error: NOT_ADMIN };
+  }
+  const t = now();
+  let error = "";
+  let details: Record<string, unknown> | null = null;
+  switch (body.action) {
+    case "admin":
+      break;
+    case "admin_start_event":
+    case "admin_stop_event": {
+      const o = body.action === "admin_start_event" ? startEvent(calendar, body.event, body.hours, t) : stopEvent(calendar, body.event, t);
+      if (typeof o === "string") {
+        error = o;
+        break;
+      }
+      const { error: saveError } = await admin.from("event_overrides").upsert({ event: o.event, starts_at: o.start, ends_at: o.end });
+      if (saveError) {
+        error = "The server couldn't change the calendar.";
+        break;
+      }
+      calendar = withOverrides(eventRules,
+        [...(calendar.overrides ?? []).filter((x) => x.event !== o.event || x.start !== o.start), o]);
+      details = { ...o };
+      break;
+    }
+    case "admin_give": {
+      const gift = checkGift(rules.buildings.resources, (u) => rules.buildings.hasUnit(u), body.resources, body.troops);
+      if (typeof gift === "string") {
+        error = gift;
+        break;
+      }
+      const everyone = body.target === "*";
+      let targets: Row[] = [];
+      if (everyone) {
+        const { data } = await admin.from("players").select("user_id, name");
+        targets = data ?? [];
+      } else if (typeof body.target === "string" && body.target.trim() !== "") {
+        const { data } = await admin.from("players").select("user_id, name")
+          .ilike("name", body.target.trim().replace(/[%_\\]/g, "\\$&")).maybeSingle();
+        if (data) targets = [data];
+      }
+      if (targets.length === 0) {
+        error = everyone ? "There are no players yet." : "There's no player by that name.";
+        break;
+      }
+      let given = 0;
+      for (const p of targets) if (await giveTo(p.user_id, gift)) given++;
+      if (given < targets.length) error = `${targets.length - given} castles were busy and got nothing. Try them again.`;
+      details = { target: everyone ? "everyone" : targets[0].name, castles: given, ...gift };
+      break;
+    }
+    default:
+      error = "Unknown order.";
+  }
+  if (details !== null) await admin.from("admin_log").insert({ admin: userId, at: t, action: body.action, details });
+  return { ok: true, now: now(), error, result: await adminView() };
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method !== "POST") return reply({ ok: false, error: "Use POST." }, 405);
   const token = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "");
@@ -278,6 +391,8 @@ Deno.serve(async (req: Request) => {
     return reply({ ok: false, error: "Bad request." }, 400);
   }
   if (body === null || typeof body !== "object" || Array.isArray(body)) return reply({ ok: false, error: "Bad request." }, 400);
+  calendar = await loadCalendar();
+  if (typeof body.action === "string" && body.action.startsWith("admin")) return reply(await adminOrder(userId, body));
 
   if (body.action === "join") {
     const why = checkName(body.name);
@@ -289,7 +404,7 @@ Deno.serve(async (req: Request) => {
       const spot = pickSpot(world as World, (homes ?? []).map((h) => [h.home_x, h.home_y] as [number, number]));
       if (spot === null) return reply({ ok: false, error: "The world is full. Try again later." });
       // A castle founded during a Baron Invasion meets its invaders straight away.
-      const state = invade(newPlayer(rules, world as World, String(body.name), now(), spot, pvp), eventRules, world as World, now());
+      const state = invade(newPlayer(rules, world as World, String(body.name), now(), spot, pvp), calendar, world as World, now());
       const { error } = await admin.from("players").insert({ user_id: userId, ...state, ...publicColumns(state), version: 1 });
       if (!error) return reply(await view(userId, state));
       if (error.code !== "23505") return reply({ ok: false, error: "The server couldn't create your castle." }, 500);
@@ -335,7 +450,7 @@ Deno.serve(async (req: Request) => {
 
   if (body.action === "event_board") {
     // The Baron Invasion on now (or the last one): the players with the most event points in it.
-    const inv = lastInvasion(eventRules, now());
+    const inv = lastInvasion(calendar, now());
     const key = inv?.start ?? -1;
     const shown = "name, event_key, event_points, alliance:alliances!players_alliance_id_fkey(tag)";
     const { data, error } = await admin.from("players").select(shown).eq("event_key", key).gt("event_points", 0)
@@ -421,7 +536,7 @@ Deno.serve(async (req: Request) => {
     const { version, ...stored } = row as PlayerState & { version: number };
     const t = now();
     const outcome = act(rules, stored, body, t, { pvp, target: target?.target, homecomings, alliances: allianceRules, aid: aidRules,
-      events: { rules: eventRules, world: world as World } });
+      events: { rules: calendar, world: world as World } });
     // Save only if nobody else changed the row meanwhile; otherwise start over.
     const { data: saved, error: saveError } = await admin.from("players")
       .update({ ...outcome.state, ...publicColumns(outcome.state), version: version + 1, updated_at: new Date().toISOString() })

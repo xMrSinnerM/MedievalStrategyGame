@@ -112,6 +112,22 @@ the tiers taken. Points count for the invasion on now, or the last one until
 the next starts. `event_board` lists the players with the most points in
 that invasion and the asking player's rank.
 
+The game owner's tools (`supabase/functions/game/admin.ts`) work only for
+accounts in the `admins` table, which the game can never change. Add one in
+the SQL editor:
+
+```
+insert into public.admins (user_id) select id from auth.users where email = 'owner@example.com';
+```
+
+`admin` returns the owner's panel (or `is_admin: false` for everyone else),
+`admin_start_event` and `admin_stop_event` change the calendar through rows in
+`event_overrides` (an extra run of an event, or a scheduled run that ends
+early), and `admin_give` adds resources and soldiers to one castle or to all
+(`"target": "*"`) and leaves each player a `gift` report. Every one of these
+is written to `admin_log`. With the local server, `ADMINS=email,...` names the
+owner accounts.
+
 To deploy changes with the Supabase CLI, from the repository root:
 
 ```

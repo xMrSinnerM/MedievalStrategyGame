@@ -11,6 +11,7 @@ const TOP := 66.0                ## panels start below the resource bar
 var _info: Label
 var _resources: ResourceBar
 var _alliance_button: Button
+var _owner_panel: Control
 var _zoom_t := 0.0
 var _party_status := ""
 var _news: Label
@@ -42,6 +43,12 @@ func _ready() -> void:
 		_alliance_button = _bar_button("Alliance (G)", alliance.toggle)
 		row.add_child(_alliance_button)
 		row.add_child(_bar_button("Events (V)", events.toggle))
+		var owner := preload("res://scripts/ui/admin_panel.gd").new()
+		_owner_panel = owner
+		var owner_button := _bar_button("Owner (O)", owner.toggle)
+		owner_button.visible = Economy.is_admin
+		Economy.admin_changed.connect(func(_e: String) -> void: owner_button.visible = Economy.is_admin)
+		row.add_child(owner_button)
 		row.add_child(_bar_button("Leaderboard (L)", leaderboard.toggle))
 	else:
 		row.add_child(_bar_button("Diplomacy (K)", diplomacy.toggle))
@@ -100,6 +107,11 @@ func _ready() -> void:
 	events.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	events.grow_vertical = Control.GROW_DIRECTION_BOTH
 	add_child(events)
+	if _owner_panel != null:
+		_owner_panel.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+		_owner_panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+		_owner_panel.grow_vertical = Control.GROW_DIRECTION_BOTH
+		add_child(_owner_panel)
 	if Economy.online:
 		Economy.alliance_changed.connect(func(_error: String) -> void: _update_alliance_button())
 	var chat: ChatBox = null
@@ -226,7 +238,7 @@ func _process(delta: float) -> void:
 		var shield := ""
 		if Economy.is_protected():
 			shield = "    Beginner protection: %s left (ends if you attack a player)" % _hours(Economy.protected_until - Economy.now())
-		_info.text = "Online as %s" % Online.email + shield + "\nClick: pick your castle, another player's or a robber baron camp    C: your castle    L: leaderboard    G: alliance    V: events    Enter: chat\nWASD / drag: pan    Q E / right-drag: rotate    wheel: zoom\nM: parchment map    Home: recentre    F1: hide    Esc: menu\nzoom %d%%    %d fps" % [int(_zoom_t * 100.0), Engine.get_frames_per_second()]
+		_info.text = "Online as %s" % Online.email + shield + "\nClick: pick your castle, another player's or a robber baron camp    C: your castle    L: leaderboard    G: alliance    V: events    Enter: chat" + ("    O: owner tools" if Economy.is_admin else "") + "\nWASD / drag: pan    Q E / right-drag: rotate    wheel: zoom\nM: parchment map    Home: recentre    F1: hide    Esc: menu\nzoom %d%%    %d fps" % [int(_zoom_t * 100.0), Engine.get_frames_per_second()]
 		return
 	_info.text = "Click: travel there, or pick a castle or party    F: find your party    C: your castle    K: diplomacy\nWASD / drag: pan    Q E / right-drag: rotate    wheel: zoom\nM: parchment map    Home: recentre    F1: hide    Esc: menu\nYour party: %s\nzoom %d%%    %d fps" % [_party_status, int(_zoom_t * 100.0), Engine.get_frames_per_second()]
 
