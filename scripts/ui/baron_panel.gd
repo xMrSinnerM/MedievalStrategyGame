@@ -72,9 +72,14 @@ func _refresh() -> void:
 	var br := Economy.baron_rules
 	var now := Economy.now()
 	_title.text = camp.camp_name
-	_level.text = "Robber baron camp, level %d" % camp.level
+	_level.text = ("Invader camp, level %d" if camp.is_invader() else "Robber baron camp, level %d") % camp.level
 	var lines: PackedStringArray = []
-	if camp.level < br.max_level:
+	if camp.is_invader():
+		lines.append("Baron Invasion: a win gives %d event points and raises it a level" % (camp.points * camp.level))
+		var inv := Economy.invasion()
+		if not inv.is_empty() and float(inv.start) == camp.event:
+			lines.append("Leaves in %s    Your points: %d" % [_long_clock(float(inv.end) - now), Economy.invasion_points()])
+	elif camp.level < br.max_level:
 		lines.append("Wins %d of %d to reach level %d" % [camp.defeats, br.defeats_needed(camp.level), camp.level + 1])
 	var garrison := camp.garrison(br)
 	var total := 0
@@ -114,6 +119,13 @@ func _send() -> void:
 static func _clock(seconds: float) -> String:
 	var s := maxi(0, ceili(seconds))
 	return "%d:%02d" % [s / 60, s % 60]
+
+
+static func _long_clock(seconds: float) -> String:
+	var m := maxi(0, ceili(seconds / 60.0))
+	if m >= 1440:
+		return "%dd %02dh" % [m / 1440, (m % 1440) / 60]
+	return "%dh %02dm" % [m / 60, m % 60]
 
 
 func _label(size: int, color: Color) -> Label:

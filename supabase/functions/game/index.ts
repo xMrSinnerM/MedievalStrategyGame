@@ -61,6 +61,7 @@ import { DatabaseAllianceStore } from "./alliance_store.ts";
 import { chatView, send, type Speaker } from "./chat.ts";
 import { DatabaseChatStore } from "./chat_store.ts";
 import { deliver, recall, type Aid, type AidRules } from "./aid.ts";
+import { invade } from "./invasion.ts";
 
 const rules = makeRules(buildings, units, barons);
 const pvp = pvpData as PvpRules;
@@ -77,7 +78,7 @@ const ALLIANCE_ORDERS = new Set([
   "alliance", "join_alliance", "accept_invite", "decline_invite", "cancel_request", "leave_alliance", "disband_alliance",
   "invite", "cancel_invite", "kick", "answer_request", "set_role", "alliance_settings",
 ]);
-const COLUMNS = "name, home_x, home_y, castle, camps, marches, next_march, protected_until, barons_beaten, version";
+const COLUMNS = "name, home_x, home_y, castle, camps, marches, next_march, protected_until, barons_beaten, event_key, event_points, version";
 const REPORTS_SHOWN = 20;
 const RETRIES = 4;
 const PLAYERS_SHOWN = 500;
@@ -285,7 +286,8 @@ Deno.serve(async (req: Request) => {
       if (homesError) return reply({ ok: false, error: "The server couldn't create your castle." }, 500);
       const spot = pickSpot(world as World, (homes ?? []).map((h) => [h.home_x, h.home_y] as [number, number]));
       if (spot === null) return reply({ ok: false, error: "The world is full. Try again later." });
-      const state = newPlayer(rules, world as World, String(body.name), now(), spot, pvp);
+      // A castle founded during a Baron Invasion meets its invaders straight away.
+      const state = invade(newPlayer(rules, world as World, String(body.name), now(), spot, pvp), eventRules, world as World, now());
       const { error } = await admin.from("players").insert({ user_id: userId, ...state, ...publicColumns(state), version: 1 });
       if (!error) return reply(await view(userId, state));
       if (error.code !== "23505") return reply({ ok: false, error: "The server couldn't create your castle." }, 500);
@@ -393,7 +395,8 @@ Deno.serve(async (req: Request) => {
     }
     const { version, ...stored } = row as PlayerState & { version: number };
     const t = now();
-    const outcome = act(rules, stored, body, t, { pvp, target: target?.target, homecomings, alliances: allianceRules, aid: aidRules });
+    const outcome = act(rules, stored, body, t, { pvp, target: target?.target, homecomings, alliances: allianceRules, aid: aidRules,
+      events: { rules: eventRules, world: world as World } });
     // Save only if nobody else changed the row meanwhile; otherwise start over.
     const { data: saved, error: saveError } = await admin.from("players")
       .update({ ...outcome.state, ...publicColumns(outcome.state), version: version + 1, updated_at: new Date().toISOString() })

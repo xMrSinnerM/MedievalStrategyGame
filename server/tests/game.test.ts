@@ -92,10 +92,14 @@ test("new players get free spots, and camp levels count from their spot", () => 
   const first = newPlayer(rules, world, "First", T0);
   assert.deepEqual(first.camps.map((c) => c.level), world.camps.map((c) => c.level));
   const taken: [number, number][] = [];
+  const roomy = (s: [number, number]) => (world.invasion_spots?.[world.spots.indexOf(s)]?.length ?? 0) >= 3;
+  const roomyCount = world.spots.filter(roomy).length;
   for (let i = 0; i < world.spots.length; i++) {
     const spot = pickSpot(world, taken);
     assert.ok(spot !== null);
     assert.ok(!taken.some(([x, y]) => x === spot[0] && y === spot[1]));
+    // Spots with room for a Baron Invasion's camps go first.
+    assert.equal(roomy(spot), i < roomyCount);
     taken.push(spot);
   }
   assert.equal(pickSpot(world, taken), null);

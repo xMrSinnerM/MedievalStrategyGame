@@ -10,6 +10,8 @@ import { advanceMarches, sendAttack, type Army, type March, type Report } from "
 import { godotHash, type Dict } from "../../../server/rules/util.ts";
 import type { AllianceRules } from "./alliances.ts";
 import { checkShipment, type Aid, type AidRules } from "./aid.ts";
+import type { EventRules } from "../../../server/rules/events.ts";
+import { eventPoints, invade } from "./invasion.ts";
 
 /** A player as stored in the players table (the game columns). */
 export interface PlayerState {
@@ -24,6 +26,9 @@ export interface PlayerState {
   protected_until: number;
   /** Robber baron camps your armies have beaten, for the leaderboard. */
   barons_beaten: number;
+  /** The start of the last Baron Invasion you played in, and your event points in it. */
+  event_key: number;
+  event_points: number;
 }
 
 /** The numbers for fights between players, from data/pvp.json. */
@@ -94,6 +99,8 @@ export interface Context {
   homecomings?: Homecoming[];
   alliances?: AllianceRules;
   aid?: AidRules;
+  /** Timed events, for Baron Invasions; `offset` shifts their clock (local testing). */
+  events?: { rules: EventRules; world: World; offset?: number };
 }
 
 export interface World {
@@ -103,6 +110,8 @@ export interface World {
   camps: { id: string; name: string; position: [number, number]; level: number }[];
   /** Where players' castles can stand (scripts/economy/player_spots.gd). */
   spots: [number, number][];
+  /** For each spot, where invader camps can stand around it (Baron Invasions). */
+  invasion_spots?: [number, number][][];
 }
 
 /** What other players see of you on the map. */
@@ -138,12 +147,17 @@ export function checkName(name: unknown): string {
   return "";
 }
 
+/** Spots with room for this many invader camps around them are given out first. */
+const ROOMY = 3;
+
 /** A free spot for a new castle, chosen at random; null when the world is full. */
 export function pickSpot(world: World, taken: [number, number][], random: () => number = Math.random): [number, number] | null {
   const used = new Set(taken.map(([x, y]) => `${x},${y}`));
   const free = world.spots.filter(([x, y]) => !used.has(`${x},${y}`));
   if (free.length === 0) return null;
-  return free[Math.floor(random() * free.length)];
+  const roomy = free.filter((s) => (world.invasion_spots?.[world.spots.indexOf(s)]?.length ?? 0) >= ROOMY);
+  const pool = roomy.length > 0 ? roomy : free;
+  return pool[Math.floor(random() * pool.length)];
 }
 
 /** The level other players see: your keep's. */
@@ -163,6 +177,14 @@ export function might(castle: CastleData, pvp: PvpRules): number {
 /** How many of these battle reports are camps beaten. */
 export function campsBeaten(reports: Report[]): number {
   return reports.filter((r) => r.winner === "a" && !r.empty).length;
+}
+
+/** The leaderboard counts after these battles: camps beaten and event points. */
+export function scored(stored: PlayerState, reports: Report[]): Pick<PlayerState, "barons_beaten" | "event_points"> {
+  return {
+    barons_beaten: (stored.barons_beaten ?? 0) + campsBeaten(reports),
+    event_points: (stored.event_points ?? 0) + eventPoints(reports, stored.event_key ?? 0),
+  };
 }
 
 /** Whether nobody may attack this player now: new, small, and peaceful so far. */
@@ -186,11 +208,15 @@ export function newPlayer(rules: Rules, world: World, name: string, now: number,
     next_march: 1,
     protected_until: pvp ? now + pvp.protection_hours * 3600 : 0,
     barons_beaten: 0,
+    event_key: 0,
+    event_points: 0,
   };
 }
 
 /** Brings the player's world up to `now`, then carries out the order (if any). */
-export function act(rules: Rules, stored: PlayerState, req: Request, now: number, ctx: Context = {}): Outcome {
+export function act(rules: Rules, given: PlayerState, req: Request, now: number, ctx: Context = {}): Outcome {
+  const ev = ctx.events;
+  const stored = ev ? invade(given, ev.rules, ev.world, now, ev.offset ?? 0) : given;
   const army: Army = {
     castle: CastleState.fromDict(rules.buildings, stored.castle),
     camps: structuredClone(stored.camps),
@@ -323,7 +349,7 @@ export function act(rules: Rules, stored: PlayerState, req: Request, now: number
       marches: army.marches,
       next_march: army.nextMarch,
       protected_until: protectedUntil,
-      barons_beaten: (stored.barons_beaten ?? 0) + campsBeaten(reports),
+      ...scored(stored, reports),
     },
     reports,
     error,
@@ -422,7 +448,7 @@ export function fightRaid(rules: Rules, pvp: PvpRules, stored: PlayerState, raid
       camps: world.camps,
       marches: world.marches,
       next_march: world.nextMarch,
-      barons_beaten: (stored.barons_beaten ?? 0) + campsBeaten(campReports),
+      ...scored(stored, campReports),
     },
     campReports,
     attackerReport: report("attacker", raid.defender_name),

@@ -36,6 +36,9 @@ export interface Report {
   new_level: number;
   defeats: number;
   needed: number;
+  /** Invader camps: the invasion it belongs to, and the event points this win earned. */
+  event?: number;
+  points?: number;
 }
 
 export interface Army {
@@ -131,8 +134,14 @@ function fightCamp(world: Army, rules: BaronRules, m: March): Report {
   const result = attackCamp(camp, rules, world.castle.rules, m.army, m.id * 7919 + godotHash(m.camp), m.arrive);
   m.survivors = result.survivors;
   m.loot = result.loot;
-  return { ...report, winner: result.winner, a: result.a, b: result.b, spoils: result.loot, level: result.level,
+  const out: Report = { ...report, winner: result.winner, a: result.a, b: result.b, spoils: result.loot, level: result.level,
     leveled: result.leveled, new_level: camp.level, defeats: camp.defeats, needed: rules.defeatsNeeded(camp.level) };
+  if (camp.event !== undefined) {
+    out.event = camp.event;
+    out.points = result.winner === "a" ? (camp.points ?? 0) * result.level : 0;
+    out.needed = 1;
+  }
+  return out;
 }
 
 function comeHome(world: Army, m: March, at: number): void {

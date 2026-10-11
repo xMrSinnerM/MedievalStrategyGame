@@ -11,6 +11,20 @@ export interface WeeklyEvent {
   hour: number;
   hours: number;
   effects: Record<string, number>;
+  /** Invader camps near every castle while the event runs (see invasion.ts). */
+  invasion?: InvasionRules;
+}
+
+/** How a Baron Invasion goes, from data/events.json. */
+export interface InvasionRules {
+  camps: number;
+  names: string[];
+  /** The first camp's level is 1 + this per keep level above 1; each next camp is a level higher. */
+  level_per_keep: number;
+  /** Event points for a win: this times the camp's level. */
+  points_per_level: number;
+  /** Seconds a beaten invader camp rebuilds. */
+  rebuild: number;
 }
 
 export interface EventRules {
@@ -23,6 +37,7 @@ export interface EventTime {
   name: string;
   description: string;
   effects: Record<string, number>;
+  invasion?: InvasionRules;
   start: number;
   end: number;
 }
@@ -41,7 +56,9 @@ function lastStart(e: WeeklyEvent, t: number): number {
 }
 
 function at(e: WeeklyEvent, start: number): EventTime {
-  return { id: e.id, name: e.name, description: e.description, effects: e.effects, start, end: start + e.hours * 3600 };
+  const out: EventTime = { id: e.id, name: e.name, description: e.description, effects: e.effects, start, end: start + e.hours * 3600 };
+  if (e.invasion !== undefined) out.invasion = e.invasion;
+  return out;
 }
 
 /** The events that are on at `t`. */

@@ -142,6 +142,8 @@ func show_baron_report(report: Dictionary) -> void:
 	var lines: PackedStringArray = []
 	if won:
 		lines.append("Your army is bringing home %s." % _spoils(report.spoils))
+		if int(report.get("points", 0)) > 0:
+			lines.append("Baron Invasion: +%d event points." % int(report.points))
 		if report.leveled:
 			lines.append("%s rises to level %d: more soldiers, more loot." % [report.defender, report.new_level])
 		else:

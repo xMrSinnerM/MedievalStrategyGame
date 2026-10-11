@@ -13,6 +13,11 @@ var position := Vector2.ZERO
 var level := 1
 var defeats := 0             ## wins against it at its current level
 var rebuilt_at := 0.0        ## unix time it can be attacked again
+## Online only: an invader camp of a Baron Invasion (a timed event) has the
+## start of its invasion here, and gives `points` event points per level for
+## a win. The server decides its fights; it rises a level with every win.
+var event := 0.0
+var points := 0
 
 
 static func create(camp_id: String, display_name: String, pos: Vector2, start_level := 1) -> BaronCamp:
@@ -22,6 +27,10 @@ static func create(camp_id: String, display_name: String, pos: Vector2, start_le
 	camp.position = pos
 	camp.level = start_level
 	return camp
+
+
+func is_invader() -> bool:
+	return event > 0.0
 
 
 func is_ready(now: float) -> bool:
@@ -68,8 +77,12 @@ static func _carried(stock: Dictionary, capacity: float) -> Dictionary:
 
 
 func to_dict() -> Dictionary:
-	return {"id": id, "name": camp_name, "position": [position.x, position.y], "level": level,
+	var out := {"id": id, "name": camp_name, "position": [position.x, position.y], "level": level,
 			"defeats": defeats, "rebuilt_at": rebuilt_at}
+	if is_invader():
+		out["event"] = event
+		out["points"] = points
+	return out
 
 
 static func from_dict(data: Dictionary) -> BaronCamp:
@@ -77,4 +90,6 @@ static func from_dict(data: Dictionary) -> BaronCamp:
 	var camp := create(data.get("id", ""), data.get("name", ""), Vector2(pos[0], pos[1]), int(data.get("level", 1)))
 	camp.defeats = int(data.get("defeats", 0))
 	camp.rebuilt_at = float(data.get("rebuilt_at", 0.0))
+	camp.event = float(data.get("event", 0.0))
+	camp.points = int(data.get("points", 0))
 	return camp

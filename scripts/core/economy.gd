@@ -32,6 +32,8 @@ signal aid_changed
 signal aid_news(text: String)
 ## Online: the server sent the timed events on now and next (see `events`).
 signal events_changed
+## Online: robber baron camps came or went (invader camps of a Baron Invasion).
+signal barons_changed
 
 ## Games are kept in SLOTS save slots under save_dir (slot_1.json ...).
 const SLOTS := 3
@@ -135,6 +137,9 @@ var aid_rules := {}
 ## "upcoming": [...]}, each {"id", "name", "description", "effects", "start",
 ## "end"} in Unix seconds (data/events.json).
 var events := {}
+## Online: the start of the last Baron Invasion you played in, and your event points in it.
+var event_key := 0.0
+var event_points := 0
 
 var _seen_report := 0          ## newest server battle report already shown
 var _poll_timer := 0.0
@@ -748,6 +753,8 @@ func begin_online(answer: Dictionary) -> void:
 	_chat_timer = 0.0
 	aid = []
 	events = {}
+	event_key = 0.0
+	event_points = 0
 	protected_until = 0.0
 	if pvp.is_empty():
 		pvp = get_node("/root/GameData").load_json("res://data/pvp.json")
@@ -780,15 +787,26 @@ func apply_server(answer: Dictionary) -> void:
 		return
 	player_castle.copy_from(CastleState.from_dict(rules, p.get("castle", {})))
 	castle_positions[MAIN_CASTLE] = Vector2(float(p.get("home_x", 0.0)), float(p.get("home_y", 0.0)))
+	var listed := {}
+	var camps_moved := false
 	for c: Dictionary in p.get("camps", []):
 		var fresh := BaronCamp.from_dict(c)
+		listed[fresh.id] = true
 		var camp := get_baron(fresh.id)
 		if camp == null:
 			barons.append(fresh)
+			camps_moved = true
 		else:
 			camp.level = fresh.level
 			camp.defeats = fresh.defeats
 			camp.rebuilt_at = fresh.rebuilt_at
+	# Invader camps leave when their invasion is over.
+	var kept := barons.filter(func(b: BaronCamp) -> bool: return listed.has(b.id))
+	if kept.size() != barons.size():
+		barons.assign(kept)
+		camps_moved = true
+	event_key = float(p.get("event_key", 0.0))
+	event_points = int(p.get("event_points", 0))
 	marches = p.get("marches", [])
 	_next_march = int(p.get("next_march", _next_march))
 	protected_until = float(p.get("protected_until", 0.0))
@@ -812,6 +830,8 @@ func apply_server(answer: Dictionary) -> void:
 			aid_news.emit(aid_text(report))
 		else:
 			attack_resolved.emit(_server_report(report))
+	if camps_moved:
+		barons_changed.emit()
 	changed.emit()
 	marches_changed.emit()
 
@@ -840,6 +860,7 @@ func _server_report(r: Dictionary) -> Dictionary:
 		"spoils": r.get("spoils", {}), "level": int(r.get("level", 1)), "leveled": r.get("leveled", false),
 		"new_level": int(r.get("new_level", 1)), "defeats": int(r.get("defeats", 0)),
 		"needed": int(r.get("needed", 1)), "home_in": maxf(0.0, back - now()),
+		"invader": r.has("event"), "points": int(r.get("points", 0)),
 	}
 
 
@@ -1062,6 +1083,20 @@ func baron_loot(level: int) -> Dictionary:
 		for r: String in loot:
 			loot[r] = floori(int(loot[r]) * factor)
 	return loot
+
+
+func invasion() -> Dictionary:
+	## The Baron Invasion on now ({} if none).
+	for e: Dictionary in events_on():
+		if e.has("invasion"):
+			return e
+	return {}
+
+
+func invasion_points() -> int:
+	## Your event points in the invasion on now (0 if none).
+	var e := invasion()
+	return event_points if not e.is_empty() and float(e.start) == event_key else 0
 
 
 func loot_bonus_note() -> String:

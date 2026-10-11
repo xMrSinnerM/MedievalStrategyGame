@@ -95,6 +95,17 @@ nothing runs on a timer: a battle with a camp uses the bonus of the events on
 at the moment it is fought. Every answer with your castle carries `events`,
 the events on now and the next ones.
 
+A Baron Invasion (`supabase/functions/game/invasion.ts`) adds invader camps
+to the player's own camp list the first time they play while it runs, on
+places around their castle that `world/world.json` lists for each spot
+(`invasion_spots`), and starts their event points again from 0. Invader camps
+are ordinary camps with an `event` field: they rise a level with every win,
+rebuild quickly, and each win's report carries the event points it earned,
+which go to the `event_points` column (with `event_key`, the invasion's
+start). When the invasion is over, its camps leave once no army is marching
+to or from them. New castles are placed on spots with room for every
+invader camp first.
+
 To deploy changes with the Supabase CLI, from the repository root:
 
 ```
