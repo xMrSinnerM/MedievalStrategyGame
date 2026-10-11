@@ -264,6 +264,25 @@ been stormed is left alone for 10 minutes. Your main castle is safe from
 sieges until its keep reaches level 2 (newcomer's protection), so train a
 garrison before you upgrade it.
 
+### Siege waves
+
+Every attack on a castle or a robber baron camp (sieges, sent attacks and
+attacks on players online) is fought in waves over three walls, like Goodgame
+Empire (`Battle.siege`, ported in `server/rules/battle.ts`):
+
+- The defenders stand on the **left**, **front** and **right** walls, with a
+  reserve in the **courtyard**: 25%, 35%, 25% and 15% of them.
+- The attackers come in waves, each with soldiers for every wall. Without a
+  choice the army goes in one wave, 30% left, 40% front and 30% right. A
+  higher keep allows more waves: 2 from keep 2 and 3 from keep 4.
+- Each wave fights each wall's defenders behind the wall. Attackers who lose
+  on a wall go home. A broken wall lets the next waves walk straight through,
+  and its last defenders fall back into the courtyard.
+- Break at least one wall, then win the courtyard, where the defenders make
+  their last stand around the keep (the wall's bonus times 1.5).
+
+Battle reports say which walls broke and how the courtyard went.
+
 ## Diplomacy
 
 You rule Aldmere: its lords follow your wars. `Diplomacy`
@@ -514,6 +533,9 @@ How the parts work:
 - [x] Helping allies: sending resources and soldiers
 - [x] Timed events: weekend loot bonus, baron invasions, event rewards and leaderboard
 - [x] Owner tools: start and stop events, give players resources and soldiers
+- [x] Siege waves: battle rules (walls and courtyard)
+- [ ] Siege waves: choose your waves on the attack screen
+- [ ] Siege waves: set your defenders on the walls
 
 ## Known limitations
 

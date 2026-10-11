@@ -117,6 +117,7 @@ func show_report(report: Dictionary) -> void:
 		_footer.text = "Your surviving soldiers fell back. %s took %d gold in plunder." % [enemy, report.loot]
 	if report.get("lifted", "") != "":
 		_footer.text += "\nThe siege of %s is lifted." % report.lifted
+	_add_siege_line(report, me == "a")
 	visible = true
 
 
@@ -151,6 +152,7 @@ func show_baron_report(report: Dictionary) -> void:
 	else:
 		lines.append("The camp held. Your surviving soldiers are marching home.")
 	_footer.text = "\n".join(lines)
+	_add_siege_line(report, true)
 
 
 func show_raid_report(report: Dictionary) -> void:
@@ -174,7 +176,37 @@ func show_raid_report(report: Dictionary) -> void:
 		var helped: Array = report.get("helped_by", [])
 		if not helped.is_empty():
 			_footer.text = "Defenders from %s fought beside your garrison.\n" % ", ".join(PackedStringArray(helped)) + _footer.text
+	_add_siege_line(report, attacking)
 	_title.add_theme_color_override("font_color", WIN if won else LOSS)
+
+
+func _add_siege_line(report: Dictionary, attacking: bool) -> void:
+	## Puts how the walls and the courtyard went (Battle.siege()) above the footer.
+	var line := siege_line(report, attacking)
+	if line != "":
+		_footer.text = line + "\n" + _footer.text
+
+
+static func siege_line(report: Dictionary, attacking: bool) -> String:
+	var walls: Dictionary = report.get("walls", {})
+	if walls.is_empty():
+		return ""
+	var broken: PackedStringArray = []
+	for w: String in Battle.WALLS:
+		if walls.get(w, {}).get("broken", false):
+			broken.append(w)
+	var who := "Your army" if attacking else "The enemy"
+	if broken.is_empty():
+		return "%s broke no wall." % who if attacking else "Every wall held."
+	var which := " and ".join(broken) if broken.size() < 3 else "left, front and right"
+	var line := "%s broke %s %s wall%s" % [who, "the" if attacking else "your", which, "s" if broken.size() > 1 else ""]
+	var yard: Dictionary = report.get("courtyard", {})
+	if yard.get("open", false):
+		return line + " and found the courtyard empty."
+	if yard.has("winner"):
+		var won_yard: bool = yard.winner == "a"
+		return line + (" and won in the courtyard." if won_yard else " but lost in the courtyard.")
+	return line + "."
 
 
 func _clear_grid() -> void:

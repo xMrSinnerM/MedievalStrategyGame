@@ -12,6 +12,15 @@ export const MAX_ROUNDS = 12;
 export const ODDS_SAMPLES = 40;
 export const WALL_MAX = 1.5;
 export const WALL_HALF = 200.0;
+export const WALLS = ["left", "front", "right"] as const;
+export type Wall = typeof WALLS[number];
+export type Layout = Record<Wall | "courtyard", number>;
+export const DEFAULT_LAYOUT: Layout = { left: 25, front: 35, right: 25, courtyard: 15 };
+export const ATTACK_SPLIT: Record<string, number> = { left: 30, front: 40, right: 30 };
+export const WAVES_BY_KEEP: [number, number][] = [[1, 1], [2, 2], [4, 3]];
+export const WALL_SEED = 101;
+export const COURTYARD_SEED = 997;
+export const COURTYARD_BONUS = 1.5;
 
 export type Side = Record<string, { start: number; lost: number }>;
 
@@ -40,6 +49,173 @@ export function fight(rules: BuildingRules, a: Dict, b: Dict, seed: number, wall
   const shareA = startA > 0 ? total(leftA) / startA : 0;
   const shareB = startB > 0 ? total(leftB) / startB : 0;
   return { winner: shareA > shareB ? "a" : "b", rounds, a: losses(a, leftA), b: losses(b, leftB) };
+}
+
+/** One wave of an attack: soldiers for each wall. */
+export type Wave = Partial<Record<Wall, Dict>>;
+
+export type WallFight = { wave: number; open: true } | { wave: number; winner: "a" | "b"; a: Side; b: Side };
+
+export interface SiegeResult extends FightResult {
+  walls: Record<Wall, { broken: boolean; fights: WallFight[] }>;
+  courtyard: Record<string, never> | { open: true } | { winner: "a" | "b"; a: Side; b: Side };
+  waves: number;
+}
+
+/**
+ * Storms a castle or camp in waves. A port of Battle.siege() in
+ * scripts/economy/battle.gd: the defenders stand on the walls and in the
+ * courtyard by `layout`; each wave fights each wall's defenders behind the
+ * wall, and attackers who break a wall go on to fight the courtyard (the
+ * reserve plus that wall's last defenders), who make their last stand around
+ * the keep with the wall's bonus times COURTYARD_BONUS.
+ */
+export function siege(rules: BuildingRules, waves: Wave[], defenders: Dict, layout: Layout, seed: number, wall = 1.0): SiegeResult {
+  const posts = split(defenders, layout, ["left", "right", "courtyard", "front"]);
+  const sent: Dict = {};
+  const home: Dict = {};
+  const through: Dict = {};
+  const walls = {} as SiegeResult["walls"];
+  let rounds = 0;
+  let brokenAny = false;
+  let yard = posts.courtyard;
+  const holding: Dict = {};
+  WALLS.forEach((w, i) => {
+    let held = posts[w];
+    const fights: WallFight[] = [];
+    let broken = false;
+    waves.forEach((wave, k) => {
+      const troops = ints(wave[w] ?? {});
+      if (Object.keys(troops).length === 0) return;
+      add(sent, troops);
+      if (broken || Object.keys(held).length === 0) {
+        broken = true;
+        add(through, troops);
+        fights.push({ wave: k, open: true });
+        return;
+      }
+      const r = fight(rules, troops, held, seed + WALL_SEED * (i + 1) + k, wall);
+      rounds += r.rounds;
+      held = survivors(r.b);
+      fights.push({ wave: k, winner: r.winner, a: r.a, b: r.b });
+      if (r.winner === "a") {
+        broken = true;
+        add(through, survivors(r.a));
+      } else {
+        add(home, survivors(r.a));
+      }
+    });
+    walls[w] = { broken, fights };
+    if (broken) {
+      brokenAny = true;
+      add(yard, held);
+    } else {
+      add(holding, held);
+    }
+  });
+  let winner: "a" | "b" = "b";
+  let courtyard: SiegeResult["courtyard"] = {};
+  if (brokenAny && Object.keys(through).length > 0) {
+    if (Object.keys(yard).length === 0) {
+      winner = "a";
+      courtyard = { open: true };
+      add(home, through);
+    } else {
+      const r = fight(rules, through, yard, seed + COURTYARD_SEED, wall * COURTYARD_BONUS);
+      rounds += r.rounds;
+      winner = r.winner;
+      courtyard = { winner: r.winner, a: r.a, b: r.b };
+      yard = survivors(r.b);
+      add(home, survivors(r.a));
+    }
+  }
+  add(holding, yard);
+  return { winner, rounds, a: kept(sent, home), b: kept(ints(defenders), holding), walls, courtyard, waves: waves.length };
+}
+
+export function siegeOdds(rules: BuildingRules, waves: Wave[], defenders: Dict, layout: Layout, seed = 1, wall = 1.0): number {
+  if (!waves.some((wave) => Object.values(wave).some((army) => Object.keys(ints(army ?? {})).length > 0))) return 0;
+  let wins = 0;
+  for (let k = 0; k < ODDS_SAMPLES; k++) if (siege(rules, waves, defenders, layout, seed + k, wall).winner === "a") wins += 1;
+  return wins / ODDS_SAMPLES;
+}
+
+/** One wave with the army spread over the walls by ATTACK_SPLIT. */
+export function autoWaves(army: Dict): Wave[] {
+  return [split(army, ATTACK_SPLIT, ["left", "right", "front"])];
+}
+
+export function wavesForKeep(keep: number): number {
+  let n = 1;
+  for (const [from, waves] of WAVES_BY_KEEP) if (keep >= from) n = waves;
+  return n;
+}
+
+/** Spreads an army over `order`'s keys by percentage, rounding down; the last key gets the rest. */
+export function split(army: Dict, shares: Record<string, number>, order: string[]): Record<string, Dict> {
+  const out: Record<string, Dict> = {};
+  for (const key of order) out[key] = {};
+  for (const u of Object.keys(army)) {
+    const n = Math.trunc(army[u]);
+    if (n <= 0) continue;
+    let left = n;
+    order.forEach((key, i) => {
+      let part = i === order.length - 1 ? left : Math.floor(n * Math.trunc(shares[key] ?? 0) / 100);
+      part = Math.min(part, left);
+      left -= part;
+      if (part > 0) out[key][u] = part;
+    });
+  }
+  return out;
+}
+
+/**
+ * Checks waves sent with an attack: 1 to `max` of them, each soldiers for
+ * some of the walls. Returns them without empty walls, or why not. Whether
+ * the garrison has the soldiers is checked on their sum (wavesArmy()).
+ */
+export function checkWaves(waves: unknown, max: number, hasUnit: (unit: string) => boolean): Wave[] | string {
+  if (!Array.isArray(waves) || waves.length === 0) return "Bad waves.";
+  if (waves.length > max) return max === 1 ? "Upgrade your keep to send more than one wave." : `Your keep allows ${max} waves.`;
+  const out: Wave[] = [];
+  for (const wave of waves) {
+    if (wave === null || typeof wave !== "object" || Array.isArray(wave)) return "Bad waves.";
+    const clean: Wave = {};
+    for (const [w, army] of Object.entries(wave as Record<string, unknown>)) {
+      if (!(WALLS as readonly string[]).includes(w)) return "Bad waves.";
+      if (army === null || typeof army !== "object" || Array.isArray(army)) return "Bad waves.";
+      const troops: Dict = {};
+      for (const [unit, n] of Object.entries(army as Record<string, unknown>)) {
+        if (!hasUnit(unit)) return "Unknown unit.";
+        if (typeof n !== "number" || !Number.isInteger(n) || n < 0) return "Bad waves.";
+        if (n > 0) troops[unit] = n;
+      }
+      if (Object.keys(troops).length > 0) clean[w as Wall] = troops;
+    }
+    out.push(clean);
+  }
+  return out;
+}
+
+/** Every soldier in the waves, by unit. */
+export function wavesArmy(waves: Wave[]): Dict {
+  const out: Dict = {};
+  for (const wave of waves) for (const army of Object.values(wave)) add(out, army ?? {});
+  return out;
+}
+
+/** "" if `layout` is a valid defence layout, otherwise why not. */
+export function checkLayout(layout: unknown): string {
+  if (layout === null || typeof layout !== "object" || Array.isArray(layout)) return "Bad layout.";
+  const keys = Object.keys(DEFAULT_LAYOUT);
+  if (Object.keys(layout).length !== keys.length) return "Bad layout.";
+  let sum = 0;
+  for (const key of keys) {
+    const v = (layout as Record<string, unknown>)[key];
+    if (typeof v !== "number" || !Number.isInteger(v) || v < 0 || v > 100) return "Bad layout.";
+    sum += v;
+  }
+  return sum === 100 ? "" : "The walls and courtyard must add up to 100%.";
 }
 
 export function wallFromDefense(d: number): number {
@@ -78,6 +254,22 @@ function casualties(rules: BuildingRules, attackers: Dict, defenders: Dict, luck
       out[t] = (out[t] ?? 0) + power * share * rules.unitBonus(u, t) / Math.max(rules.unitStat(t, "defense") * wall, 1.0);
     }
   }
+  return out;
+}
+
+function ints(army: Dict): Dict {
+  const out: Dict = {};
+  for (const u of Object.keys(army)) if (Math.trunc(army[u]) > 0) out[u] = Math.trunc(army[u]);
+  return out;
+}
+
+function add(to: Dict, army: Dict): void {
+  for (const u of Object.keys(army)) if (Math.trunc(army[u]) > 0) to[u] = (to[u] ?? 0) + Math.trunc(army[u]);
+}
+
+function kept(start: Dict, left: Dict): Side {
+  const out: Side = {};
+  for (const u of Object.keys(start)) out[u] = { start: start[u], lost: start[u] - Math.min(left[u] ?? 0, start[u]) };
   return out;
 }
 

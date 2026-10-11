@@ -25,6 +25,7 @@ func _initialize() -> void:
 	test_warband()
 	test_battle()
 	test_siege()
+	test_siege_waves()
 	test_capture()
 	test_save_slots()
 	test_diplomacy()
@@ -339,6 +340,53 @@ func test_siege() -> void:
 	keep.id = "npc_castle"
 	keep.troops = {"spearman": 20}
 	check(Battle.assault(raider, keep, 7).outcome == "held", "an even fight against walls is lost")
+
+
+func test_siege_waves() -> void:
+	# Spreading soldiers: rounded down, the last key gets the rest.
+	var parts := Battle.split({"spearman": 10, "archer": 1}, Battle.DEFAULT_LAYOUT, ["left", "right", "courtyard", "front"])
+	check(parts.left == {"spearman": 2} and parts.right == {"spearman": 2} and parts.courtyard == {"spearman": 1}
+			and parts.front == {"spearman": 5, "archer": 1}, "layout split")
+	check(Battle.auto_waves({"spearman": 10}) == [{"left": {"spearman": 3}, "right": {"spearman": 3}, "front": {"spearman": 4}}], "auto waves")
+	check(Battle.waves_for_keep(1) == 1 and Battle.waves_for_keep(2) == 2 and Battle.waves_for_keep(3) == 2
+			and Battle.waves_for_keep(5) == 3, "waves by keep")
+	check(Battle.check_layout(Battle.DEFAULT_LAYOUT) == "", "default layout is valid")
+	check(Battle.check_layout({"left": 50, "front": 50, "right": 0, "courtyard": 10}) != "", "layout must add up to 100")
+	check(Battle.check_layout({"left": 50, "front": 50}) != "", "layout needs every post")
+	# Nobody on the left wall: the attackers walk in, and nobody in the courtyard either.
+	var open_left := {"left": 0, "front": 100, "right": 0, "courtyard": 0}
+	var r := Battle.siege(rules, [{"left": {"spearman": 5}}], {"spearman": 50}, open_left, 1, 2.0)
+	check(r.winner == "a" and r.walls.left.broken and r.courtyard.get("open", false), "an empty wall and courtyard fall at once")
+	check(r.a.spearman.lost == 0 and r.b.spearman.lost == 0, "nobody fell")
+	# A wall that holds sends its attackers home; the other walls' defenders never fight.
+	r = Battle.siege(rules, [{"front": {"spearman": 5}}], {"spearman": 100}, Battle.DEFAULT_LAYOUT, 3, 2.0)
+	check(r.winner == "b" and not r.walls.front.broken and r.courtyard.is_empty(), "the front held")
+	check(r.walls.left.fights.is_empty() and r.b.spearman.lost < 35, "only the front fought")
+	# A big wave breaks the front, the next wave walks through it.
+	r = Battle.siege(rules, [{"front": {"swordsman": 200}}, {"front": {"archer": 20}}], {"spearman": 60}, Battle.DEFAULT_LAYOUT, 5, 1.5)
+	check(r.walls.front.broken and r.walls.front.fights.size() == 2 and r.walls.front.fights[1].get("open", false), "second wave walks through")
+	check(r.winner == "a" and r.courtyard.has("winner"), "won in the courtyard")
+	check(r.a.archer.lost == 0 and r.waves == 2, "the second wave lost nobody at the wall")
+	var start := 0
+	for u: String in r.b:
+		start += r.b[u].start
+	check(start == 60, "every defender counted once")
+	# A camp attack is a siege, and the odds use the same rules.
+	var chance := Battle.siege_odds(rules, Battle.auto_waves({"swordsman": 300}), {"spearman": 20}, Battle.DEFAULT_LAYOUT, 1, 1.5)
+	check(chance == 1.0, "a crushing army always wins")
+	check(Battle.siege_odds(rules, [{}], {"spearman": 20}, Battle.DEFAULT_LAYOUT) == 0.0, "no soldiers, no chance")
+	# Waves sent with an attack, and the castle's own layout (saved with it).
+	check(Battle.check_waves([{"left": {"spearman": 3}}], 1, rules) == "", "one wave is fine")
+	check(Battle.check_waves([{}, {}], 1, rules) != "", "the keep limits the waves")
+	check(Battle.check_waves([{"middle": {"spearman": 3}}], 2, rules) != "", "only the three walls")
+	check(Battle.waves_army([{"left": {"spearman": 3}}, {"left": {"spearman": 2}, "front": {"archer": 1}}]) == {"spearman": 5, "archer": 1}, "waves army")
+	var c := fresh()
+	check(c.layout == Battle.DEFAULT_LAYOUT, "castles start with the default layout")
+	c.layout = {"left": 10, "front": 60, "right": 10, "courtyard": 20}
+	check(CastleState.from_dict(rules, c.to_dict()).layout == c.layout, "the layout is saved")
+	var old := c.to_dict()
+	old.erase("layout")
+	check(CastleState.from_dict(rules, old).layout == Battle.DEFAULT_LAYOUT, "old saves get the default layout")
 
 
 func test_capture() -> void:

@@ -3,7 +3,7 @@
 // while before it can be attacked again.
 
 import { BaronRules } from "./baron_rules.ts";
-import { fight, survivors, wallFromDefense, type FightResult } from "./battle.ts";
+import { autoWaves, DEFAULT_LAYOUT, siege, survivors, wallFromDefense, type SiegeResult, type Wave } from "./battle.ts";
 import { BuildingRules } from "./building_rules.ts";
 import type { Dict } from "./util.ts";
 
@@ -22,7 +22,7 @@ export interface CampData {
   rebuild?: number;
 }
 
-export interface CampAttack extends FightResult {
+export interface CampAttack extends SiegeResult {
   level: number;
   leveled: boolean;
   survivors: Dict;
@@ -33,9 +33,14 @@ export function isReady(camp: CampData, now: number): boolean {
   return now >= camp.rebuilt_at;
 }
 
-/** Fights the camp's garrison behind its palisade and updates the camp. */
-export function attackCamp(camp: CampData, rules: BaronRules, units: BuildingRules, army: Dict, seed: number, now: number): CampAttack {
-  const result = fight(units, army, rules.garrison(camp.level), seed, wallFromDefense(rules.palisade(camp.level)));
+/**
+ * Storms the camp's palisade with `waves` (by default the army in one wave,
+ * autoWaves()), the garrison in DEFAULT_LAYOUT, and updates the camp.
+ */
+export function attackCamp(camp: CampData, rules: BaronRules, units: BuildingRules, army: Dict, seed: number, now: number,
+  waves?: Wave[]): CampAttack {
+  const result = siege(units, waves ?? autoWaves(army), rules.garrison(camp.level), DEFAULT_LAYOUT, seed,
+    wallFromDefense(rules.palisade(camp.level)));
   const out: CampAttack = { ...result, level: camp.level, leveled: false, survivors: survivors(result.a), loot: {} };
   if (result.winner !== "a") return out;
   const factor = rules.lootFactor(now);

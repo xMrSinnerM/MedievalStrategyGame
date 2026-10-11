@@ -5,7 +5,7 @@
 
 import { attackCamp, isReady, type CampData } from "./baron_camp.ts";
 import { BaronRules } from "./baron_rules.ts";
-import type { Side } from "./battle.ts";
+import type { Side, SiegeResult, Wave } from "./battle.ts";
 import { CastleState } from "./castle_state.ts";
 import { godotHash, type Dict } from "./util.ts";
 
@@ -13,6 +13,8 @@ export interface March {
   id: number;
   camp: string;
   army: Dict;
+  /** How the army storms the walls; without it, one wave (autoWaves()). */
+  waves?: Wave[];
   depart: number;
   arrive: number;
   back: number;
@@ -30,6 +32,9 @@ export interface Report {
   winner: "a" | "b";
   a: Side;
   b: Side;
+  /** How each wall and the courtyard went; absent when the camp was empty. */
+  walls?: SiegeResult["walls"];
+  courtyard?: SiegeResult["courtyard"];
   spoils: Dict;
   level: number;
   leveled: boolean;
@@ -70,8 +75,8 @@ export function checkAttack(world: Army, campId: string, army: Dict, now: number
   return "";
 }
 
-/** Sends soldiers from the garrison against a camp. Returns "" or why not. */
-export function sendAttack(world: Army, rules: BaronRules, campId: string, army: Dict, now: number): string {
+/** Sends soldiers from the garrison against a camp, in `waves` if given. Returns "" or why not. */
+export function sendAttack(world: Army, rules: BaronRules, campId: string, army: Dict, now: number, waves?: Wave[]): string {
   world.castle.advanceTo(now);
   const why = checkAttack(world, campId, army, now);
   if (why !== "") return why;
@@ -84,7 +89,7 @@ export function sendAttack(world: Army, rules: BaronRules, campId: string, army:
   }
   const travel = marchTimeTo(world, rules, world.camps.find((c) => c.id === campId)!);
   world.marches.push({ id: world.nextMarch, camp: campId, army: sent, depart: now, arrive: now + travel,
-    back: now + 2 * travel, state: "out", survivors: {}, loot: {} });
+    back: now + 2 * travel, state: "out", survivors: {}, loot: {}, ...(waves ? { waves } : {}) });
   world.nextMarch += 1;
   return "";
 }
@@ -131,10 +136,10 @@ function fightCamp(world: Army, rules: BaronRules, m: March): Report {
     report.empty = true;
     return report;
   }
-  const result = attackCamp(camp, rules, world.castle.rules, m.army, m.id * 7919 + godotHash(m.camp), m.arrive);
+  const result = attackCamp(camp, rules, world.castle.rules, m.army, m.id * 7919 + godotHash(m.camp), m.arrive, m.waves);
   m.survivors = result.survivors;
   m.loot = result.loot;
-  const out: Report = { ...report, winner: result.winner, a: result.a, b: result.b, spoils: result.loot, level: result.level,
+  const out: Report = { ...report, winner: result.winner, a: result.a, b: result.b, walls: result.walls, courtyard: result.courtyard, spoils: result.loot, level: result.level,
     leveled: result.leveled, new_level: camp.level, defeats: camp.defeats, needed: rules.defeatsNeeded(camp.level) };
   if (camp.event !== undefined) {
     out.event = camp.event;

@@ -6,7 +6,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { attackCamp, isReady, type CampData } from "../rules/baron_camp.ts";
-import { fight, odds } from "../rules/battle.ts";
+import { autoWaves, fight, odds, siege, siegeOdds, split } from "../rules/battle.ts";
 import { CastleState } from "../rules/castle_state.ts";
 import { makeRules } from "../rules/load.ts";
 import { godotHash } from "../rules/util.ts";
@@ -104,6 +104,16 @@ test("battles", () => {
   fixtures.battles.forEach((c: any, i: number) => {
     same(fight(rules.buildings, c.a, c.b, c.seed, c.wall), c.result, `battle ${i}`);
     same(odds(rules.buildings, c.a, c.b, c.seed, c.wall), c.odds, `battle ${i} odds`);
+  });
+});
+
+test("siege waves", () => {
+  assert.ok(fixtures.sieges.length > 0);
+  fixtures.sieges.forEach((c: any, i: number) => {
+    same(siege(rules.buildings, c.waves, c.defenders, c.layout, c.seed, c.wall), c.result, `siege ${i}`);
+    same(siegeOdds(rules.buildings, c.waves, c.defenders, c.layout, c.seed, c.wall), c.odds, `siege ${i} odds`);
+    same(autoWaves(c.army), c.auto, `siege ${i} auto waves`);
+    same(split(c.defenders, c.layout, ["left", "right", "courtyard", "front"]), c.split, `siege ${i} split`);
   });
 });
 

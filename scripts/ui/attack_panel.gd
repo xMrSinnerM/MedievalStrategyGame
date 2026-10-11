@@ -223,7 +223,7 @@ func _update() -> void:
 		var wins := 0
 		var lost := 0
 		for k in SAMPLES:
-			var result := Battle.fight(Economy.rules, army, garrison, 1000 + k, wall)
+			var result := Battle.siege(Economy.rules, Battle.auto_waves(army), garrison, Battle.DEFAULT_LAYOUT, 1000 + k, wall)
 			if result.winner == "a":
 				wins += 1
 			lost += Battle.lost_count(result.a)
@@ -263,7 +263,8 @@ func _update_player() -> void:
 		var wins := 0
 		var lost := 0
 		for k in SAMPLES:
-			var result := Battle.fight(Economy.rules, army, seen.get("troops", {}), 1000 + k, float(seen.get("wall", 1.0)))
+			var result := Battle.siege(Economy.rules, Battle.auto_waves(army), seen.get("troops", {}), Battle.DEFAULT_LAYOUT,
+					1000 + k, float(seen.get("wall", 1.0)))
 			if result.winner == "a":
 				wins += 1
 			lost += Battle.lost_count(result.a)

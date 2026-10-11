@@ -5,6 +5,7 @@
 //
 // Time is passed in explicitly (Unix seconds).
 
+import { checkLayout, DEFAULT_LAYOUT, type Layout } from "./battle.ts";
 import { BuildingRules } from "./building_rules.ts";
 import { get, type Dict } from "./util.ts";
 
@@ -40,6 +41,7 @@ export interface CastleData {
   hunger: number;
   field: Dict;
   field_ready: boolean;
+  layout: Layout;
 }
 
 export class CastleState {
@@ -55,6 +57,8 @@ export class CastleState {
   hunger = 0;
   field: Dict = {};
   fieldReady = false;
+  /** Where the garrison stands when the castle is stormed (siege() in battle.ts). */
+  layout: Layout = { ...DEFAULT_LAYOUT };
   private nextId = 1;
 
   constructor(rules: BuildingRules) {
@@ -362,6 +366,7 @@ export class CastleState {
       hunger: this.hunger,
       field: { ...this.field },
       field_ready: this.fieldReady,
+      layout: { ...this.layout },
     };
   }
 
@@ -398,6 +403,9 @@ export class CastleState {
       if (rules.hasUnit(unit)) castle.field[unit] = Math.trunc(Number(data.field[unit]));
     }
     castle.fieldReady = Boolean(data.field_ready ?? false);
+    if (checkLayout(data.layout) === "") {
+      for (const key of Object.keys(DEFAULT_LAYOUT) as (keyof Layout)[]) castle.layout[key] = data.layout[key];
+    }
     return castle;
   }
 

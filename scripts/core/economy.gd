@@ -523,6 +523,7 @@ func _fight_camp(m: Dictionary) -> void:
 		"player": "a", "baron": true, "attacker": "Your army", "defender": camp.camp_name,
 		"attacker_faction": player_faction, "defender_faction": "barons", "place": camp.camp_name,
 		"winner": result.winner, "a": result.a, "b": result.b, "loot": 0, "spoils": result.loot,
+		"walls": result.walls, "courtyard": result.courtyard,
 		"level": result.level, "leveled": result.leveled, "new_level": camp.level,
 		"defeats": camp.defeats, "needed": baron_rules.defeats_needed(camp.level),
 		"home_in": maxf(0.0, float(m.back) - now()),
@@ -866,7 +867,8 @@ func _server_report(r: Dictionary) -> Dictionary:
 				"attacker": "Your army" if attacking else other, "defender": other if attacking else "Your castle",
 				"attacker_faction": player_faction, "defender_faction": "", "place": "",
 				"winner": r.get("winner", "b"), "a": r.get("a", {}), "b": r.get("b", {}), "loot": 0,
-				"spoils": r.get("spoils", {}), "wall": float(r.get("wall", 1.0)), "helped_by": r.get("helped_by", [])}
+				"spoils": r.get("spoils", {}), "wall": float(r.get("wall", 1.0)), "helped_by": r.get("helped_by", []),
+				"walls": r.get("walls", {}), "courtyard": r.get("courtyard", {})}
 	if r.get("empty", false):
 		return {"player": "a", "baron": true, "empty": true, "defender": r.get("name", ""),
 				"winner": "a", "a": {}, "b": {}, "loot": 0, "place": ""}
@@ -882,6 +884,7 @@ func _server_report(r: Dictionary) -> Dictionary:
 		"new_level": int(r.get("new_level", 1)), "defeats": int(r.get("defeats", 0)),
 		"needed": int(r.get("needed", 1)), "home_in": maxf(0.0, back - now()),
 		"invader": r.has("event"), "points": int(r.get("points", 0)),
+		"walls": r.get("walls", {}), "courtyard": r.get("courtyard", {}),
 	}
 
 
