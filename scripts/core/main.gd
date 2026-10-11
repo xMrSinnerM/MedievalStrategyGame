@@ -49,7 +49,10 @@ func start_online(answer: Dictionary) -> void:
 	Economy.begin_online(answer)
 	GameData.ensure_loaded()
 	GameData.reset_settlements()
-	GameData.settlements_by_id[Economy.MAIN_CASTLE].name = Economy.player_castle.castle_name
+	var own: Dictionary = GameData.settlements_by_id[Economy.MAIN_CASTLE]
+	own.name = Economy.player_castle.castle_name
+	var home := Economy.home_position()
+	own.position = [home.x, home.y]
 	world_map = WORLD_SCENE.instantiate()
 	add_child(world_map)
 	main_menu.visible = false

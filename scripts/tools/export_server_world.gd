@@ -1,7 +1,8 @@
 extends SceneTree
-## Writes server/world/world.json: where your castle stands and the robber
-## baron camps around it, placed exactly as the game places them
-## (BaronPlacer). The server can't read the terrain, so it uses this list.
+## Writes server/world/world.json: the robber baron camps, placed exactly as
+## the game places them (BaronPlacer), how their starting level grows with
+## distance, and the spots where players' castles can stand (PlayerSpots).
+## The server can't read the terrain, so it uses these lists.
 ##
 ## Run from the project folder after changing the terrain, settlements,
 ## player.json or the "camps" section of barons.json:
@@ -19,12 +20,20 @@ func _initialize() -> void:
 		return
 	var own: Dictionary = game_data.settlements_by_id.get(MAIN_CASTLE, {})
 	var home := Vector2(own.position[0], own.position[1])
-	var camps := BaronPlacer.place(BaronRules.load_default(), game_data.nav.is_passable, game_data.settlements,
+	var baron_rules := BaronRules.load_default()
+	var camps := BaronPlacer.place(baron_rules, game_data.nav.is_passable, game_data.settlements,
 			home, game_data.terrain.world_size)
-	var out := {"home": [home.x, home.y], "camps": camps}
+	var spots := PlayerSpots.place(game_data.terrain, game_data.nav.is_passable, game_data.settlements, camps, home)
+	var out := {
+		"home": [home.x, home.y],
+		"camp_levels": {"per_distance": float(baron_rules.camps.get("level_per_distance", 170.0)),
+				"max": int(baron_rules.camps.get("start_level_max", 12))},
+		"camps": camps,
+		"spots": spots,
+	}
 	var file := FileAccess.open(OUT, FileAccess.WRITE)
 	file.store_string(JSON.stringify(out, "\t", false))
 	file.close()
-	print("wrote %s with %d camps" % [OUT, camps.size()])
+	print("wrote %s with %d camps and %d spots" % [OUT, camps.size(), spots.size()])
 	game_data.free()
 	quit()

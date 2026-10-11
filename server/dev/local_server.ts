@@ -11,7 +11,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { makeRules } from "../rules/load.ts";
-import { act, checkName, newPlayer, type PlayerState, type World } from "../../supabase/functions/game/game.ts";
+import { act, castleLevel, checkName, newPlayer, pickSpot, type PlayerState, type World } from "../../supabase/functions/game/game.ts";
 
 const root = new URL("../../", import.meta.url);
 const json = (path: string) => JSON.parse(readFileSync(new URL(path, root), "utf8"));
@@ -101,10 +101,17 @@ createServer(async (req, res) => {
       if (players.has(user)) return send(res, 200, { ok: false, error: "You already have a castle." });
       const taken = [...players.values()].some((p) => p.name.toLowerCase() === String(body.name).trim().toLowerCase());
       if (taken) return send(res, 200, { ok: false, error: "That name is taken." });
-      const state = newPlayer(rules, world, String(body.name), now());
+      const spot = pickSpot(world, [...players.values()].map((p) => [p.home_x, p.home_y] as [number, number]));
+      if (spot === null) return send(res, 200, { ok: false, error: "The world is full. Try again later." });
+      const state = newPlayer(rules, world, String(body.name), now(), spot);
       state.castle.troops = { ...START_TROOPS };
       players.set(user, state);
       return send(res, 200, view(user, state));
+    }
+    if (body.action === "world") {
+      const others = [...players.entries()].filter(([id]) => id !== user)
+        .map(([, p]) => ({ name: p.name, home_x: p.home_x, home_y: p.home_y, level: castleLevel(p.castle) }));
+      return send(res, 200, { ok: true, now: now(), error: "", players: others });
     }
     const stored = players.get(user);
     if (stored === undefined) return send(res, 200, { ok: false, error: "No castle yet.", needs_join: true });

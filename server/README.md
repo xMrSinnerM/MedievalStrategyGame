@@ -36,15 +36,16 @@ godot --headless --path . --script res://tests/dump_server_fixtures.gd
 - `supabase/functions/game/`: the game server, one Edge Function. `index.ts`
   checks who is signed in, loads their row, and `game.ts` runs their world up
   to the server's clock and carries out the order. Orders: `join`, `state`,
-  `place`, `upgrade`, `cancel`, `move`, `recruit`, `cancel_training`, `attack`
-  (see the top of `index.ts`).
-- `world/world.json`: where the castle stands and the robber baron camps,
-  written by `scripts/tools/export_server_world.gd` because the server can't
-  read the terrain.
+  `place`, `upgrade`, `cancel`, `move`, `recruit`, `cancel_training`, `attack`,
+  and `world` for the other players' castles (see the top of `index.ts`).
+- `world/world.json`: the robber baron camps and the spots where players'
+  castles can stand, written by `scripts/tools/export_server_world.gd`
+  because the server can't read the terrain.
 
-Players sign up with email and password (Supabase Auth). Until Phase 8 every
-player gets the same spot on the map and the same camps, each with their own
-camp levels.
+Players sign up with email and password (Supabase Auth). Each new player gets
+a free spot on the map at random, and the same camps as everyone, with their
+own camp levels: camps near their castle start at level 1. Other players see
+only your name, spot and keep level.
 
 To deploy changes with the Supabase CLI, from the repository root:
 

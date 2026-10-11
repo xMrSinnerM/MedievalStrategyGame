@@ -20,7 +20,19 @@ export interface PlayerState {
 
 export interface World {
   home: [number, number];
+  /** A camp's starting level: 1 + one per `per_distance` from your castle, up to `max`. */
+  camp_levels: { per_distance: number; max: number };
   camps: { id: string; name: string; position: [number, number]; level: number }[];
+  /** Where players' castles can stand (scripts/economy/player_spots.gd). */
+  spots: [number, number][];
+}
+
+/** What other players see of you on the map. */
+export interface PublicPlayer {
+  name: string;
+  home_x: number;
+  home_y: number;
+  level: number;
 }
 
 // deno-lint-ignore no-explicit-any
@@ -44,14 +56,30 @@ export function checkName(name: unknown): string {
   return "";
 }
 
-export function newPlayer(rules: Rules, world: World, name: string, now: number): PlayerState {
+/** A free spot for a new castle, chosen at random; null when the world is full. */
+export function pickSpot(world: World, taken: [number, number][], random: () => number = Math.random): [number, number] | null {
+  const used = new Set(taken.map(([x, y]) => `${x},${y}`));
+  const free = world.spots.filter(([x, y]) => !used.has(`${x},${y}`));
+  if (free.length === 0) return null;
+  return free[Math.floor(random() * free.length)];
+}
+
+/** The level other players see: your keep's. */
+export function castleLevel(castle: CastleData): number {
+  return castle.buildings.find((b) => b.type === "keep")?.level ?? 1;
+}
+
+export function newPlayer(rules: Rules, world: World, name: string, now: number, spot: [number, number] = world.home): PlayerState {
   const castle = CastleState.createNew(rules.buildings, "player_castle", `${name.trim()}'s Castle`, "player", now);
+  const { per_distance, max } = world.camp_levels;
+  const startLevel = (p: [number, number]) =>
+    Math.min(max, Math.max(1, 1 + Math.floor(Math.hypot(p[0] - spot[0], p[1] - spot[1]) / per_distance)));
   return {
     name: name.trim(),
-    home_x: world.home[0],
-    home_y: world.home[1],
+    home_x: spot[0],
+    home_y: spot[1],
     castle: castle.toDict(),
-    camps: world.camps.map((c) => ({ id: c.id, name: c.name, position: [c.position[0], c.position[1]], level: c.level, defeats: 0, rebuilt_at: 0 })),
+    camps: world.camps.map((c) => ({ id: c.id, name: c.name, position: [c.position[0], c.position[1]], level: startLevel(c.position), defeats: 0, rebuilt_at: 0 })),
     marches: [],
     next_march: 1,
   };

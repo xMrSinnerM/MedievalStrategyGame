@@ -11,6 +11,7 @@ extends Node3D
 @onready var parchment: Node3D = $ParchmentOverlay
 @onready var camera_rig: CampaignCamera = $CampaignCamera
 var barons: Node3D
+var players: Node3D
 
 
 func _ready() -> void:
@@ -30,11 +31,19 @@ func _ready() -> void:
 	barons.name = "Barons"
 	add_child(barons)
 	barons.build()
+	if Economy.online:
+		players = preload("res://scripts/world/players_layer.gd").new()
+		players.name = "Players"
+		add_child(players)
+		players.build()
 	parties.barons = barons
 	parties.camera_rig = camera_rig
 	parties.build()
 	parchment.build()
 	camera_rig.setup()
+	if Economy.online:
+		var home := Economy.home_position()
+		camera_rig.focus_on(Vector3(home.x, GameData.terrain.get_surface_height(home.x, home.y), home.y))
 	Economy.castle_captured.connect(_on_castle_captured)
 	Economy.diplomacy_changed.connect(func(_news: Array) -> void: parties.on_diplomacy_changed())
 	print("World map built in %d ms (%d settlements, %d bridges, %d trees, %d parties)" % [Time.get_ticks_msec() - started,
