@@ -1,5 +1,5 @@
 {
-	"_comment": "Timed events online, the same for everyone. Each weekly event starts on a day of the week (1 = Monday ... 7 = Sunday) at an hour in UTC and lasts `hours`. Effects: baron_loot multiplies what robber baron camps drop. An event with `invasion` puts invader camps near every castle while it runs: `camps` of them (named from `names`), the first at level 1 + `level_per_keep` per keep level above 1 and each next one a level higher. Every win raises an invader camp a level and gives `points_per_level` event points for each level it had; a beaten camp rebuilds for `rebuild` seconds.",
+	"_comment": "Timed events online, the same for everyone. Each weekly event starts on a day of the week (1 = Monday ... 7 = Sunday) at an hour in UTC and lasts `hours`. Effects: baron_loot multiplies what robber baron camps drop. An event with `invasion` puts invader camps near every castle while it runs: `camps` of them (named from `names`), the first at level 1 + `level_per_keep` per keep level above 1 and each next one a level higher. Every win raises an invader camp a level and gives `points_per_level` event points for each level it had; a beaten camp rebuilds for `rebuild` seconds. `rewards` are the invasion's reward tiers: reach a tier's points to claim its resources and soldiers, in order, until the next invasion starts (resources fill your storage; what doesn't fit is lost).",
 	"weekly": [
 		{
 			"id": "plunder_weekend",
@@ -29,7 +29,52 @@
 				],
 				"level_per_keep": 2,
 				"points_per_level": 10,
-				"rebuild": 120
+				"rebuild": 120,
+				"rewards": [
+					{
+						"points": 50,
+						"resources": {
+							"wood": 300,
+							"stone": 300
+						}
+					},
+					{
+						"points": 150,
+						"resources": {
+							"food": 500,
+							"gold": 200
+						}
+					},
+					{
+						"points": 300,
+						"troops": {
+							"spearman": 20
+						}
+					},
+					{
+						"points": 600,
+						"resources": {
+							"wood": 800,
+							"stone": 800,
+							"gold": 300
+						}
+					},
+					{
+						"points": 1000,
+						"troops": {
+							"swordsman": 25
+						}
+					},
+					{
+						"points": 2000,
+						"resources": {
+							"gold": 1000
+						},
+						"troops": {
+							"horseman": 20
+						}
+					}
+				]
 			}
 		}
 	]

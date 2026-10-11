@@ -5,7 +5,8 @@
 // other; this file only adds and removes them.
 
 import type { CampData } from "../../../server/rules/baron_camp.ts";
-import { activeEvents, type EventRules } from "../../../server/rules/events.ts";
+import type { CastleState } from "../../../server/rules/castle_state.ts";
+import { activeEvents, type EventRules, type RewardTier } from "../../../server/rules/events.ts";
 import type { Report } from "../../../server/rules/marches.ts";
 import type { PlayerState, World } from "./game.ts";
 
@@ -24,9 +25,11 @@ export function invade(stored: PlayerState, events: EventRules, world: World, t:
   const camps = stored.camps.filter((c) => c.event === undefined || c.event === start || busy.has(c.id));
   let eventKey = stored.event_key ?? 0;
   let eventPoints = stored.event_points ?? 0;
+  let claimed = stored.event_claimed ?? 0;
   if (on !== undefined && on.invasion !== undefined && start !== undefined && eventKey !== start) {
     eventKey = start;
     eventPoints = 0;
+    claimed = 0;
     const inv = on.invasion;
     const spot = (world.spots ?? []).findIndex(([x, y]) => x === stored.home_x && y === stored.home_y);
     const places = spot < 0 ? [] : world.invasion_spots?.[spot] ?? [];
@@ -46,8 +49,37 @@ export function invade(stored: PlayerState, events: EventRules, world: World, t:
       } satisfies CampData);
     }
   }
-  if (camps.length === stored.camps.length && eventKey === stored.event_key && eventPoints === stored.event_points) return stored;
-  return { ...stored, camps, event_key: eventKey, event_points: eventPoints };
+  if (camps.length === stored.camps.length && eventKey === stored.event_key && eventPoints === stored.event_points &&
+    claimed === stored.event_claimed) return stored;
+  return { ...stored, camps, event_key: eventKey, event_points: eventPoints, event_claimed: claimed };
+}
+
+/** The Baron Invasion's reward tiers (data/events.json). */
+export function rewardTiers(events: EventRules): RewardTier[] {
+  return events.weekly.find((e) => e.invasion !== undefined)?.invasion?.rewards ?? [];
+}
+
+/**
+ * Gives the castle reward tier `tier` if it is the next one and the player
+ * has its points. Resources fill the storage (what doesn't fit is lost) and
+ * soldiers join the garrison. Returns "" or why not.
+ */
+export function claimReward(castle: CastleState, points: number, claimed: number, tiers: RewardTier[], tier: unknown): string {
+  if (typeof tier !== "number" || !Number.isInteger(tier) || tier < 0 || tier >= tiers.length) return "There's no such reward.";
+  if (tier < claimed) return "You already have that reward.";
+  if (tier > claimed) return "Claim the rewards in order.";
+  const reward = tiers[tier];
+  if (points < reward.points) return `That reward needs ${reward.points} event points.`;
+  const cap = castle.storageCapacity();
+  for (const [r, n] of Object.entries(reward.resources ?? {})) {
+    if (!(r in castle.resources)) continue;
+    const have = castle.resources[r];
+    castle.resources[r] = Math.max(have, Math.min(cap, have + n));
+  }
+  for (const [unit, n] of Object.entries(reward.troops ?? {})) {
+    if (castle.rules.hasUnit(unit)) castle.troops[unit] = (castle.troops[unit] ?? 0) + n;
+  }
+  return "";
 }
 
 /** Event points won in these battle reports for the invasion `eventKey`. */

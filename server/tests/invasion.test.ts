@@ -5,7 +5,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { makeRules } from "../rules/load.ts";
-import type { EventRules } from "../rules/events.ts";
+import { lastInvasion, type EventRules } from "../rules/events.ts";
 import { act, newPlayer, type PlayerState, type World } from "../../supabase/functions/game/game.ts";
 import { invade } from "../../supabase/functions/game/invasion.ts";
 
@@ -88,4 +88,54 @@ test("a castle on a spot with no places gets no invaders, and other camps are ne
   const q = invade(p, events, world, START);
   assert.equal(q.camps.length, world.camps.length);
   assert.equal(q.event_key, START);
+});
+
+test("reward tiers are claimed in order once you have the points, and start again with the next invasion", () => {
+  const tiers = events.weekly.find((e) => e.invasion)!.invasion!.rewards!;
+  let p: PlayerState = { ...player(START - 3600), event_key: START, event_points: tiers[1].points, event_claimed: 0 };
+  p.castle.resources = { wood: 100, stone: 100, food: 100, gold: 100 };
+  let out = act(rules, p, { action: "claim_reward", tier: 1 }, START + 10, ctx);
+  assert.equal(out.error, "Claim the rewards in order.");
+  out = act(rules, p, { action: "claim_reward", tier: 0 }, START + 10, ctx);
+  assert.equal(out.error, "");
+  assert.equal(out.state.event_claimed, 1);
+  assert.ok(out.state.castle.resources.wood >= 100 + tiers[0].resources!.wood - 1, "the resources arrive");
+  out = act(rules, out.state, { action: "claim_reward", tier: 0 }, START + 11, ctx);
+  assert.equal(out.error, "You already have that reward.");
+  out = act(rules, out.state, { action: "claim_reward", tier: 1 }, START + 12, ctx);
+  assert.equal(out.error, "");
+  out = act(rules, out.state, { action: "claim_reward", tier: 2 }, START + 13, ctx);
+  assert.equal(out.error, `That reward needs ${tiers[2].points} event points.`);
+  out = act(rules, out.state, { action: "claim_reward", tier: 99 }, START + 13, ctx);
+  assert.equal(out.error, "There's no such reward.");
+  // Soldiers join the garrison.
+  p = { ...out.state, event_points: tiers[2].points };
+  out = act(rules, p, { action: "claim_reward", tier: 2 }, START + 14, ctx);
+  assert.equal(out.error, "");
+  assert.equal(out.state.castle.troops.spearman, tiers[2].troops!.spearman);
+  // Resources never overflow the storage.
+  p = { ...out.state, event_points: tiers[3].points };
+  p.castle.resources = { wood: 990, stone: 990, food: 990, gold: 990 };
+  out = act(rules, p, { action: "claim_reward", tier: 3 }, START + 15, ctx);
+  assert.equal(out.error, "");
+  assert.ok(out.state.castle.resources.wood <= 1000);
+  // A week later the next invasion starts afresh.
+  out = act(rules, out.state, { action: "state" }, START + 7 * 86400 + 5, ctx);
+  assert.equal(out.state.event_key, START + 7 * 86400);
+  assert.equal(out.state.event_points, 0);
+  assert.equal(out.state.event_claimed, 0);
+});
+
+test("the last invasion is the one on now, or else the one that ended most recently", () => {
+  assert.equal(lastInvasion(events, START + 60)!.start, START);
+  assert.equal(lastInvasion(events, END + 3 * 86400)!.start, START, "the weekend after");
+  assert.equal(lastInvasion(events, START - 1)!.start, START - 7 * 86400);
+});
+
+test("points from an earlier invasion can't claim this one's rewards", () => {
+  const p: PlayerState = { ...player(START - 3600), event_key: START - 7 * 86400, event_points: 5000, event_claimed: 0 };
+  const out = act(rules, p, { action: "claim_reward", tier: 0 }, START - 60, { events: { rules: events, world } });
+  assert.equal(out.error, "");
+  const later = act(rules, p, { action: "claim_reward", tier: 0 }, START + 7 * 86400 - 60, { events: { rules: events, world } });
+  assert.match(later.error, /needs \d+ event points/);
 });

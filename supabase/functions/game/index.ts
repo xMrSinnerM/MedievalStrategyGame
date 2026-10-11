@@ -7,6 +7,8 @@
 // POST { "action": "state" }                     your castle, camps, marches, raids and reports
 // POST { "action": "world" }                     other players: name, spot, level, protection
 // POST { "action": "leaderboard" }               the mightiest castles, and your own rank
+// POST { "action": "event_board" }               the most event points in the Baron Invasion, and your rank
+// POST { "action": "claim_reward", "tier": n }   the invasion's next reward tier (data/events.json)
 // POST { "action": "place", "type", "cell": [x, y] }
 // POST { "action": "upgrade" | "cancel", "id" }
 // POST { "action": "move", "id", "cell": [x, y] }
@@ -51,7 +53,7 @@ import aidData from "../../../data/aid.json" with { type: "json" };
 import eventsData from "../../../data/events.json" with { type: "json" };
 import world from "../../../server/world/world.json" with { type: "json" };
 import { makeRules } from "../../../server/rules/load.ts";
-import { effectAt, eventsView, type EventRules } from "../../../server/rules/events.ts";
+import { effectAt, eventsView, lastInvasion, type EventRules } from "../../../server/rules/events.ts";
 import {
   act, castleLevel, checkName, fightRaid, isProtected, might, newPlayer, pickSpot, spyReport,
   type Homecoming, type PlayerState, type PvpRules, type Raid, type Target, type World,
@@ -78,7 +80,7 @@ const ALLIANCE_ORDERS = new Set([
   "alliance", "join_alliance", "accept_invite", "decline_invite", "cancel_request", "leave_alliance", "disband_alliance",
   "invite", "cancel_invite", "kick", "answer_request", "set_role", "alliance_settings",
 ]);
-const COLUMNS = "name, home_x, home_y, castle, camps, marches, next_march, protected_until, barons_beaten, event_key, event_points, version";
+const COLUMNS = "name, home_x, home_y, castle, camps, marches, next_march, protected_until, barons_beaten, event_key, event_points, event_claimed, version";
 const REPORTS_SHOWN = 20;
 const RETRIES = 4;
 const PLAYERS_SHOWN = 500;
@@ -329,6 +331,29 @@ Deno.serve(async (req: Request) => {
     }
     const { count: total } = await admin.from("players").select("user_id", { count: "exact", head: true });
     return reply({ ok: true, now: now(), error: "", result: { players: (data ?? []).map(flat), me, rank, total: total ?? 0 } });
+  }
+
+  if (body.action === "event_board") {
+    // The Baron Invasion on now (or the last one): the players with the most event points in it.
+    const inv = lastInvasion(eventRules, now());
+    const key = inv?.start ?? -1;
+    const shown = "name, event_key, event_points, alliance:alliances!players_alliance_id_fkey(tag)";
+    const { data, error } = await admin.from("players").select(shown).eq("event_key", key).gt("event_points", 0)
+      .order("event_points", { ascending: false }).order("name").limit(RANKS_SHOWN);
+    if (error) return reply({ ok: false, error: "The server couldn't load the event leaderboard." }, 500);
+    const { data: mine } = await admin.from("players").select(shown).eq("user_id", userId).maybeSingle();
+    const flat = (r: Row) => ({ name: r.name, points: r.event_points, tag: tagOf(r) });
+    const me = mine && mine.event_key === key && mine.event_points > 0 ? flat(mine) : null;
+    let rank = 0;
+    if (me) {
+      const { count } = await admin.from("players").select("user_id", { count: "exact", head: true })
+        .eq("event_key", key).gt("event_points", me.points);
+      rank = (count ?? 0) + 1;
+    }
+    const { count: total } = await admin.from("players").select("user_id", { count: "exact", head: true })
+      .eq("event_key", key).gt("event_points", 0);
+    return reply({ ok: true, now: now(), error: "",
+      result: { event: inv ?? null, players: (data ?? []).map(flat), me, rank, total: total ?? 0 } });
   }
 
   if (body.action === "chat" || body.action === "chat_send") {

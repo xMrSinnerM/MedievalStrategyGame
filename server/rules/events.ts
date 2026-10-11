@@ -25,6 +25,15 @@ export interface InvasionRules {
   points_per_level: number;
   /** Seconds a beaten invader camp rebuilds. */
   rebuild: number;
+  /** Reward tiers, claimed in order once you have their points. */
+  rewards?: RewardTier[];
+}
+
+/** What an event reward tier gives: resources for your storage and soldiers for your garrison. */
+export interface RewardTier {
+  points: number;
+  resources?: Record<string, number>;
+  troops?: Record<string, number>;
 }
 
 export interface EventRules {
@@ -48,7 +57,7 @@ const WEEK = 7 * DAY;
 const MONDAY = -3 * DAY;
 
 /** The most recent start of this event at or before `t`. */
-function lastStart(e: WeeklyEvent, t: number): number {
+export function lastStart(e: WeeklyEvent, t: number): number {
   const offset = (e.day - 1) * DAY + e.hour * 3600;
   const weekStart = MONDAY + Math.floor((t - MONDAY) / WEEK) * WEEK;
   const start = weekStart + offset;
@@ -69,6 +78,17 @@ export function activeEvents(rules: EventRules, t: number): EventTime[] {
 /** The events that start after `t`, soonest first (one per weekly event). */
 export function upcomingEvents(rules: EventRules, t: number): EventTime[] {
   return rules.weekly.map((e) => at(e, lastStart(e, t) + WEEK)).sort((a, b) => a.start - b.start);
+}
+
+/** The Baron Invasion on at `t`, or else the last one to have started (undefined if there is none on the calendar). */
+export function lastInvasion(rules: EventRules, t: number): EventTime | undefined {
+  let best: EventTime | undefined;
+  for (const e of rules.weekly) {
+    if (e.invasion === undefined) continue;
+    const time = at(e, lastStart(e, t));
+    if (best === undefined || time.start > best.start) best = time;
+  }
+  return best;
 }
 
 /** The product of an effect over the events on at `t` (1 when none). */
