@@ -39,3 +39,5 @@ signal baron_selected(camp_id: String)
 signal attack_screen_requested(camp_id: String)
 ## Online: another player's castle was clicked (their name; "" clears the selection).
 signal player_selected(player_name: String)
+## Online: open the screen for sending an ally resources ("resources") or defenders ("troops").
+signal help_screen_requested(player_name: String, kind: String)

@@ -9,6 +9,7 @@ import type { Rules } from "../../../server/rules/load.ts";
 import { advanceMarches, sendAttack, type Army, type March, type Report } from "../../../server/rules/marches.ts";
 import { godotHash, type Dict } from "../../../server/rules/util.ts";
 import type { AllianceRules } from "./alliances.ts";
+import { checkShipment, type Aid, type AidRules } from "./aid.ts";
 
 /** A player as stored in the players table (the game columns). */
 export interface PlayerState {
@@ -74,14 +75,25 @@ export interface RaidReport {
   b: Side;
   spoils: Dict;
   wall: number;
+  /** Defender's report: the allies whose soldiers fought beside the garrison. */
+  helped_by?: string[];
+}
+
+/** Soldiers walking back into the castle, with what they carry. */
+export interface Homecoming {
+  back: number;
+  survivors: Dict;
+  loot: Dict;
 }
 
 /** What act() needs besides the player: other players and armies coming home. */
 export interface Context {
   pvp?: PvpRules;
   target?: Target;
-  homecomings?: Raid[];
+  /** Armies back from attacking players, and defenders back from allies. */
+  homecomings?: Homecoming[];
   alliances?: AllianceRules;
+  aid?: AidRules;
 }
 
 export interface World {
@@ -112,6 +124,8 @@ export interface Outcome {
   result?: unknown;
   /** An army sent against another player, for index.ts to store. */
   raid?: Omit<Raid, "id">;
+  /** Resources or defenders sent to an ally, for index.ts to store. */
+  aid?: Omit<Aid, "id">;
 }
 
 export const NAME_RULE = /^[\p{L}\p{N}][\p{L}\p{N} _'-]{1,18}[\p{L}\p{N}]$/u;
@@ -191,6 +205,7 @@ export function act(rules: Rules, stored: PlayerState, req: Request, now: number
   let error = "";
   let result: unknown = undefined;
   let raid: Omit<Raid, "id"> | undefined;
+  let aid: Omit<Aid, "id"> | undefined;
   let protectedUntil = stored.protected_until ?? 0;
   switch (req.action) {
     case "state":
@@ -269,6 +284,34 @@ export function act(rules: Rules, stored: PlayerState, req: Request, now: number
       else for (const r of Object.keys(a.found_cost)) castle.resources[r] -= a.found_cost[r];
       break;
     }
+    case "send_resources":
+    case "send_defenders": {
+      const target = ctx.target;
+      const troops = req.action === "send_defenders";
+      if (ctx.aid === undefined) error = "Unknown order.";
+      else if (target === undefined) error = "There's no player by that name.";
+      else if (target.name === stored.name) error = "That's your own castle.";
+      else if (!target.ally) error = "You can only help members of your own alliance.";
+      else if (troops) error = isArmy(req.army) ? checkArmy(castle, req.army) : "Bad army.";
+      else error = checkShipment(castle, ctx.aid, req.resources);
+      if (error !== "" || target === undefined || ctx.aid === undefined) break;
+      const sent: Dict = {};
+      const pool = troops ? castle.troops : castle.resources;
+      const asked: Dict = troops ? req.army : req.resources;
+      for (const k of Object.keys(asked)) {
+        if (asked[k] > 0) {
+          sent[k] = asked[k];
+          pool[k] -= asked[k];
+        }
+      }
+      const from: [number, number] = [stored.home_x, stored.home_y];
+      const travel = rules.barons.marchTime(Math.hypot(target.home[0] - from[0], target.home[1] - from[1]));
+      const leave = troops ? now + travel + ctx.aid.station_hours * 3600 : now + travel;
+      aid = { kind: troops ? "troops" : "resources", sender_name: stored.name, receiver_name: target.name,
+        resources: troops ? {} : sent, army: troops ? sent : {}, from, to: target.home, depart: now, arrive: now + travel,
+        leave, back: troops ? leave + travel : now + travel };
+      break;
+    }
     default:
       error = "Unknown order.";
   }
@@ -286,6 +329,7 @@ export function act(rules: Rules, stored: PlayerState, req: Request, now: number
     error,
     result,
     raid,
+    aid,
   };
 }
 
@@ -301,8 +345,8 @@ function checkArmy(castle: CastleState, army: Dict): string {
   return total > 0 ? "" : "Choose some soldiers to send.";
 }
 
-/** Survivors of an attack on a player walk back in with what they carry. */
-function comeHomeFromRaid(castle: CastleState, raid: Raid): void {
+/** Survivors of an attack on a player, or defenders back from an ally, walk back in with what they carry. */
+function comeHomeFromRaid(castle: CastleState, raid: Homecoming): void {
   castle.advanceTo(raid.back);
   for (const unit of Object.keys(raid.survivors)) {
     if (castle.rules.hasUnit(unit)) castle.troops[unit] = (castle.troops[unit] ?? 0) + raid.survivors[unit];
@@ -324,14 +368,18 @@ export interface RaidOutcome {
   defenderReport: RaidReport;
   survivors: Dict;
   loot: Dict;
+  /** What is left of each group of allied defenders, in the order given. */
+  helpers: Dict[];
 }
 
 /**
  * An army reaches another player's castle: the defender's world runs up to
- * that moment, the army fights their garrison behind their wall, and if it
- * wins it takes up to `loot_share` of each resource, as much as it can carry.
+ * that moment, the army fights their garrison and any allied defenders
+ * (`helpers`) behind their wall, and if it wins it takes up to `loot_share`
+ * of each resource, as much as it can carry. Losses fall on the garrison
+ * and the defenders in proportion to their numbers.
  */
-export function fightRaid(rules: Rules, pvp: PvpRules, stored: PlayerState, raid: Raid): RaidOutcome {
+export function fightRaid(rules: Rules, pvp: PvpRules, stored: PlayerState, raid: Raid, helpers: Dict[] = []): RaidOutcome {
   const world: Army = {
     castle: CastleState.fromDict(rules.buildings, stored.castle),
     camps: structuredClone(stored.camps),
@@ -343,8 +391,11 @@ export function fightRaid(rules: Rules, pvp: PvpRules, stored: PlayerState, raid
   const castle = world.castle;
   castle.advanceTo(raid.arrive);
   const wall = wallFromDefense(castle.defense());
-  const result = fight(rules.buildings, raid.army, castle.troops, raid.id * 7919 + godotHash(raid.defender_name), wall);
-  for (const unit of Object.keys(result.b)) castle.troops[unit] = Math.max(0, (castle.troops[unit] ?? 0) - result.b[unit].lost);
+  const groups: Dict[] = [castle.troops, ...helpers.map((h) => ({ ...h }))];
+  const defenders: Dict = {};
+  for (const g of groups) for (const unit of Object.keys(g)) defenders[unit] = (defenders[unit] ?? 0) + g[unit];
+  const result = fight(rules.buildings, raid.army, defenders, raid.id * 7919 + godotHash(raid.defender_name), wall);
+  for (const unit of Object.keys(result.b)) shareLosses(groups, unit, result.b[unit].lost);
   const back = survivors(result.a);
   const loot: Dict = {};
   if (result.winner === "a") {
@@ -378,11 +429,32 @@ export function fightRaid(rules: Rules, pvp: PvpRules, stored: PlayerState, raid
     defenderReport: report("defender", raid.attacker_name),
     survivors: back,
     loot,
+    helpers: groups.slice(1).map((g) => {
+      const left: Dict = {};
+      for (const unit of Object.keys(g)) if (g[unit] > 0) left[unit] = g[unit];
+      return left;
+    }),
   };
 }
 
-/** What a spy sees: the soldiers at home and the wall, as of now. */
-export function spyReport(rules: Rules, pvp: PvpRules, stored: PlayerState, now: number) {
+/** Takes `lost` soldiers of one unit from the groups, in proportion to how many each has. */
+function shareLosses(groups: Dict[], unit: string, lost: number): void {
+  const total = groups.reduce((n, g) => n + (g[unit] ?? 0), 0);
+  if (total <= 0 || lost <= 0) return;
+  const cut = groups.map((g) => Math.floor(lost * (g[unit] ?? 0) / total));
+  let left = lost - cut.reduce((a, b) => a + b, 0);
+  for (let i = 0; i < groups.length && left > 0; i++) {
+    const extra = Math.min((groups[i][unit] ?? 0) - cut[i], left);
+    cut[i] += extra;
+    left -= extra;
+  }
+  groups.forEach((g, i) => {
+    if (unit in g) g[unit] = Math.max(0, g[unit] - cut[i]);
+  });
+}
+
+/** What a spy sees: the soldiers at home (with any allied defenders) and the wall, as of now. */
+export function spyReport(rules: Rules, pvp: PvpRules, stored: PlayerState, now: number, helpers: Dict[] = []) {
   const world: Army = {
     castle: CastleState.fromDict(rules.buildings, stored.castle),
     camps: structuredClone(stored.camps),
@@ -393,7 +465,9 @@ export function spyReport(rules: Rules, pvp: PvpRules, stored: PlayerState, now:
   advanceMarches(world, rules.barons, now);
   world.castle.advanceTo(now);
   const troops: Dict = {};
-  for (const unit of Object.keys(world.castle.troops)) if (world.castle.troops[unit] > 0) troops[unit] = world.castle.troops[unit];
+  for (const group of [world.castle.troops, ...helpers]) {
+    for (const unit of Object.keys(group)) if (group[unit] > 0) troops[unit] = (troops[unit] ?? 0) + group[unit];
+  }
   return {
     name: stored.name, at: now, level: castleLevel(stored.castle), troops,
     wall: wallFromDefense(world.castle.defense()), protected: isProtected(stored, pvp, now),

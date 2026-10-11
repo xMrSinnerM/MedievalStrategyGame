@@ -99,6 +99,12 @@ func _refresh() -> void:
 	lines.append("Keep level %d    Defence %d" % [castle.keep_level(), int(castle.defense())])
 	lines.append("%d buildings, %d under construction" % [castle.buildings.size(), castle.constructions().size()])
 	lines.append("Garrison %d soldiers, warband %d" % [castle.troop_count(), castle.field_count()])
+	if castle == Economy.player_castle and Economy.online:
+		for a: Dictionary in Economy.defenders_here():
+			var n := 0
+			for unit: String in a.army:
+				n += int(a.army[unit])
+			lines.append("%d defenders from %s, for %s more" % [n, a.sender_name, _clock(float(a.leave) - Economy.now())])
 	if castle == Economy.player_castle and Economy.newcomer_protected():
 		lines.append("Safe from sieges until your keep reaches level %d" % Economy.PROTECTED_BELOW_KEEP)
 	var rates := castle.net_per_hour()
@@ -126,6 +132,13 @@ func _refresh() -> void:
 		_siege_info.text = "\n".join(siege)
 		_besiege.disabled = mine.field_count() <= 0
 		MenuStyle.war_button_text(_besiege, "Besiege", settlement.get("faction", ""))
+
+
+static func _clock(seconds: float) -> String:
+	var s := maxi(0, ceili(seconds))
+	if s >= 3600:
+		return "%dh %02dm" % [s / 3600, (s % 3600) / 60]
+	return "%d:%02d" % [s / 60, s % 60]
 
 
 func _label(size: int, color: Color) -> Label:

@@ -1,0 +1,5 @@
+{
+	"_comment": "Helping members of your own alliance online. Resources go by cart: one shipment carries at most carry_per_keep_level times the sender's keep level, takes as long as a march, and whatever the receiver's storage can't hold is lost. Defenders march to the ally's castle, help defend it against attacks for station_hours, then walk home; the sender can call them back early. Soldiers away from home eat nothing, like armies on a march.",
+	"carry_per_keep_level": 500,
+	"station_hours": 8
+}

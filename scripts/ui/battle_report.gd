@@ -169,6 +169,9 @@ func show_raid_report(report: Dictionary) -> void:
 		_place.text = "%s attacked your castle (%s)" % [report.name, walls]
 		_footer.text = "%s's army fell back with nothing." % report.name if won \
 				else "%s carried off %s. Train more soldiers to hold the walls." % [report.name, _spoils(report.spoils)]
+		var helped: Array = report.get("helped_by", [])
+		if not helped.is_empty():
+			_footer.text = "Defenders from %s fought beside your garrison.\n" % ", ".join(PackedStringArray(helped)) + _footer.text
 	_title.add_theme_color_override("font_color", WIN if won else LOSS)
 
 

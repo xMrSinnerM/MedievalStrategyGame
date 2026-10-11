@@ -103,6 +103,15 @@ func _ready() -> void:
 		chat.offset_left = 12
 		chat.offset_bottom = -12
 		add_child(chat)
+	if Economy.online:
+		var help := preload("res://scripts/ui/help_panel.gd").new()
+		help.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+		help.grow_horizontal = Control.GROW_DIRECTION_BOTH
+		help.grow_vertical = Control.GROW_DIRECTION_BOTH
+		add_child(help)
+		Economy.aid_news.connect(func(text: String) -> void:
+			_news.text = text
+			_news_left = NEWS_TIME * 1.5)
 	var attack := preload("res://scripts/ui/attack_panel.gd").new()
 	attack.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 	attack.grow_horizontal = Control.GROW_DIRECTION_BOTH
@@ -190,7 +199,7 @@ func _process(delta: float) -> void:
 	_alert.text = "\n".join(alerts)
 	if not visible:
 		return
-	_resources.show_castle(Economy.player_castle, Economy.troops_away() if not Economy.marches.is_empty() else 0)
+	_resources.show_castle(Economy.player_castle, Economy.troops_away() if not Economy.marches.is_empty() or not Economy.aid.is_empty() else 0)
 	if Economy.online:
 		var shield := ""
 		if Economy.is_protected():
