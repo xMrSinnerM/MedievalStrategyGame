@@ -24,6 +24,8 @@ signal leaderboard_changed
 ## Online: the server sent your alliance's view (see `alliance`); `error` is
 ## why the last alliance order was refused, or "".
 signal alliance_changed(error: String)
+## Online: new chat messages arrived, or the server refused one you sent (error).
+signal chat_changed(error: String)
 
 ## Games are kept in SLOTS save slots under save_dir (slot_1.json ...).
 const SLOTS := 3
@@ -102,10 +104,25 @@ var leaderboard := {}
 ## you), "asked" (alliances you asked to join), "alliances" (all), "rules",
 ## "you" (your name).
 var alliance := {}
+## Online: chat messages, oldest first, as the server sent them:
+## [{"id", "channel" ("world" or "alliance"), "name", "tag", "text", "at"}].
+var chat_messages: Array = []
+## Online: whether you're in an alliance, so its chat channel is open.
+var chat_in_alliance := false
+## Online: true once the server's first chat answer has come.
+var chat_loaded := false
+## Set by the chat box while it is open, so new messages come quicker.
+var chat_open := false
+## How often the online game asks for chat messages, with the chat box open and closed.
+const CHAT_POLL_OPEN := 4.0
+const CHAT_POLL_CLOSED := 15.0
+## Messages kept for the chat box.
+const CHAT_KEPT := 150
 
 var _seen_report := 0          ## newest server battle report already shown
 var _poll_timer := 0.0
 var _world_timer := 0.0
+var _chat_timer := 0.0
 var _asked_for := 0.0          ## march time we last asked the server about
 var _tick_timer := 0.0
 var _save_timer := 0.0
@@ -704,12 +721,17 @@ func begin_online(answer: Dictionary) -> void:
 	spy_reports = {}
 	leaderboard = {}
 	alliance = {}
+	chat_messages = []
+	chat_in_alliance = false
+	chat_loaded = false
+	_chat_timer = 0.0
 	protected_until = 0.0
 	if pvp.is_empty():
 		pvp = get_node("/root/GameData").load_json("res://data/pvp.json")
 	_world_timer = WORLD_POLL
 	apply_server(answer)
 	get_node("/root/Online").order({"action": "alliance"})
+	get_node("/root/Online").order({"action": "chat", "after": 0})
 
 
 func end_online() -> void:
@@ -807,6 +829,11 @@ func _process_online(delta: float) -> void:
 		_world_timer = 0.0
 		get_node("/root/Online").order({"action": "world"})
 		get_node("/root/Online").order({"action": "alliance"})
+	# Chat: only when nothing else is waiting, so it never holds up your orders.
+	_chat_timer += delta
+	if _chat_timer >= (CHAT_POLL_OPEN if chat_open else CHAT_POLL_CLOSED) and not get_node("/root/Online").busy():
+		_chat_timer = 0.0
+		get_node("/root/Online").order({"action": "chat", "after": last_chat_id()})
 
 
 func set_others(players: Array) -> void:
@@ -943,8 +970,57 @@ func found_alliance(alliance_name: String, tag: String) -> String:
 func set_alliance(view: Dictionary, error: String) -> void:
 	if not online:
 		return
+	var before = my_alliance().get("id")
 	alliance = view
+	if my_alliance().get("id") != before and chat_loaded:
+		# A new alliance: forget the old one's chat and fetch the new one's recent talk.
+		chat_messages = chat_messages.filter(func(m: Dictionary) -> bool: return m.get("channel", "") != "alliance")
+		chat_in_alliance = not my_alliance().is_empty()
+		get_node("/root/Online").order({"action": "chat", "after": 0})
+		chat_changed.emit("")
 	alliance_changed.emit(error)
+
+
+# --- Online: chat ---------------------------------------------------------------------
+
+func last_chat_id() -> int:
+	return int(chat_messages.back().id) if not chat_messages.is_empty() else 0
+
+
+func send_chat(channel: String, text: String) -> String:
+	## Sends a message to "world" or "alliance"; "" if it went to the server,
+	## else why not. The server's answer arrives with chat_changed.
+	var clean := text.strip_edges()
+	if clean == "":
+		return "Write something first."
+	if clean.length() > 200:
+		return "Messages are at most 200 characters long."
+	if channel == "alliance" and not chat_in_alliance:
+		return "You aren't in an alliance."
+	get_node("/root/Online").order({"action": "chat_send", "channel": channel, "text": clean, "after": last_chat_id()})
+	_chat_timer = 0.0
+	return ""
+
+
+func set_chat(view: Dictionary, error: String) -> void:
+	## The server's answer to "chat" or "chat_send": messages we may not have yet.
+	if not online:
+		return
+	var have := {}
+	for m: Dictionary in chat_messages:
+		have[int(m.id)] = true
+	var added := false
+	for m: Dictionary in view.get("messages", []):
+		if not have.has(int(m.get("id", 0))):
+			chat_messages.append(m)
+			added = true
+	if added:
+		chat_messages.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return int(a.id) < int(b.id))
+	if chat_messages.size() > CHAT_KEPT:
+		chat_messages = chat_messages.slice(chat_messages.size() - CHAT_KEPT)
+	chat_in_alliance = bool(view.get("in_alliance", false))
+	chat_loaded = true
+	chat_changed.emit(error)
 
 
 func take_order_result(body: Dictionary, answer: Dictionary) -> void:

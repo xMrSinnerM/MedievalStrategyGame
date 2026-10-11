@@ -32,6 +32,7 @@ var _distance_now := 700.0
 var _pan_drag := false
 var _rotate_drag := false
 var _last_zoom_t := -1.0
+var _typing := false
 
 
 func _ready() -> void:
@@ -89,21 +90,23 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _process(delta: float) -> void:
+	# Keys don't move the camera while you type in a text field (chat, alliance names).
+	_typing = get_viewport().gui_get_focus_owner() is LineEdit
 	var move := Vector2.ZERO
-	if Input.is_physical_key_pressed(KEY_W) or Input.is_physical_key_pressed(KEY_UP):
+	if _key(KEY_W) or _key(KEY_UP):
 		move.y -= 1.0
-	if Input.is_physical_key_pressed(KEY_S) or Input.is_physical_key_pressed(KEY_DOWN):
+	if _key(KEY_S) or _key(KEY_DOWN):
 		move.y += 1.0
-	if Input.is_physical_key_pressed(KEY_A) or Input.is_physical_key_pressed(KEY_LEFT):
+	if _key(KEY_A) or _key(KEY_LEFT):
 		move.x -= 1.0
-	if Input.is_physical_key_pressed(KEY_D) or Input.is_physical_key_pressed(KEY_RIGHT):
+	if _key(KEY_D) or _key(KEY_RIGHT):
 		move.x += 1.0
 	if move != Vector2.ZERO:
 		var pixels_per_second := get_viewport().get_visible_rect().size.y * key_pan_speed
 		_pan_by_pixels(move.normalized() * pixels_per_second * delta)
-	if Input.is_physical_key_pressed(KEY_Q):
+	if _key(KEY_Q):
 		_yaw += key_rotate_speed * delta
-	if Input.is_physical_key_pressed(KEY_E):
+	if _key(KEY_E):
 		_yaw -= key_rotate_speed * delta
 
 	var terrain: TerrainData = GameData.terrain
@@ -144,3 +147,7 @@ func _apply() -> void:
 	if absf(zoom_t - _last_zoom_t) > 0.001:
 		_last_zoom_t = zoom_t
 		EventBus.camera_zoom_changed.emit(zoom_t)
+
+
+func _key(key: Key) -> bool:
+	return not _typing and Input.is_physical_key_pressed(key)
