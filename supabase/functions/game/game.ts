@@ -43,6 +43,8 @@ export interface PvpRules {
   /** Leaderboard might: points per building level and per soldier at home. */
   might_per_building_level: number;
   might_per_soldier: number;
+  /** Players can't attack castles whose keep is more than this many levels below their own. */
+  attack_keep_gap?: number;
 }
 
 /** An army one player sent against another (a row of the raids table). */
@@ -68,6 +70,8 @@ export interface Target {
   name: string;
   home: [number, number];
   protected: boolean;
+  /** Their keep level, if known. */
+  level?: number;
   /** In the same alliance as the player giving the order. */
   ally?: boolean;
 }
@@ -196,6 +200,11 @@ export function scored(stored: PlayerState, reports: Report[]): Pick<PlayerState
 }
 
 /** Whether nobody may attack this player now: new, small, and peaceful so far. */
+/** Whether a castle at keep `level` is too far below `keep` to be attacked. */
+export function tooSmall(keep: number, level: number | undefined, pvp: PvpRules | undefined): boolean {
+  return level !== undefined && pvp?.attack_keep_gap !== undefined && keep - level > pvp.attack_keep_gap;
+}
+
 export function isProtected(state: Pick<PlayerState, "protected_until" | "castle">, pvp: PvpRules, now: number): boolean {
   return state.protected_until > now && castleLevel(state.castle) < pvp.protection_until_keep;
 }
@@ -294,6 +303,7 @@ export function act(rules: Rules, given: PlayerState, req: Request, now: number,
       else if (target.name === stored.name) error = "That's your own castle.";
       else if (target.ally) error = "You can't attack a member of your own alliance.";
       else if (target.protected) error = "That castle is under beginner protection.";
+      else if (tooSmall(castle.keepLevel(), target.level, ctx.pvp)) error = "That castle is too small for you to attack.";
       else if (sent === null) error = "Bad army.";
       else error = checkArmy(castle, sent);
       if (error !== "" || target === undefined || sent === null) break;

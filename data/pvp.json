@@ -1,7 +1,8 @@
 {
-	"_comment": "Fights between players online. New players can't be attacked for protection_hours, or until their keep reaches protection_until_keep, and lose that protection as soon as they attack someone themselves. A winning attack carries off up to loot_share of each resource, as much as the survivors can carry (carry_per_soldier in barons.json). Spying costs spy_cost and shows the target's soldiers at home and their wall. The leaderboard ranks castles by might: might_per_building_level for every building level plus might_per_soldier for every soldier at home.",
+	"_comment": "Fights between players online. New players can't be attacked for protection_hours, or until their keep reaches protection_until_keep, and lose that protection as soon as they attack someone themselves. Nobody can attack a castle whose keep is more than attack_keep_gap levels below their own. A winning attack carries off up to loot_share of each resource, as much as the survivors can carry (carry_per_soldier in barons.json). Spying costs spy_cost and shows the target's soldiers at home and their wall. The leaderboard ranks castles by might: might_per_building_level for every building level plus might_per_soldier for every soldier at home.",
 	"protection_hours": 120,
 	"protection_until_keep": 3,
+	"attack_keep_gap": 1,
 	"loot_share": 0.25,
 	"spy_cost": { "gold": 25 },
 	"might_per_building_level": 10,

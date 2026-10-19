@@ -258,7 +258,8 @@ async function findTarget(name: unknown, userId: string): Promise<{ target: Targ
   const me = await store.player(userId);
   const ally = row.alliance_id !== null && me !== null && Number(row.alliance_id) === me.alliance_id;
   return {
-    target: { name: row.name, home: [row.home_x, row.home_y], protected: isProtected(row as PlayerState, pvp, now()), ally },
+    target: { name: row.name, home: [row.home_x, row.home_y], protected: isProtected(row as PlayerState, pvp, now()),
+      level: castleLevel((row as PlayerState).castle), ally },
     row,
   };
 }
