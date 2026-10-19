@@ -18,7 +18,7 @@
 			"unique": true,
 			"max_level": 5,
 			"cost": { "wood": 200, "stone": 250, "gold": 60 },
-			"cost_growth": 2.6,
+			"cost_growth": 3.0,
 			"time": 150,
 			"time_growth": 4.5,
 			"storage": 1500,
@@ -45,7 +45,7 @@
 			"max_level": 10,
 			"max_count": [2, 3, 4, 5, 6],
 			"cost": { "wood": 60, "stone": 30 },
-			"cost_growth": 1.55,
+			"cost_growth": 1.7,
 			"time": 30,
 			"time_growth": 2.2,
 			"produces": { "wood": 40 },
@@ -58,7 +58,7 @@
 			"max_level": 10,
 			"max_count": [2, 3, 4, 5, 6],
 			"cost": { "wood": 70, "stone": 20 },
-			"cost_growth": 1.55,
+			"cost_growth": 1.7,
 			"time": 30,
 			"time_growth": 2.2,
 			"produces": { "stone": 32 },
@@ -71,7 +71,7 @@
 			"max_level": 10,
 			"max_count": [2, 3, 4, 5, 6],
 			"cost": { "wood": 50, "stone": 20 },
-			"cost_growth": 1.5,
+			"cost_growth": 1.65,
 			"time": 30,
 			"time_growth": 2.2,
 			"produces": { "food": 45 },
@@ -84,7 +84,7 @@
 			"max_level": 10,
 			"max_count": [2, 4, 6, 8, 10],
 			"cost": { "wood": 80, "stone": 40 },
-			"cost_growth": 1.55,
+			"cost_growth": 1.7,
 			"time": 30,
 			"time_growth": 2.2,
 			"produces": { "gold": 15 },
@@ -97,7 +97,7 @@
 			"unique": true,
 			"max_level": 10,
 			"cost": { "wood": 150, "stone": 100, "gold": 60 },
-			"cost_growth": 1.6,
+			"cost_growth": 1.7,
 			"time": 60,
 			"time_growth": 2.2
 		},
@@ -108,11 +108,11 @@
 			"max_level": 10,
 			"max_count": [1, 1, 2, 2, 3],
 			"cost": { "wood": 120, "stone": 80 },
-			"cost_growth": 1.6,
+			"cost_growth": 1.7,
 			"time": 40,
 			"time_growth": 2.2,
-			"storage": 800,
-			"storage_growth": 1.5
+			"storage": 1000,
+			"storage_growth": 1.55
 		}
 	}
 }
