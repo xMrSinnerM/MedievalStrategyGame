@@ -163,8 +163,8 @@ and open ground still sends your party straight there.
   level-1 cost, build time and output, and a growth factor per level
   (`value x growth^(level - 1)`), so balancing means changing a few numbers.
 - **The keep sets the limits**: other buildings can go up to twice its level,
-  it decides how many of each you may build, and it adds builders (one at
-  first, more at keep levels 3 and 5). Builders are the only way to build
+  it decides how many of each you may build, and it adds builders (two at
+  first, a third from keep level 4). Builders are the only way to build
   faster; there is no premium currency and nothing to buy.
 - **Storage** comes from the keep and storehouses and caps every resource.
 - **Saving** is automatic every 30 seconds and on quit, to the slot you are
@@ -299,6 +299,40 @@ Battle reports say which walls broke and how the courtyard went, with a row
 for each wall and the courtyard: broken in which wave, held, undefended or not
 attacked, and who fell there.
 
+## Balance
+
+The pace is set so a castle takes **about a month** to build up fully for a
+player who looks in a few times a day: the first upgrades take a minute or
+two, the top ones most of a day (the keep's last level about 17 hours), and
+the storage holds about a night's production. Playing nonstop is faster, but
+not by much more than twice, because the long top upgrades wait on the
+builders rather than on the player.
+
+`tools/balance_sim.gd` plays a new castle forward through the game's own rules
+and prints a Markdown report: the keep levels and their costs, robber baron
+camps by level, when each keep level is reached, production, storage and
+soldiers over time, and how a raiding player's attacks went. It runs two
+players side by side, one who only builds and trains (`NpcBrain`) and one who
+also attacks the camp that pays best:
+
+```
+godot --headless --path . --script res://tools/balance_sim.gd -- days=45 checkins=4 out=/tmp/balance.md
+```
+
+`checkins=N` makes both players look in N times a day between 8:00 and 23:00
+(leave it out to have them decide every 10 minutes). With the current numbers:
+
+| | Keep 2 | Keep 5 | Everything built |
+|---|---|---|---|
+| 4 visits a day | 2 days | 22 days | 35 days |
+| Nonstop | 13 hours | 10 days | 17 days |
+
+Robber baron camps are worth raiding: for a player who looks in 4 times a day
+and sends their army out each time, loot is about a sixth of their income in
+the middle of the game (days 7 to 21) and less later on, when their own
+production has grown. Raiding doesn't build the castle faster (the top
+upgrades wait on the builders), but it pays for a bigger army.
+
 ## Diplomacy
 
 You rule Aldmere: its lords follow your wars. `Diplomacy`
@@ -340,8 +374,10 @@ Kingdoms. Each camp starts at level 1, and every win against it counts towards
 its next level: one win per level at first, two from level 10 and three from
 level 20. A higher camp has a bigger garrison (14 soldiers at level 1, growing
 16% a level, with swordsmen from level 4 and horsemen from level 8), a stronger
-palisade and richer loot (15% more a level). Winners carry off up to 12
-resources per surviving soldier. A beaten camp rebuilds for 5 minutes plus 30
+palisade and richer loot (1,320 resources at level 1, 15% more a level,
+worth about an hour of your own production for the camps you can beat in the
+middle of the game). Winners carry off up to 20 resources per surviving
+soldier. A beaten camp rebuilds for 5 minutes plus 30
 seconds per level before it can be attacked again; a camp that holds keeps its
 level. All of these numbers live in `data/barons.json` (`BaronRules`), and each
 camp's level is saved with your game (`BaronCamp`, `Economy.barons`).
@@ -386,7 +422,7 @@ account or sign in (email and password) and name your castle. Online you
 have your castle on your own spot of the map, the other players' castles
 around you, and the robber baron camps. Click another player's castle to
 send a spy or an attack; new players are protected from attacks for their
-first three days. Press L for the leaderboard: the mightiest castles and
+first five days (or until their keep reaches level 3). Press L for the leaderboard: the mightiest castles and
 the robber barons they have beaten. Your castle keeps building and
 training while the game is closed, and nothing is saved on your computer
 except that you're signed in. The warband, lords and diplomacy are single

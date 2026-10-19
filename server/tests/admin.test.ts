@@ -93,9 +93,10 @@ test("gifts hold known resources and soldiers in sensible amounts", () => {
 test("a gift goes into the castle, even past the storage limit", () => {
   const castle = CastleState.createNew(rules.buildings, "c", "C", "player", 0);
   const cap = castle.storageCapacity();
+  const before = castle.resources.gold;
   giveCastle(castle, { resources: { gold: cap * 3 }, troops: { archer: 7 } });
-  assert.equal(castle.resources.gold, 200 + cap * 3);
+  assert.equal(castle.resources.gold, before + cap * 3);
   assert.equal(castle.troops.archer, 7);
   castle.advanceTo(3600);
-  assert.ok(castle.resources.gold >= 200 + cap * 3, "production doesn't throw it away");
+  assert.ok(castle.resources.gold >= before + cap * 3, "production doesn't throw it away");
 });
