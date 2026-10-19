@@ -32,13 +32,13 @@
 	"palisade_base": 20,
 	"palisade_per_level": 15,
 	"loot_base": {
-		"wood": 140,
-		"stone": 90,
-		"food": 140,
-		"gold": 70
+		"wood": 420,
+		"stone": 270,
+		"food": 420,
+		"gold": 210
 	},
 	"loot_growth": 1.15,
-	"carry_per_soldier": 12,
+	"carry_per_soldier": 20,
 	"defeats_per_level": [
 		{
 			"from_level": 1,
