@@ -48,6 +48,11 @@ test("orders are carried out or refused with a reason", () => {
   assert.equal(out.error, "");
   assert.equal(typeof out.result, "number");
   p = out.state;
+  for (let k = 1; k < rules.buildings.builders(1); k++) {
+    out = act(rules, p, { action: "place", type: "farm", cell: [18, 3 * k] }, T0);
+    assert.equal(out.error, "", "every other builder put to work");
+    p = out.state;
+  }
   out = act(rules, p, { action: "place", type: "house", cell: [5, 5] }, T0 + 1);
   assert.equal(out.error, "All builders are busy");
   out = act(rules, p, { action: "place", type: "quarry", cell: "1,1" }, T0);

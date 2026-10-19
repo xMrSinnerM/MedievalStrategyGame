@@ -118,7 +118,7 @@ test("reward tiers are claimed in order once you have the points, and start agai
   p.castle.resources = { wood: 990, stone: 990, food: 990, gold: 990 };
   out = act(rules, p, { action: "claim_reward", tier: 3 }, START + 15, ctx);
   assert.equal(out.error, "");
-  assert.ok(out.state.castle.resources.wood <= 1000);
+  assert.ok(out.state.castle.resources.wood <= rules.buildings.storage("keep", 1));
   // A week later the next invasion starts afresh.
   out = act(rules, out.state, { action: "state" }, START + 7 * 86400 + 5, ctx);
   assert.equal(out.state.event_key, START + 7 * 86400);

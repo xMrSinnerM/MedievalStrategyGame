@@ -163,8 +163,8 @@ and open ground still sends your party straight there.
   level-1 cost, build time and output, and a growth factor per level
   (`value x growth^(level - 1)`), so balancing means changing a few numbers.
 - **The keep sets the limits**: other buildings can go up to twice its level,
-  it decides how many of each you may build, and it adds builders (one at
-  first, more at keep levels 3 and 5). Builders are the only way to build
+  it decides how many of each you may build, and it adds builders (two at
+  first, a third from keep level 4). Builders are the only way to build
   faster; there is no premium currency and nothing to buy.
 - **Storage** comes from the keep and storehouses and caps every resource.
 - **Saving** is automatic every 30 seconds and on quit, to the slot you are
@@ -298,6 +298,34 @@ report on your castle shows it.
 Battle reports say which walls broke and how the courtyard went, with a row
 for each wall and the courtyard: broken in which wave, held, undefended or not
 attacked, and who fell there.
+
+## Balance
+
+The pace is set so a castle takes **about a month** to build up fully for a
+player who looks in a few times a day: the first upgrades take a minute or
+two, the top ones most of a day (the keep's last level about 17 hours), and
+the storage holds about a night's production. Playing nonstop is faster, but
+not by much more than twice, because the long top upgrades wait on the
+builders rather than on the player.
+
+`tools/balance_sim.gd` plays a new castle forward through the game's own rules
+and prints a Markdown report: the keep levels and their costs, robber baron
+camps by level, when each keep level is reached, production, storage and
+soldiers over time, and how a raiding player's attacks went. It runs two
+players side by side, one who only builds and trains (`NpcBrain`) and one who
+also attacks the camp that pays best:
+
+```
+godot --headless --path . --script res://tools/balance_sim.gd -- days=45 checkins=4 out=/tmp/balance.md
+```
+
+`checkins=N` makes both players look in N times a day between 8:00 and 23:00
+(leave it out to have them decide every 10 minutes). With the current numbers:
+
+| | Keep 2 | Keep 5 | Everything built |
+|---|---|---|---|
+| 4 visits a day | 2 days | 22 days | 35 days |
+| Nonstop | 13 hours | 10 days | 17 days |
 
 ## Diplomacy
 
