@@ -979,6 +979,11 @@ func is_protected() -> bool:
 	return protected_until > now() and player_castle.keep_level() < int(pvp.get("protection_until_keep", 3))
 
 
+func too_small(level: int) -> bool:
+	## Whether a castle at keep `level` is too far below yours to attack.
+	return pvp.has("attack_keep_gap") and player_castle.keep_level() - level > int(pvp.attack_keep_gap)
+
+
 func spy_cost() -> Dictionary:
 	return pvp.get("spy_cost", {})
 
@@ -993,6 +998,8 @@ func check_raid(player_name: String, army: Dictionary, waves: Array = []) -> Str
 		return "You can't attack a member of your own alliance."
 	if target.get("protected", false):
 		return "That castle is under beginner protection."
+	if too_small(int(target.get("level", 1))):
+		return "That castle is too small for you to attack."
 	var bad := _check_waves(waves)
 	if bad != "":
 		return bad

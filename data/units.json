@@ -34,7 +34,7 @@
 			"barracks_level": 3,
 			"cost": { "gold": 28, "stone": 8, "food": 10 },
 			"time": 45,
-			"upkeep": 1.5,
+			"upkeep": 1.0,
 			"attack": 16,
 			"defense": 15
 		},
@@ -45,7 +45,7 @@
 			"barracks_level": 4,
 			"cost": { "gold": 45, "food": 25 },
 			"time": 70,
-			"upkeep": 3.0,
+			"upkeep": 1.5,
 			"attack": 24,
 			"defense": 12,
 			"bonus": { "archer": 1.6 }

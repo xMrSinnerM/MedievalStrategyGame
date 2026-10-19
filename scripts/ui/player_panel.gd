@@ -1,7 +1,7 @@
 extends PanelContainer
 ## Online: shown on the world map when you click another player's castle: who
 ## they are, their castle level, whether beginner protection still shelters
-## them, what your spy last saw there, and buttons to send a spy or open the
+## them (or they are too small for you to attack), what your spy last saw there, and buttons to send a spy or open the
 ## attack screen. For members of your alliance: buttons to send them resources
 ## or defenders, what you have on the way, and a button to call defenders home.
 
@@ -117,10 +117,13 @@ func _refresh() -> void:
 	_level.text = "Player castle, level %d" % int(p.get("level", 1))
 	var lines: PackedStringArray = []
 	var shielded: bool = p.get("protected", false)
+	var small := Economy.too_small(int(p.get("level", 1)))
 	if ally:
 		lines.append("A member of your alliance.")
 	elif shielded:
 		lines.append("Under beginner protection: can't be attacked yet.")
+	elif small:
+		lines.append("Too small for you to attack.")
 	lines.append("March: %s each way" % _clock(Economy.march_time_to_player(player_name)))
 	var seen: Dictionary = Economy.spy_reports.get(player_name, {})
 	if ally:
@@ -167,7 +170,7 @@ func _refresh() -> void:
 	_recall.set_meta("aid", standing)
 	_spy.text = "Send a spy (%s)" % _cost(Economy.spy_cost())
 	_spy.disabled = ally or not Economy.player_castle.can_afford(Economy.spy_cost())
-	_attack.disabled = ally or shielded or Economy.player_castle.troop_count() <= 0
+	_attack.disabled = ally or shielded or small or Economy.player_castle.troop_count() <= 0
 	_attack.tooltip_text = "Train soldiers first" if Economy.player_castle.troop_count() <= 0 else ""
 
 

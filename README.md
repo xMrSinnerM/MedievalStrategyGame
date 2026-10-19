@@ -191,8 +191,8 @@ train a little faster.
 |---|---|---|---|---|---|---|
 | Spearman | 1 | 12 gold, 10 food | 20 s | 1 | 8 | 12 |
 | Archer | 2 | 15 gold, 14 wood | 28 s | 1 | 12 | 6 |
-| Swordsman | 3 | 28 gold, 8 stone, 10 food | 45 s | 1.5 | 16 | 15 |
-| Horseman | 4 | 45 gold, 25 food | 70 s | 3 | 24 | 12 |
+| Swordsman | 3 | 28 gold, 8 stone, 10 food | 45 s | 1 | 16 | 15 |
+| Horseman | 4 | 45 gold, 25 food | 70 s | 1.5 | 24 | 12 |
 
 - Up to 5 batches of up to 50 soldiers queue up and train one after another,
   also while the game is closed. Cancelling a batch refunds 75% of what its
@@ -333,6 +333,17 @@ the middle of the game (days 7 to 21) and less later on, when their own
 production has grown. Raiding doesn't build the castle faster (the top
 upgrades wait on the builders), but it pays for a bigger army.
 
+Spearmen and archers give the most fighting for what they cost to train;
+swordsmen and horsemen give the most for the food they eat. Early on, when
+resources are short, cheap soldiers pay; later, when food is what limits the
+size of an army, the strong ones do.
+
+Online, a castle can't attack one whose keep is more than one level below its
+own (`attack_keep_gap` in `data/pvp.json`), so big castles fight castles of
+their own size rather than farming small ones. To be sure of winning, an
+attacker needs about one and a half times the defenders' soldiers, or twice as
+many against a fully built wall.
+
 ## Diplomacy
 
 You rule Aldmere: its lords follow your wars. `Diplomacy`
@@ -422,7 +433,8 @@ account or sign in (email and password) and name your castle. Online you
 have your castle on your own spot of the map, the other players' castles
 around you, and the robber baron camps. Click another player's castle to
 send a spy or an attack; new players are protected from attacks for their
-first five days (or until their keep reaches level 3). Press L for the leaderboard: the mightiest castles and
+first five days (or until their keep reaches level 3), and nobody can
+attack a castle whose keep is more than one level below their own. Press L for the leaderboard: the mightiest castles and
 the robber barons they have beaten. Your castle keeps building and
 training while the game is closed, and nothing is saved on your computer
 except that you're signed in. The warband, lords and diplomacy are single

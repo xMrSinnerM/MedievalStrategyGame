@@ -233,7 +233,8 @@ function findTarget(name: unknown, me: string): { target: Target; user: string }
   if (typeof name !== "string") return undefined;
   for (const [id, p] of players) {
     if (p.name.toLowerCase() === name.trim().toLowerCase()) {
-      return { target: { name: p.name, home: [p.home_x, p.home_y], protected: isProtected(p, pvp, now()), ally: allies(me, id) },
+      return { target: { name: p.name, home: [p.home_x, p.home_y], protected: isProtected(p, pvp, now()),
+        level: castleLevel(p.castle), ally: allies(me, id) },
         user: id };
     }
   }

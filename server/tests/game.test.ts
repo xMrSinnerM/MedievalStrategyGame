@@ -137,6 +137,10 @@ test("attacking a player: refusals, then the army marches and protection ends", 
   assert.equal(act(rules, me, { action: "attack_player", army: { spearman: 1 } }, T0, { pvp }).error, "There's no player by that name.");
   assert.equal(send({ spearman: 1 }, { ...target, name: "Raider" }).error, "That's your own castle.");
   assert.equal(send({ spearman: 1 }, { ...target, protected: true }).error, "That castle is under beginner protection.");
+  me.castle.buildings.find((b) => b.type === "keep")!.level = 2 + pvp.attack_keep_gap!;
+  assert.equal(send({ spearman: 1 }, { ...target, level: 1 }).error, "That castle is too small for you to attack.");
+  assert.equal(send({ spearman: 41 }, { ...target, level: 2 }).error, "Your garrison doesn't have that many soldiers.");
+  me.castle.buildings.find((b) => b.type === "keep")!.level = 1;
   assert.equal(send({ spearman: 41 }).error, "Your garrison doesn't have that many soldiers.");
   assert.equal(send({ spearman: 0 }).error, "Choose some soldiers to send.");
   const out = send({ spearman: 30, archer: 10 });
