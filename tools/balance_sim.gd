@@ -147,12 +147,37 @@ func _run(days: float, raids: bool) -> Dictionary:
 					c.resources[r] = have + added
 					looted[r] = float(looted.get(r, 0.0)) + added
 				march = {}
+			if awake:
+				_train_more(c, t)
 			if march.is_empty() and awake:
 				march = _pick_raid(c, camps, t)
 		while report_i < REPORT_DAYS.size() and t - T0 >= float(REPORT_DAYS[report_i]) * 86400.0:
 			snapshots.append(_snapshot(c, float(REPORT_DAYS[report_i]), looted, produced))
 			report_i += 1
 	return {"castle": c, "keep_at": keep_at, "done_at": done_at, "levels": last_levels, "snapshots": snapshots, "log": log, "looted": looted, "produced": produced}
+
+
+func _train_more(c: CastleState, t: float) -> void:
+	## The raider trains past NpcBrain's garrison cap: the strongest unit it
+	## can, from stock above a third of the storage, while the farms can feed
+	## them (soldiers may eat up to 70% of the food).
+	if c.barracks_level() <= 0 or c.training.size() >= 2:
+		return
+	var food_left: float = c.production_per_hour().get("food", 0.0) * 0.7 - c.upkeep_per_hour()
+	for b in c.training:
+		food_left -= b.remaining * rules.unit_upkeep(b.unit)
+	var best := ""
+	for u: String in rules.units:
+		if rules.unit_barracks_level(u) <= c.barracks_level():
+			if best == "" or rules.unit_barracks_level(u) > rules.unit_barracks_level(best):
+				best = u
+	var n := mini(rules.max_batch, int(food_left / rules.unit_upkeep(best)))
+	var cost := rules.unit_cost(best)
+	for r: String in cost:
+		if float(cost[r]) > 0.0:
+			n = mini(n, int((float(c.resources.get(r, 0.0)) - c.storage_capacity() / 3.0) / float(cost[r])))
+	if n > 0:
+		c.recruit(best, n, t)
 
 
 func _awake(t: float) -> bool:
