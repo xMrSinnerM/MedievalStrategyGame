@@ -20,10 +20,10 @@
 			"cost": { "wood": 200, "stone": 250, "gold": 60 },
 			"cost_growth": 2.6,
 			"time": 150,
-			"time_growth": 4.0,
+			"time_growth": 4.5,
 			"storage": 1500,
 			"storage_growth": 1.9,
-			"builders": [1, 1, 2, 2, 3]
+			"builders": [2, 2, 2, 3, 3]
 		},
 		"wall": {
 			"name": "Castle Wall",
@@ -34,7 +34,7 @@
 			"cost": { "wood": 100, "stone": 300 },
 			"cost_growth": 2.0,
 			"time": 120,
-			"time_growth": 3.5,
+			"time_growth": 4.0,
 			"defense": 100,
 			"defense_growth": 1.8
 		},
@@ -47,7 +47,7 @@
 			"cost": { "wood": 60, "stone": 30 },
 			"cost_growth": 1.55,
 			"time": 30,
-			"time_growth": 1.9,
+			"time_growth": 2.2,
 			"produces": { "wood": 40 },
 			"production_growth": 1.35
 		},
@@ -60,7 +60,7 @@
 			"cost": { "wood": 70, "stone": 20 },
 			"cost_growth": 1.55,
 			"time": 30,
-			"time_growth": 1.9,
+			"time_growth": 2.2,
 			"produces": { "stone": 32 },
 			"production_growth": 1.35
 		},
@@ -73,7 +73,7 @@
 			"cost": { "wood": 50, "stone": 20 },
 			"cost_growth": 1.5,
 			"time": 30,
-			"time_growth": 1.9,
+			"time_growth": 2.2,
 			"produces": { "food": 45 },
 			"production_growth": 1.35
 		},
@@ -86,7 +86,7 @@
 			"cost": { "wood": 80, "stone": 40 },
 			"cost_growth": 1.55,
 			"time": 30,
-			"time_growth": 1.9,
+			"time_growth": 2.2,
 			"produces": { "gold": 15 },
 			"production_growth": 1.35
 		},
@@ -99,7 +99,7 @@
 			"cost": { "wood": 150, "stone": 100, "gold": 60 },
 			"cost_growth": 1.6,
 			"time": 60,
-			"time_growth": 1.95
+			"time_growth": 2.2
 		},
 		"storehouse": {
 			"name": "Storehouse",
@@ -110,7 +110,7 @@
 			"cost": { "wood": 120, "stone": 80 },
 			"cost_growth": 1.6,
 			"time": 40,
-			"time_growth": 1.95,
+			"time_growth": 2.2,
 			"storage": 800,
 			"storage_growth": 1.5
 		}
