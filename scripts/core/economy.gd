@@ -38,6 +38,8 @@ signal barons_changed
 signal event_board_changed
 ## Online: the server sent the game owner's panel (see `admin_view`), or refused an owner's order.
 signal admin_changed(error: String)
+## your outpost was founded, or carts left or arrived
+signal outpost_changed
 
 ## Games are kept in SLOTS save slots under save_dir (slot_1.json ...).
 const SLOTS := 3
@@ -66,6 +68,10 @@ var baron_rules: BaronRules
 var quest_book: QuestBook
 ## Commanders and gear (data/gear.json).
 var gear_rules: GearRules
+var outpost_rules: OutpostRules
+## Your outpost (OutpostRules): {name, region, x, y, carts, next_cart}, {} until
+## you found one. Its castle is in `castles` with the id OutpostRules.OUTPOST_ID.
+var outpost := {}
 var barons: Array[BaronCamp] = []
 ## Your armies on the road: {"id", "camp", "army", "depart", "arrive", "back",
 ## "state" ("out" or "home"), "survivors", "loot"}. Times are unix seconds.
@@ -186,6 +192,7 @@ func ensure_loaded() -> void:
 	baron_rules = BaronRules.load_default()
 	quest_book = QuestBook.load_default()
 	gear_rules = GearRules.load_default()
+	outpost_rules = OutpostRules.load_default()
 	if not load_game():
 		new_game()
 	gear_rules.sync(player_castle)
@@ -252,6 +259,7 @@ func begin_new(n := 1) -> void:
 	baron_rules = BaronRules.load_default()
 	quest_book = QuestBook.load_default()
 	gear_rules = GearRules.load_default()
+	outpost_rules = OutpostRules.load_default()
 	slot = n
 	_loaded = true
 	new_game()
@@ -264,6 +272,7 @@ func begin_load(n := 1) -> void:
 	baron_rules = BaronRules.load_default()
 	quest_book = QuestBook.load_default()
 	gear_rules = GearRules.load_default()
+	outpost_rules = OutpostRules.load_default()
 	slot = n
 	_loaded = true
 	if not load_game():
@@ -695,6 +704,7 @@ func new_game() -> void:
 	exiled.clear()
 	player_castle = CastleState.create_new(rules, MAIN_CASTLE, "Your Castle", "player", now())
 	castles.append(player_castle)
+	outpost = {}
 	diplomacy = Diplomacy.from_data_files(now())
 	barons.clear()
 	marches.clear()
@@ -725,11 +735,13 @@ func load_game() -> bool:
 		barons.append(BaronCamp.from_dict(b))
 	marches = data.get("marches", [])
 	_next_march = int(data.get("next_march", 1))
+	outpost = data.get("outpost", {})
 	player_castle = find_main_castle()
 	if player_castle == null:
 		return false
 	# Catch up on everything that happened while the game was closed.
 	var t := now()
+	_deliver_carts(t)
 	for c in castles:
 		if c.is_npc():
 			NpcBrain.catch_up(c, t)
@@ -755,7 +767,7 @@ func save_game() -> void:
 			"homes": homes, "exiled": exiled.keys(),
 			"diplomacy": diplomacy.to_dict() if diplomacy != null else {},
 			"barons": barons.map(func(b: BaronCamp) -> Dictionary: return b.to_dict()),
-			"marches": marches, "next_march": _next_march}, "\t", true, true))
+			"marches": marches, "next_march": _next_march, "outpost": outpost}, "\t", true, true))
 	f.close()
 
 
@@ -769,6 +781,7 @@ func _process(delta: float) -> void:
 	if _tick_timer >= TICK:
 		_tick_timer = 0.0
 		var t := now()
+		_deliver_carts(t)
 		for c in castles:
 			c.advance_to(t)
 			if c.is_npc():
@@ -802,6 +815,7 @@ func begin_online(answer: Dictionary) -> void:
 	baron_rules = BaronRules.load_default()
 	quest_book = QuestBook.load_default()
 	gear_rules = GearRules.load_default()
+	outpost_rules = OutpostRules.load_default()
 	online = true
 	_loaded = true
 	slot = 0
@@ -812,6 +826,7 @@ func begin_online(answer: Dictionary) -> void:
 	diplomacy = Diplomacy.from_data_files(now())
 	player_castle = CastleState.create_new(rules, MAIN_CASTLE, "Your Castle", "player", now())
 	castles.append(player_castle)
+	outpost = {}
 	barons.clear()
 	marches = []
 	warband_home = false
@@ -870,6 +885,7 @@ func apply_server(answer: Dictionary) -> void:
 		return
 	player_castle.copy_from(CastleState.from_dict(rules, p.get("castle", {})))
 	castle_positions[MAIN_CASTLE] = Vector2(float(p.get("home_x", 0.0)), float(p.get("home_y", 0.0)))
+	_take_outpost(p.get("outpost"))
 	var listed := {}
 	var camps_moved := false
 	for c: Dictionary in p.get("camps", []):
@@ -960,7 +976,10 @@ func _process_online(delta: float) -> void:
 	_tick_timer += delta
 	if _tick_timer >= TICK:
 		_tick_timer = 0.0
+		_deliver_carts(now())
 		player_castle.advance_to(now())
+		if outpost_castle() != null:
+			outpost_castle().advance_to(now())
 		quest_book.roll_day(player_castle, now())
 		gear_rules.sync(player_castle)
 		changed.emit()
@@ -1349,6 +1368,120 @@ func _gear_order(why: String, order: Dictionary) -> String:
 		save_game()
 	changed.emit()
 	return ""
+
+
+# --- Outpost --------------------------------------------------------------------
+
+func outpost_castle() -> CastleState:
+	## Your outpost's castle, or null before you found one.
+	return get_castle(OutpostRules.OUTPOST_ID) if not outpost.is_empty() else null
+
+
+func outpost_position() -> Vector2:
+	return Vector2(float(outpost.get("x", 0.0)), float(outpost.get("y", 0.0)))
+
+
+func outpost_spot() -> Variant:
+	## Where an outpost would stand: offline the free player spot (server/world/world.json)
+	## nearest your castle; online the server picks it the same way ([x, y], or null).
+	if online:
+		return [0.0, 0.0]
+	var world = JSON.parse_string(FileAccess.get_file_as_string("res://server/world/world.json"))
+	if not world is Dictionary:
+		return null
+	return OutpostRules.nearest_spot(world.get("spots", []), home_position(), [])
+
+
+func check_found_outpost(region: String) -> String:
+	return outpost_rules.check_found(player_castle, not outpost.is_empty(), region, outpost_spot())
+
+
+func found_outpost(region: String) -> String:
+	## Founds your outpost in a region (data/outposts.json), paid from your main castle.
+	## Online the server founds it; its answer brings the outpost.
+	var spot: Variant = outpost_spot()
+	var why := outpost_rules.check_found(player_castle, not outpost.is_empty(), region, spot)
+	if why != "":
+		return why
+	if online:
+		get_node("/root/Online").order({"action": "found_outpost", "region": region})
+		return ""
+	var castle := outpost_rules.found(player_castle, region, now())
+	castles.append(castle)
+	outpost = {"name": castle.castle_name, "region": region, "x": float(spot[0]), "y": float(spot[1]), "carts": [], "next_cart": 1}
+	save_game()
+	outpost_changed.emit()
+	changed.emit()
+	return ""
+
+
+func cart_time() -> float:
+	## How long carts take between your castles.
+	return baron_rules.march_time(home_position().distance_to(outpost_position()))
+
+
+func check_carts(from_outpost: bool, resources: Dictionary) -> String:
+	var castle := outpost_castle()
+	if castle == null:
+		return "You have no outpost."
+	return outpost_rules.check_carts(castle if from_outpost else player_castle, resources)
+
+
+func send_carts(from_outpost: bool, resources: Dictionary) -> String:
+	## Sends carts of resources from one of your castles to the other.
+	var why := check_carts(from_outpost, resources)
+	if why != "":
+		return why
+	var from := outpost_castle() if from_outpost else player_castle
+	var load := {}
+	for r: String in resources:
+		if int(resources[r]) > 0:
+			load[r] = int(resources[r])
+			from.resources[r] = float(from.resources[r]) - int(resources[r])
+	var t := now()
+	var id := int(outpost.get("next_cart", 1))
+	outpost.carts.append({"id": id, "to": "home" if from_outpost else "outpost", "resources": load, "depart": t,
+			"arrive": t + cart_time()})
+	outpost.next_cart = id + 1
+	if online:
+		get_node("/root/Online").order({"action": "send_carts", "from": "outpost" if from_outpost else "home", "resources": load})
+	else:
+		save_game()
+	outpost_changed.emit()
+	changed.emit()
+	return ""
+
+
+func _deliver_carts(t: float) -> void:
+	var castle := outpost_castle()
+	if castle == null or outpost.get("carts", []).is_empty():
+		return
+	var before: int = outpost.carts.size()
+	outpost.carts = OutpostRules.deliver_carts(player_castle, castle, outpost.carts, t)
+	if outpost.carts.size() != before:
+		outpost_changed.emit()
+
+
+func _take_outpost(given: Variant) -> void:
+	## Online: your outpost as the server has it.
+	var castle := get_castle(OutpostRules.OUTPOST_ID)
+	if not given is Dictionary:
+		if castle != null:
+			castles.erase(castle)
+			outpost = {}
+			outpost_changed.emit()
+		return
+	var fresh := CastleState.from_dict(rules, given.get("castle", {}))
+	var founded := castle == null
+	if founded:
+		castles.append(fresh)
+	else:
+		castle.copy_from(fresh)
+	var carts_before: int = outpost.get("carts", []).size()
+	outpost = {"name": given.get("name", ""), "region": given.get("region", ""), "x": float(given.get("x", 0.0)),
+			"y": float(given.get("y", 0.0)), "carts": given.get("carts", []), "next_cart": int(given.get("next_cart", 1))}
+	if founded or outpost.carts.size() != carts_before:
+		outpost_changed.emit()
 
 
 func claim_quest(kind: String, index := 0) -> String:

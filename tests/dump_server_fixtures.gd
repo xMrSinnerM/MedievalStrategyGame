@@ -12,6 +12,7 @@ var rules: BuildingRules
 var baron_rules: BaronRules
 var quest_book: QuestBook
 var gear: GearRules
+var outposts: OutpostRules
 var rng := RandomNumberGenerator.new()
 
 
@@ -20,6 +21,7 @@ func _initialize() -> void:
 	baron_rules = BaronRules.load_default()
 	quest_book = QuestBook.load_default()
 	gear = GearRules.load_default()
+	outposts = OutpostRules.load_default()
 	rng.seed = 20261011
 	var data := {
 		"castles": [],
@@ -30,6 +32,7 @@ func _initialize() -> void:
 		"dailies": [],
 		"drops": [],
 		"armoury": {},
+		"outpost": {},
 		"hashes": {},
 	}
 	for run in 4:
@@ -54,6 +57,7 @@ func _initialize() -> void:
 		var seed_value := rng.randi_range(0, 2_000_000_000)
 		data.drops.append({"level": level, "seed": seed_value, "item": gear.roll_drop(level, seed_value)})
 	data.armoury = armoury_run()
+	data.outpost = outpost_run()
 	for s in ["baron_0", "baron_7", "baron_29", "", "Ölberg", "a long camp id"]:
 		data.hashes[s] = hash(s)
 	var file := FileAccess.open(OUT, FileAccess.WRITE)
@@ -327,3 +331,87 @@ func armoury_run() -> Dictionary:
 		leads.append(lead if lead != null else "none")
 	return {"drops": drops, "ops": ops, "castle": castle.to_dict(), "fx": fx, "castellan": gear.castellan_effects(castle),
 			"leads": leads, "levels": range(0, 320, 7).map(func(x: int) -> int: return gear.level_for(x))}
+
+
+func outpost_run() -> Dictionary:
+	## A main castle founding an outpost, random orders for the outpost (some of
+	## them things an outpost can't do), and carts between the two castles.
+	var main := CastleState.create_new(rules, "c", "Main Castle", "player", T0)
+	var t := T0
+	var checks := {"too_low": outposts.check_found(main, false, "wood", [1.0, 1.0])}
+	for b in main.buildings:
+		if b.type == "keep":
+			b.level = outposts.keep_needed
+	checks["poor"] = outposts.check_found(main, false, "wood", [1.0, 1.0])
+	for r: String in main.resources:
+		main.resources[r] = 9000.0
+	checks["has"] = outposts.check_found(main, true, "wood", [1.0, 1.0])
+	checks["region"] = outposts.check_found(main, false, "silk", [1.0, 1.0])
+	checks["spot"] = outposts.check_found(main, false, "stone", null)
+	checks["ok"] = outposts.check_found(main, false, "stone", [1.0, 1.0])
+	var outpost := outposts.found(main, "stone", t)
+	var types := ["woodcutter", "quarry", "farm", "house", "barracks", "storehouse", "keep", "wall", "workshop"]
+	var steps: Array = []
+	var carts: Array = []
+	var next_cart := 1
+	for i in 160:
+		var step := {}
+		var roll := rng.randi() % 100
+		if roll < 25:
+			t += float(rng.randi_range(1, 5400))
+			carts = OutpostRules.deliver_carts(main, outpost, carts, t)
+			main.advance_to(t)
+			outpost.advance_to(t)
+			step = {"op": "advance", "t": t}
+		elif roll < 45:
+			var type: String = types[rng.randi() % types.size()]
+			var cell := [rng.randi_range(0, rules.grid_size - 1), rng.randi_range(0, rules.grid_size - 1)]
+			step = {"op": "place", "t": t, "type": type, "cell": cell, "result": outpost.place(type, Vector2i(cell[0], cell[1]), t)}
+		elif roll < 60:
+			var id := rng.randi_range(1, outpost._next_id)
+			step = {"op": "upgrade", "t": t, "id": id, "result": outpost.upgrade(id, t)}
+		elif roll < 65:
+			var r: String = rules.resources[rng.randi() % rules.resources.size()]
+			var amount := float(rng.randi_range(500, 5000))
+			outpost.resources[r] += amount
+			step = {"op": "grant", "resource": r, "amount": amount}
+		elif roll < 85:
+			var home := rng.randi() % 2 == 0
+			var from := main if home else outpost
+			var load := {}
+			for r: String in rules.resources:
+				if rng.randi() % 2 == 0:
+					load[r] = rng.randi_range(0, 900)
+			if rng.randi() % 10 == 0:
+				load["silk"] = 5
+			var result := outposts.check_carts(from, load)
+			step = {"op": "carts", "t": t, "home": home, "load": load, "result": result, "cap": outposts.cart_capacity(from)}
+			if result == "":
+				for r: String in load:
+					from.resources[r] = float(from.resources[r]) - float(load[r])
+				var travel := float(rng.randi_range(60, 4000))
+				carts.append({"id": next_cart, "to": "outpost" if home else "home", "resources": load, "depart": t, "arrive": t + travel})
+				next_cart += 1
+				step["travel"] = travel
+		else:
+			step = {"op": "checks", "build": {}, "upgrade": {}}
+			for type: String in types:
+				step.build[type] = outpost.check_build(type)
+			for b in outpost.buildings:
+				step.upgrade[str(b.id)] = outpost.check_upgrade(b.id)
+		step["main"] = main.to_dict()
+		step["outpost"] = outpost.to_dict()
+		step["carts"] = carts.duplicate(true)
+		steps.append(step)
+	var spots := []
+	for k in 30:
+		spots.append([float(rng.randi_range(0, 40)) * 50.0, float(rng.randi_range(0, 40)) * 50.0])
+	var nearest := []
+	for k in 10:
+		var home: Array = spots[rng.randi() % spots.size()]
+		var taken := []
+		for j in rng.randi_range(0, 8):
+			taken.append(spots[rng.randi() % spots.size()])
+		var taken_v := taken.map(func(s: Array) -> Vector2: return Vector2(s[0], s[1]))
+		nearest.append({"home": home, "taken": taken, "spot": OutpostRules.nearest_spot(spots, Vector2(home[0], home[1]), taken_v)})
+	return {"t0": T0, "checks": checks, "region": "stone", "steps": steps, "spots": spots, "nearest": nearest}

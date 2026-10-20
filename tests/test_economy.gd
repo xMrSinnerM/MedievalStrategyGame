@@ -39,6 +39,7 @@ func _initialize() -> void:
 	test_quests()
 	test_tools()
 	test_gear()
+	test_outpost()
 	print("%d checks, %d failed" % [checks, failures])
 	quit(1 if failures > 0 else 0)
 
@@ -1008,6 +1009,75 @@ func test_gear() -> void:
 			"a level 1 camp gives 1 xp: %s" % [reports[0].get("lead")])
 	var report: GDScript = load("res://scripts/ui/battle_report.gd")
 	check(report.has_method("gear_line"), "the battle report shows commanders and gear")
+	eco.delete_slot(1)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://test_saves"))
+	eco.free()
+
+
+func test_outpost() -> void:
+	var o := OutpostRules.load_default()
+	var main := fresh()
+	check(o.check_found(main, false, "wood", [1.0, 1.0]) == "Your keep must reach level %d first." % o.keep_needed, "keep too low")
+	for b in main.buildings:
+		if b.type == "keep":
+			b.level = o.keep_needed
+	for r: String in main.resources:
+		main.resources[r] = 9000.0
+	check(o.check_found(main, false, "silk", [1.0, 1.0]) == "Choose a region for your outpost.", "no such region")
+	check(o.check_found(main, false, "wood", null) == "There's no free land for an outpost.", "no spot")
+	check(o.check_found(main, false, "wood", [1.0, 1.0]) == "", "can found")
+	var post := o.found(main, "wood", T0)
+	near(main.resources.wood, 9000.0 - float(o.cost.wood), "paid from the main castle")
+	check(post.id == OutpostRules.OUTPOST_ID and post.castle_name == "Timberland", "named after its region")
+	check(post.check_build("barracks") == "An outpost can't have one of these", "no barracks")
+	check(post.check_build("woodcutter") == "", "woodcutters allowed")
+	# The region's bonus: the same woodcutter makes half as much again.
+	var plain := fresh()
+	for c: CastleState in [plain, post]:
+		c.place("woodcutter", Vector2i(2, 2), T0)
+		c.advance_to(T0 + 86_400.0)
+	check(plain.production_per_hour().wood > 0.0, "a woodcutter makes wood")
+	near(post.production_per_hour().wood, plain.production_per_hour().wood * 1.5, "Timberland makes 50% more wood")
+	for b in post.buildings:
+		if b.type == "keep":
+			b.level = o.keep_cap
+			check(post.check_upgrade(b.id) == "An outpost's keep can't go higher", "keep capped")
+	var saved := CastleState.from_dict(rules, JSON.parse_string(JSON.stringify(post.to_dict())))
+	check(saved.boost == post.boost and saved.limits.keep == o.keep_cap, "boost and limits are saved")
+	# Carts.
+	check(o.check_carts(main, {}) == "Load something onto the carts.", "empty carts")
+	check(o.check_carts(main, {"wood": 99999}) == "Not enough resources.", "too much")
+	var cap := o.cart_capacity(main)
+	check(o.check_carts(main, {"wood": cap + 1}) != "", "over capacity")
+	var stock := float(post.resources.stone)
+	var carts := [{"id": 1, "to": "outpost", "resources": {"stone": 400}, "depart": T0, "arrive": T0 + 86_400.0 + 100.0}]
+	carts = OutpostRules.deliver_carts(main, post, carts, T0 + 86_400.0 + 50.0)
+	check(carts.size() == 1, "not there yet")
+	carts = OutpostRules.deliver_carts(main, post, carts, T0 + 86_400.0 + 200.0)
+	check(carts.is_empty() and post.resources.stone >= stock + 400.0 - 0.01, "the stone arrived")
+	check(OutpostRules.nearest_spot([[0, 0], [10, 0], [3, 4], [50, 50]], Vector2(0, 0), [Vector2(3, 4)]) == [10.0, 0.0],
+			"the nearest free spot, not home and not taken")
+	# The whole thing through the economy, offline, saved and loaded.
+	var eco = load("res://scripts/core/economy.gd").new()
+	eco.save_dir = "user://test_saves"
+	eco.begin_new(1)
+	check(eco.check_found_outpost("stone") == "Your keep must reach level %d first." % o.keep_needed, "economy: keep too low")
+	for b in eco.player_castle.buildings:
+		if b.type == "keep":
+			b.level = o.keep_needed
+	for r: String in eco.player_castle.resources:
+		eco.player_castle.resources[r] = 9000.0
+	check(eco.found_outpost("stone") == "", "economy: founded")
+	check(eco.outpost_castle() != null and eco.outpost.region == "stone" and eco.check_found_outpost("wood") == "You already have an outpost.",
+			"economy: one outpost")
+	check(eco.send_carts(false, {"food": 300}) == "" and eco.outpost.carts.size() == 1, "economy: carts sent")
+	eco.save_game()
+	eco.begin_load(1)
+	check(eco.outpost_castle() != null and eco.outpost_castle().boost == {"stone": 0.5} and eco.outpost.carts.size() == 1,
+			"economy: the outpost and its carts are saved")
+	var food := float(eco.outpost_castle().resources.food)
+	eco._deliver_carts(float(eco.outpost.carts[0].arrive) + 1.0)
+	check(eco.outpost.carts.is_empty() and eco.outpost_castle().resources.food >= food + 299.0, "economy: carts unload at the outpost")
 	eco.delete_slot(1)
 	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://test_saves"))
 	eco.free()

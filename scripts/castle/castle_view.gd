@@ -247,8 +247,11 @@ func _click(screen_pos: Vector2) -> void:
 
 func _tell_server(order: Dictionary) -> void:
 	## Online, every order done here is also sent to the server, which
-	## carries it out under the same rules and has the final word.
+	## carries it out under the same rules and has the final word. Orders in
+	## your outpost say so.
 	if Economy.online:
+		if castle.id == OutpostRules.OUTPOST_ID:
+			order["castle"] = OutpostRules.OUTPOST_ID
 		Online.order(order)
 
 

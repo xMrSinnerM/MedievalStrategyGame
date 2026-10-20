@@ -1,0 +1,15 @@
+{
+	"_comment": "Outposts: a second castle with its own buildings, storage and production, founded on the free castle spot nearest your home once your keep reaches keep_needed (cost taken from your main castle). Each outpost works a region that adds `bonus` to one resource's production. An outpost may build only `types`, its keep up to keep_cap. Carts carry resources between your castles, up to cart_share of the sending castle's storage per trip (at least cart_min), at the marching speed (data/barons.json march_speed); what doesn't fit in the storage when they arrive is lost.",
+	"keep_needed": 3,
+	"cost": { "wood": 4000, "stone": 4000, "food": 2000, "gold": 2000 },
+	"keep_cap": 3,
+	"types": ["keep", "wall", "woodcutter", "quarry", "farm", "house", "storehouse"],
+	"cart_share": 0.5,
+	"cart_min": 500,
+	"regions": {
+		"wood": { "name": "Timberland", "bonus": 0.5, "description": "Old forest as far as the eye can see: woodcutters make half as much again." },
+		"stone": { "name": "Quarry Hills", "bonus": 0.5, "description": "Grey hills full of good stone: quarries make half as much again." },
+		"food": { "name": "Farmlands", "bonus": 0.5, "description": "Rich black soil by the river: farms make half as much again." },
+		"gold": { "name": "Trade Post", "bonus": 0.5, "description": "A crossroads where merchants stop: houses bring in half as much gold again." }
+	}
+}

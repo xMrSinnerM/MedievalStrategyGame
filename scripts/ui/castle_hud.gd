@@ -104,8 +104,11 @@ func show_castle() -> void:
 	# Only your main castle has a warband; castles you capture just hold a garrison.
 	_warband_button.visible = view.editable and view.castle == Economy.player_castle and not Economy.online
 	_warband.visible = false
-	_defence_button.visible = view.editable
+	# An outpost can't be attacked, so it has no defence to plan, and builds only what it may.
+	_defence_button.visible = view.editable and view.castle.limits.is_empty()
 	_defence.visible = false
+	for type: String in _build_buttons:
+		_build_buttons[type].visible = view.castle.limits.is_empty() or view.castle.limits.types.has(type)
 	_queue_signature = "?"
 	_on_mode_changed(view.mode)
 	_refresh()

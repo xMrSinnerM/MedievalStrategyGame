@@ -41,6 +41,11 @@ var crafting: Array[Dictionary] = []
 var defence_tools := {}
 ## Commanders, the castellan's gear and the bag of gear not worn (GearRules).
 var armoury := GearRules.new_armoury()
+## Extra production by resource (0.5 for half as much again): an outpost's region.
+var boost := {}
+## An outpost's building limits ({"types": [allowed types], "keep": highest
+## keep level}); empty for a normal castle (OutpostRules).
+var limits := {}
 
 var _next_id := 1
 
@@ -123,6 +128,9 @@ func production_per_hour() -> Dictionary:
 		var p := rules.production(b.type, b.level)
 		for r: String in p:
 			out[r] = out.get(r, 0.0) + p[r]
+	for r: String in boost:
+		if out.has(r):
+			out[r] *= 1.0 + float(boost[r])
 	return out
 
 
@@ -286,6 +294,8 @@ func check_build(type: String) -> String:
 		return "Unknown building"
 	if rules.is_perimeter(type):
 		return "This is built around the castle, not placed"
+	if not limits.is_empty() and not limits.types.has(type):
+		return "An outpost can't have one of these"
 	if count(type) >= rules.max_count(type, keep_level()):
 		return "The castle already has one" if rules.is_unique(type) else "Upgrade the keep to build more of these"
 	return _check_start_work(rules.cost(type, 1))
@@ -308,6 +318,8 @@ func check_upgrade(building_id: int) -> String:
 		return "No such building"
 	if b.target > 0:
 		return "Already under construction"
+	if not limits.is_empty() and b.type == "keep" and b.level >= int(limits.keep):
+		return "An outpost's keep can't go higher"
 	if b.level >= rules.max_level(b.type, keep_level()):
 		if b.type != "keep" and b.level < int(rules.types[b.type].get("max_level", 10)):
 			return "Upgrade the keep first"
@@ -618,6 +630,8 @@ func copy_from(other: CastleState) -> void:
 	crafting = other.crafting
 	defence_tools = other.defence_tools
 	armoury = other.armoury
+	boost = other.boost
+	limits = other.limits
 	_next_id = other._next_id
 
 
@@ -639,6 +653,7 @@ func to_dict() -> Dictionary:
 		"stats": stats.duplicate(), "quests": quests.duplicate(true),
 		"tools": tools.duplicate(), "crafting": crafting.duplicate(true), "defence_tools": defence_tools.duplicate(true),
 		"armoury": armoury.duplicate(true),
+		"boost": boost.duplicate(), "limits": limits.duplicate(true) if not limits.is_empty() else null,
 	}
 
 
@@ -715,6 +730,17 @@ static func from_dict(p_rules: BuildingRules, data: Dictionary) -> CastleState:
 		if not group.is_empty():
 			castle.defence_tools[w] = group
 	castle.armoury = GearRules.read_armoury(data.get("armoury"))
+	var boosts: Variant = data.get("boost", {})
+	if boosts is Dictionary:
+		for r: String in boosts:
+			if p_rules.resources.has(r):
+				castle.boost[r] = float(boosts[r])
+	var lim: Variant = data.get("limits")
+	if lim is Dictionary:
+		var types: Array = []
+		for t in lim.get("types", []):
+			types.append(String(t))
+		castle.limits = {"types": types, "keep": int(lim.get("keep", 1))}
 	return castle
 
 

@@ -15,6 +15,7 @@ import { lastInvasion, type EventRules } from "../../../server/rules/events.ts";
 import { claimReward, eventPoints, invade, rewardTiers } from "./invasion.ts";
 import { claimQuest, rollDay, type QuestRules } from "../../../server/rules/quests.ts";
 import type { GearRules, Lead } from "../../../server/rules/gear.ts";
+import { deliverCarts, OUTPOST_ID, type Cart, type OutpostData } from "../../../server/rules/outposts.ts";
 
 /** A player as stored in the players table (the game columns). */
 export interface PlayerState {
@@ -34,6 +35,8 @@ export interface PlayerState {
   event_points: number;
   /** How many of that invasion's reward tiers you have claimed. */
   event_claimed: number;
+  /** Your second castle (data/outposts.json), or null before you found one. */
+  outpost?: OutpostData | null;
 }
 
 /** The numbers for fights between players, from data/pvp.json. */
@@ -127,6 +130,8 @@ export interface Context {
   events?: { rules: EventRules; world: World; offset?: number };
   /** The story quests and daily tasks (data/quests.json). */
   quests?: QuestRules;
+  /** For "found_outpost": the free spot nearest your home, or null when there is none. */
+  outpostSpot?: [number, number] | null;
 }
 
 export interface World {
@@ -242,6 +247,7 @@ export function newPlayer(rules: Rules, world: World, name: string, now: number,
     event_key: 0,
     event_points: 0,
     event_claimed: 0,
+    outpost: null,
   };
 }
 
@@ -260,6 +266,16 @@ export function act(rules: Rules, given: PlayerState, req: Request, now: number,
   const reports = advanceMarches(army, rules.barons, now);
   const castle = army.castle;
   for (const raid of [...(ctx.homecomings ?? [])].sort((x, y) => x.back - y.back)) comeHomeFromRaid(rules.gear, castle, raid);
+  // Your outpost, and the carts between your castles.
+  let outpost = stored.outpost ? CastleState.fromDict(rules.buildings, stored.outpost.castle) : null;
+  let carts: Cart[] = stored.outpost ? structuredClone(stored.outpost.carts) : [];
+  let nextCart = stored.outpost?.next_cart ?? 1;
+  let outpostSpot: [number, number] | null = stored.outpost ? [stored.outpost.x, stored.outpost.y] : null;
+  let outpostRegion = stored.outpost?.region ?? "";
+  if (outpost) {
+    carts = deliverCarts(castle, outpost, carts, now);
+    outpost.advanceTo(now);
+  }
   castle.advanceTo(now);
   rules.gear.sync(castle);
   if (ctx.quests) rollDay(castle, ctx.quests, now);
@@ -273,24 +289,57 @@ export function act(rules: Rules, given: PlayerState, req: Request, now: number,
     case "state":
       break;
     case "place": {
-      if (!isCell(req.cell)) {
-        error = "Bad cell.";
-        break;
-      }
-      error = castle.checkPlace(String(req.type), req.cell);
-      if (error === "") result = castle.place(String(req.type), req.cell, now);
+      const where = req.castle === OUTPOST_ID ? outpost : castle;
+      if (where === null) error = "You have no outpost.";
+      else if (!isCell(req.cell)) error = "Bad cell.";
+      else error = where.checkPlace(String(req.type), req.cell);
+      if (error === "") result = where!.place(String(req.type), req.cell, now);
       break;
     }
-    case "upgrade":
-      error = castle.checkUpgrade(Number(req.id));
-      if (error === "") castle.upgrade(Number(req.id), now);
+    case "upgrade": {
+      const where = req.castle === OUTPOST_ID ? outpost : castle;
+      error = where === null ? "You have no outpost." : where.checkUpgrade(Number(req.id));
+      if (error === "") where!.upgrade(Number(req.id), now);
       break;
-    case "cancel":
-      if (!castle.cancel(Number(req.id), now)) error = "Nothing is being built there.";
+    }
+    case "cancel": {
+      const where = req.castle === OUTPOST_ID ? outpost : castle;
+      if (where === null || !where.cancel(Number(req.id), now)) error = "Nothing is being built there.";
       break;
-    case "move":
-      if (!isCell(req.cell) || !castle.move(Number(req.id), req.cell)) error = "There's no room there";
+    }
+    case "move": {
+      const where = req.castle === OUTPOST_ID ? outpost : castle;
+      if (where === null || !isCell(req.cell) || !where.move(Number(req.id), req.cell)) error = "There's no room there";
       break;
+    }
+    case "found_outpost":
+      error = rules.outposts.checkFound(castle, outpost !== null, req.region, ctx.outpostSpot);
+      if (error === "") {
+        outpost = rules.outposts.found(castle, String(req.region), now);
+        outpostSpot = ctx.outpostSpot!;
+        outpostRegion = String(req.region);
+      }
+      break;
+    case "send_carts": {
+      const from = req.from === OUTPOST_ID ? outpost : castle;
+      if (outpost === null || from === null || outpostSpot === null) {
+        error = "You have no outpost.";
+        break;
+      }
+      error = rules.outposts.checkCarts(from, req.resources);
+      if (error !== "") break;
+      const load: Dict = {};
+      for (const [r, n] of Object.entries(req.resources as Dict)) {
+        if (n > 0) {
+          load[r] = n;
+          from.resources[r] -= n;
+        }
+      }
+      const travel = rules.barons.marchTime(Math.hypot(outpostSpot[0] - stored.home_x, outpostSpot[1] - stored.home_y));
+      carts.push({ id: nextCart, to: from === castle ? "outpost" : "home", resources: load, depart: now, arrive: now + travel });
+      nextCart += 1;
+      break;
+    }
     case "recruit":
       error = castle.checkRecruit(String(req.unit), Number(req.amount));
       if (error === "") castle.recruit(String(req.unit), Number(req.amount), now);
@@ -440,6 +489,8 @@ export function act(rules: Rules, given: PlayerState, req: Request, now: number,
       next_march: army.nextMarch,
       protected_until: protectedUntil,
       event_claimed: claimed,
+      outpost: outpost && outpostSpot ? { name: outpost.castleName, region: outpostRegion, x: outpostSpot[0], y: outpostSpot[1],
+        castle: outpost.toDict(), carts, next_cart: nextCart } : null,
       ...scored(stored, reports),
     },
     reports,

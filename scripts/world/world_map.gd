@@ -12,6 +12,7 @@ extends Node3D
 @onready var camera_rig: CampaignCamera = $CampaignCamera
 var barons: Node3D
 var players: Node3D
+var outposts: Node3D
 
 
 func _ready() -> void:
@@ -36,8 +37,13 @@ func _ready() -> void:
 		players.name = "Players"
 		add_child(players)
 		players.build()
+	outposts = preload("res://scripts/world/outposts_layer.gd").new()
+	outposts.name = "Outposts"
+	add_child(outposts)
+	outposts.build()
 	parties.barons = barons
 	parties.players = players
+	parties.outposts = outposts
 	parties.camera_rig = camera_rig
 	parties.build()
 	parchment.build()

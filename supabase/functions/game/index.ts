@@ -29,6 +29,9 @@
 // POST { "action": "sell_gear", "item": id }     sells gear from your bag for gold
 // POST { "action": "set_layout", "layout": { "left", "front", "right", "courtyard" } }   percent of the garrison at each post
 // POST { "action": "spy", "target": "name" }
+// POST { "action": "found_outpost", "region": "wood" | "stone" | "food" | "gold" }   a second castle (data/outposts.json)
+//   on the free spot nearest your home; "place", "upgrade", "cancel" and "move" then take "castle": "outpost"
+// POST { "action": "send_carts", "from": "home" | "outpost", "resources": { wood: n } }   between your castles
 // POST { "action": "found_alliance", "name", "tag" }  costs gold (data/alliances.json)
 // POST { "action": "alliance" }                  your alliance, its members and requests, invitations, all alliances
 // POST { "action": "join_alliance" | "accept_invite" | "decline_invite" | "cancel_request", "id" }
@@ -68,10 +71,12 @@ import aidData from "../../../data/aid.json" with { type: "json" };
 import eventsData from "../../../data/events.json" with { type: "json" };
 import questsData from "../../../data/quests.json" with { type: "json" };
 import gearData from "../../../data/gear.json" with { type: "json" };
+import outpostsData from "../../../data/outposts.json" with { type: "json" };
 import world from "../../../server/world/world.json" with { type: "json" };
 import { makeRules } from "../../../server/rules/load.ts";
 import { effectAt, eventsView, lastInvasion, withOverrides, type EventOverride, type EventRules } from "../../../server/rules/events.ts";
 import { CastleState } from "../../../server/rules/castle_state.ts";
+import { nearestSpot } from "../../../server/rules/outposts.ts";
 import {
   act, castleLevel, checkName, fightRaid, isProtected, might, newPlayer, pickSpot, spyReport,
   type Homecoming, type PlayerState, type PvpRules, type Raid, type Target, type World,
@@ -87,7 +92,7 @@ import {
   adminEvents, checkGift, giftReport, giveCastle, NOT_ADMIN, OVERRIDES_KEPT, startEvent, stopEvent, type Gift,
 } from "./admin.ts";
 
-const rules = makeRules(buildings, units, barons, gearData);
+const rules = makeRules(buildings, units, barons, gearData, outpostsData);
 const pvp = pvpData as PvpRules;
 const allianceRules = alliancesData as AllianceRules;
 const aidRules = aidData as AidRules;
@@ -105,7 +110,7 @@ const ALLIANCE_ORDERS = new Set([
   "alliance", "join_alliance", "accept_invite", "decline_invite", "cancel_request", "leave_alliance", "disband_alliance",
   "invite", "cancel_invite", "kick", "answer_request", "set_role", "alliance_settings",
 ]);
-const COLUMNS = "name, home_x, home_y, castle, camps, marches, next_march, protected_until, barons_beaten, event_key, event_points, event_claimed, version";
+const COLUMNS = "name, home_x, home_y, castle, camps, marches, next_march, protected_until, barons_beaten, event_key, event_points, event_claimed, outpost, version";
 const REPORTS_SHOWN = 20;
 const RETRIES = 4;
 const PLAYERS_SHOWN = 500;
@@ -171,6 +176,18 @@ async function view(userId: string, state: PlayerState, extra: Record<string, un
 /** The columns other players can see, worked out from a player's state. */
 function publicColumns(state: PlayerState) {
   return { level: castleLevel(state.castle), might: might(state.castle, pvp) };
+}
+
+/** Every spot a castle stands on: players' homes and their outposts. */
+async function takenSpots(): Promise<[number, number][] | null> {
+  const { data, error } = await admin.from("players").select("home_x, home_y, outpost_x:outpost->x, outpost_y:outpost->y");
+  if (error) return null;
+  const taken: [number, number][] = [];
+  for (const r of data ?? []) {
+    taken.push([r.home_x, r.home_y]);
+    if (r.outpost_x !== null && r.outpost_x !== undefined) taken.push([Number(r.outpost_x), Number(r.outpost_y)]);
+  }
+  return taken;
 }
 
 async function saveReports(userId: string, reports: unknown[]) {
@@ -418,9 +435,9 @@ Deno.serve(async (req: Request) => {
     if (why !== "") return reply({ ok: false, error: why });
     // Another player may take the same spot at the same moment; then try another.
     for (let attempt = 0; attempt < RETRIES; attempt++) {
-      const { data: homes, error: homesError } = await admin.from("players").select("home_x, home_y");
-      if (homesError) return reply({ ok: false, error: "The server couldn't create your castle." }, 500);
-      const spot = pickSpot(world as World, (homes ?? []).map((h) => [h.home_x, h.home_y] as [number, number]));
+      const spots = await takenSpots();
+      if (spots === null) return reply({ ok: false, error: "The server couldn't create your castle." }, 500);
+      const spot = pickSpot(world as World, spots);
       if (spot === null) return reply({ ok: false, error: "The world is full. Try again later." });
       // A castle founded during a Baron Invasion meets its invaders straight away.
       const state = invade(newPlayer(rules, world as World, String(body.name), now(), spot, pvp), calendar, world as World, now());
@@ -436,7 +453,8 @@ Deno.serve(async (req: Request) => {
 
   if (body.action === "world") {
     const { data, error } = await admin.from("players")
-      .select("name, home_x, home_y, level, protected_until, alliance_id, alliance:alliances!players_alliance_id_fkey(tag)")
+      .select("name, home_x, home_y, level, protected_until, alliance_id, alliance:alliances!players_alliance_id_fkey(tag), "
+        + "outpost_name:outpost->>name, outpost_x:outpost->x, outpost_y:outpost->y")
       .neq("user_id", userId).limit(PLAYERS_SHOWN);
     if (error) return reply({ ok: false, error: "The server couldn't load the map." }, 500);
     const me = await store.player(userId);
@@ -445,6 +463,8 @@ Deno.serve(async (req: Request) => {
       name: p.name, home_x: p.home_x, home_y: p.home_y, level: p.level,
       protected: p.protected_until > t && p.level < pvp.protection_until_keep,
       tag: tagOf(p), ally: p.alliance_id !== null && me !== null && Number(p.alliance_id) === me.alliance_id,
+      outpost: p.outpost_x === null || p.outpost_x === undefined ? null
+        : { name: p.outpost_name, x: Number(p.outpost_x), y: Number(p.outpost_y) },
     }));
     return reply({ ok: true, now: t, error: "", players });
   }
@@ -554,7 +574,14 @@ Deno.serve(async (req: Request) => {
     }
     const { version, ...stored } = row as PlayerState & { version: number };
     const t = now();
-    const outcome = act(rules, stored, body, t, { pvp, target: target?.target, homecomings, alliances: allianceRules, aid: aidRules,
+    // An outpost goes on the free spot nearest your home.
+    let outpostSpot: [number, number] | null = null;
+    if (body.action === "found_outpost" && !stored.outpost) {
+      const taken = await takenSpots();
+      if (taken === null) return reply({ ok: false, error: "The server couldn't load the map." }, 500);
+      outpostSpot = nearestSpot((world as World).spots, [stored.home_x, stored.home_y], taken);
+    }
+    const outcome = act(rules, stored, body, t, { pvp, outpostSpot, target: target?.target, homecomings, alliances: allianceRules, aid: aidRules,
       events: { rules: calendar, world: world as World }, quests: questRules });
     // Save only if nobody else changed the row meanwhile; otherwise start over.
     const { data: saved, error: saveError } = await admin.from("players")
