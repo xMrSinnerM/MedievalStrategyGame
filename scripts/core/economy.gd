@@ -901,7 +901,7 @@ func _server_report(r: Dictionary) -> Dictionary:
 				"attacker_faction": player_faction, "defender_faction": "", "place": "",
 				"winner": r.get("winner", "b"), "a": r.get("a", {}), "b": r.get("b", {}), "loot": 0,
 				"spoils": r.get("spoils", {}), "wall": float(r.get("wall", 1.0)), "helped_by": r.get("helped_by", []),
-				"walls": r.get("walls", {}), "courtyard": r.get("courtyard", {})}
+				"walls": r.get("walls", {}), "courtyard": r.get("courtyard", {}), "tools": r.get("tools", {})}
 	if r.get("empty", false):
 		return {"player": "a", "baron": true, "empty": true, "defender": r.get("name", ""),
 				"winner": "a", "a": {}, "b": {}, "loot": 0, "place": ""}
@@ -917,7 +917,7 @@ func _server_report(r: Dictionary) -> Dictionary:
 		"new_level": int(r.get("new_level", 1)), "defeats": int(r.get("defeats", 0)),
 		"needed": int(r.get("needed", 1)), "home_in": maxf(0.0, back - now()),
 		"invader": r.has("event"), "points": int(r.get("points", 0)),
-		"walls": r.get("walls", {}), "courtyard": r.get("courtyard", {}),
+		"walls": r.get("walls", {}), "courtyard": r.get("courtyard", {}), "tools": r.get("tools", {}),
 	}
 
 
