@@ -60,6 +60,8 @@ var castles: Array[CastleState] = []   ## the player's first, then NPC castles
 var diplomacy: Diplomacy
 ## Robber baron camps and how far you have levelled each of them.
 var baron_rules: BaronRules
+## The story quests and daily tasks (data/quests.json).
+var quest_book: QuestBook
 var barons: Array[BaronCamp] = []
 ## Your armies on the road: {"id", "camp", "army", "depart", "arrive", "back",
 ## "state" ("out" or "home"), "survivors", "loot"}. Times are unix seconds.
@@ -178,6 +180,7 @@ func ensure_loaded() -> void:
 	_loaded = true
 	rules = BuildingRules.load_default()
 	baron_rules = BaronRules.load_default()
+	quest_book = QuestBook.load_default()
 	if not load_game():
 		new_game()
 
@@ -241,6 +244,7 @@ func begin_new(n := 1) -> void:
 	## Starts a fresh game in slot n from the title screen (replacing what was there).
 	rules = BuildingRules.load_default()
 	baron_rules = BaronRules.load_default()
+	quest_book = QuestBook.load_default()
 	slot = n
 	_loaded = true
 	new_game()
@@ -250,6 +254,7 @@ func begin_load(n := 1) -> void:
 	## Continues the game in slot n from the title screen.
 	rules = BuildingRules.load_default()
 	baron_rules = BaronRules.load_default()
+	quest_book = QuestBook.load_default()
 	slot = n
 	_loaded = true
 	if not load_game():
@@ -531,6 +536,8 @@ func _fight_camp(m: Dictionary) -> void:
 	var result := camp.attack(baron_rules, rules, m.army, int(m.id) * 7919 + hash(m.camp), float(m.arrive), m.get("waves", []))
 	m.survivors = result.survivors
 	m.loot = result.loot
+	if result.winner == "a":
+		player_castle.stats.barons = int(player_castle.stats.barons) + 1
 	attack_resolved.emit({
 		"player": "a", "baron": true, "attacker": "Your army", "defender": camp.camp_name,
 		"attacker_faction": player_faction, "defender_faction": "barons", "place": camp.camp_name,
@@ -549,6 +556,7 @@ func _come_home(m: Dictionary) -> void:
 	for r: String in m.loot:
 		var have := float(player_castle.resources.get(r, 0.0))
 		player_castle.resources[r] = maxf(have, minf(cap, have + float(m.loot[r])))
+		player_castle.stats.looted = float(player_castle.stats.looted) + float(m.loot[r])
 	m.state = "done"
 
 
@@ -726,6 +734,7 @@ func _process(delta: float) -> void:
 			if c.is_npc():
 				NpcBrain.think(c, t)
 		advance_marches(t)
+		quest_book.roll_day(player_castle, t)
 		changed.emit()
 	_diplomacy_timer += delta
 	if _diplomacy_timer >= DIPLOMACY_TICK and diplomacy != null:
@@ -750,6 +759,7 @@ func begin_online(answer: Dictionary) -> void:
 	## Starts the online game from the server's answer to "state" or "join".
 	rules = BuildingRules.load_default()
 	baron_rules = BaronRules.load_default()
+	quest_book = QuestBook.load_default()
 	online = true
 	_loaded = true
 	slot = 0
@@ -907,6 +917,7 @@ func _process_online(delta: float) -> void:
 	if _tick_timer >= TICK:
 		_tick_timer = 0.0
 		player_castle.advance_to(now())
+		quest_book.roll_day(player_castle, now())
 		changed.emit()
 	# Ask the server for news now and then, and as soon as an army is due
 	# to fight or come home.
@@ -1224,6 +1235,20 @@ func claim_reward(tier: int) -> String:
 	if why == "":
 		get_node("/root/Online").order({"action": "claim_reward", "tier": tier})
 	return why
+
+
+func claim_quest(kind: String, index := 0) -> String:
+	## Claims a quest reward: "story", "daily" task `index` or the "chest".
+	## Online the server gives it too, and its answer replaces the castle.
+	var why := quest_book.claim(player_castle, kind, index, now())
+	if why != "":
+		return why
+	if online:
+		get_node("/root/Online").order({"action": "claim_quest", "kind": kind, "index": index})
+	else:
+		save_game()
+	changed.emit()
+	return ""
 
 
 func ask_event_board() -> void:

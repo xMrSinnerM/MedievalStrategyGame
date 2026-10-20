@@ -1,0 +1,59 @@
+extends PanelContainer
+## A small box with the story quest you're on and today's daily tasks. It
+## glows when a reward is waiting; clicking it opens the quest screen.
+
+var panel: Control   ## the quest panel to open; set by the HUD
+
+var _label: Label
+var _timer := 0.0
+var _ready_glow := false
+
+
+func _ready() -> void:
+	add_theme_stylebox_override("panel", MenuStyle.panel(0.7, 10))
+	mouse_filter = Control.MOUSE_FILTER_STOP
+	mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	tooltip_text = "Quests (J)"
+	_label = MenuStyle.label("", 14, MenuStyle.TEXT)
+	add_child(_label)
+	gui_input.connect(func(event: InputEvent) -> void:
+		if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT and panel != null:
+			panel.toggle()
+			accept_event())
+
+
+func _process(delta: float) -> void:
+	_timer -= delta
+	if _timer <= 0.0:
+		_timer = 0.5
+		_refresh()
+	modulate = Color(1, 1, 1) if not _ready_glow else Color(1.0, 0.92 + 0.08 * sin(Time.get_ticks_msec() * 0.006), 0.75 + 0.25 * sin(Time.get_ticks_msec() * 0.006))
+
+
+func _refresh() -> void:
+	var book := Economy.quest_book
+	var castle := Economy.player_castle
+	if book == null or castle == null:
+		visible = false
+		return
+	visible = true
+	var lines: PackedStringArray = []
+	var quest := book.current_story(castle)
+	if quest.is_empty():
+		lines.append("Every quest is done")
+	else:
+		var p := book.progress(castle, quest.goal)
+		lines.append("Quest: %s    %d / %d" % [quest.title, mini(p[0], p[1]), p[1]])
+	var q := castle.quests
+	if not q.picks.is_empty():
+		var done := 0
+		for i in q.picks.size():
+			var p := book.daily_progress(castle, i)
+			if q.claimed.has(i) or p[0] >= p[1]:
+				done += 1
+		lines.append("Daily tasks: %d / %d%s" % [done, q.picks.size(), "    coffer opened" if q.chest else ""])
+	_ready_glow = book.can_claim_anything(castle)
+	if _ready_glow:
+		lines.append("A reward is waiting! Click or press J")
+	_label.text = "\n".join(lines)
+	_label.add_theme_color_override("font_color", MenuStyle.GOLD if _ready_glow else MenuStyle.TEXT)

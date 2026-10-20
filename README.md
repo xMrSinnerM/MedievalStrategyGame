@@ -414,6 +414,37 @@ Marches carry on while the game is closed and are settled when you load it.
 Your warband's soldiers can join the garrison when it is home (the warband
 panel).
 
+## Quests and daily tasks
+
+Press **J** (or the **Quests** button, or click the quest box under the
+controls on the map and on the left of the castle screen) for the
+quest screen. It works the same offline and online.
+
+**The story.** Your steward, Bertram, walks you through 30 quests in five
+chapters, from rebuilding a burned valley ("Ashes and Timber") to bringing
+down the Black Baron, the robber lord behind every camp on the map ("The
+Black Baron Falls"). One quest is open at a time: build or upgrade
+something, train soldiers, beat robber barons, bring home loot, reach a
+production, storage or total building level. Each reward (resources and
+sometimes soldiers) arrives in full when you claim it, even past your
+storage cap, and grows from a few hundred resources to 30,000 of each. The
+quest box glows when a reward is waiting.
+
+**Daily tasks.** Every day at 00:00 UTC you get three tasks, picked from:
+finish building levels, spend resources, train soldiers, beat robber barons
+and bring home loot (without a barracks only the first two). Targets and
+rewards are set by your keep level when the day begins (rewards x1, x2, x5,
+x12, x25 from keep 1 to 5), and count from what you had at the start of the
+day. Finish all three to open the **Steward's Coffer**. Opening it on days in
+a row makes it 25% richer each day, up to 2.5 times on the seventh day, which
+also adds swordsmen; miss a day and the streak starts over.
+
+The numbers live in `data/quests.json`. Progress is read from the castle
+itself and from lifetime stats it now keeps (soldiers trained, resources
+spent less refunds, barons beaten, loot brought home), so `QuestBook`
+(`scripts/economy/quest_book.gd`) and the server's `server/rules/quests.ts`
+give the same answers (checked by the server fixtures).
+
 ## Multiplayer (in progress)
 
 The multiplayer server runs on Supabase. It uses the same rules as the game,
@@ -600,6 +631,7 @@ How the parts work:
 - [x] Siege waves: battle rules (walls and courtyard)
 - [x] Siege waves: choose your waves on the attack screen
 - [x] Siege waves: set your defenders on the walls
+- [x] Quests and daily tasks
 
 ## Known limitations
 

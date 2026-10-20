@@ -36,6 +36,7 @@ func _initialize() -> void:
 	test_marches()
 	test_march_waves()
 	test_set_layout()
+	test_quests()
 	print("%d checks, %d failed" % [checks, failures])
 	quit(1 if failures > 0 else 0)
 
@@ -722,6 +723,11 @@ func test_marches() -> void:
 	check(eco.player_castle.troop_count() == 5 + survivors, "the survivors rejoin the garrison")
 	near(eco.player_castle.resources.wood, minf(eco.player_castle.storage_capacity(), wood_before + loot.wood), "the loot goes into storage")
 	check(eco.check_attack("near", {"spearman": 1}) != "", "the beaten camp is rebuilding")
+	check(int(eco.player_castle.stats.barons) == 1, "the quests count the beaten baron")
+	var looted := 0.0
+	for r in loot:
+		looted += loot[r]
+	near(eco.player_castle.stats.looted, looted, "and the loot brought home")
 	# A whole trip while the game was closed resolves on loading.
 	eco.player_castle.troops = {"spearman": 300}
 	check(eco.send_attack("far", {"spearman": 300}) == "", "a big army sets out for a far camp")
@@ -802,3 +808,86 @@ func _first(c: CastleState, type: String) -> int:
 		if b.type == type:
 			return b.id
 	return -1
+
+
+func test_quests() -> void:
+	var book := QuestBook.load_default()
+	check(book.story.size() == 30 and book.chapters.size() == 5, "30 story quests in 5 chapters")
+	for q: Dictionary in book.story:
+		var g: Dictionary = q.goal
+		if g.kind == "building":
+			check(rules.has_type(g.type) and int(g.level) <= rules.max_level(g.type, 5), "%s can be done" % q.title)
+	var day0 := 20000 * QuestBook.DAY
+	var c := CastleState.create_new(rules, "q", "Valentin's Castle", "player", day0)
+	# Lifetime stats: soldiers trained and resources spent, less refunds.
+	c.buildings.append({"id": 99, "type": "barracks", "level": 1, "cell": Vector2i(0, 0), "target": 0, "finish": 0.0})
+	c.recruit("spearman", 5, day0)
+	near(c.stats.spent, 110.0, "5 spearmen cost 110")
+	c.cancel_training(0, day0 + 1)
+	near(c.stats.spent, 27.5, "cancelling gives 75% back")
+	c.recruit("spearman", 3, day0 + 2)
+	c.advance_to(day0 + 3600)
+	check(int(c.stats.trained) == 3, "3 soldiers trained")
+	var saved := CastleState.from_dict(rules, JSON.parse_string(JSON.stringify(c.to_dict())))
+	check(saved.stats == c.stats, "stats are saved")
+	var old := c.to_dict()
+	old.erase("stats")
+	old.erase("quests")
+	check(CastleState.from_dict(rules, old).quests.story == 0, "old saves start the quests from the beginning")
+	# The story, in order.
+	var fresh_castle := fresh()
+	check(book.claim(fresh_castle, "story", 0, day0) == "That quest isn't done yet.", "the first quest wants a level 2 woodcutter")
+	for b in fresh_castle.buildings:
+		if b.type == "woodcutter":
+			b.level = 2
+	fresh_castle.resources.wood = fresh_castle.storage_capacity()
+	check(book.claim(fresh_castle, "story", 0, day0) == "", "then it can be claimed")
+	near(fresh_castle.resources.wood, fresh_castle.storage_capacity() + 150.0, "with its reward in full, past the cap")
+	check(int(fresh_castle.quests.story) == 1, "and the next quest begins")
+	# Daily tasks: a new set each day, counted from the start of the day.
+	var d := fresh()
+	check(book.roll_day(d, day0 + 5) and not book.roll_day(d, day0 + QuestBook.DAY - 1), "one set of tasks a day")
+	check(d.quests.picks.size() == 2 and not d.quests.picks.has("trained"), "no soldier tasks without a barracks")
+	var spent: int = d.quests.picks.find("spent")
+	d.stats.spent += 1499.5
+	check(book.claim(d, "daily", spent, day0 + 10) == "That task isn't done yet.", "1499.5 of 1500 isn't enough")
+	d.stats.spent += 0.5
+	var gold: float = d.resources.gold
+	check(book.claim(d, "daily", spent, day0 + 10) == "", "1500 is")
+	near(d.resources.gold, gold + 60.0, "the task's gold")
+	check(book.claim(d, "daily", spent, day0 + 10) == "You already have that reward.", "once a day")
+	check(book.claim(d, "chest", 0, day0 + 10) == "Finish today's tasks first.", "the coffer waits for every task")
+	# The coffer grows with a streak of days, and a missed day starts it over.
+	var got := []
+	for day in [0, 1, 2, 3, 4, 5, 6, 7, 9]:
+		var t: float = day0 + day * QuestBook.DAY
+		book.roll_day(d, t)
+		for k: String in d.quests.picks:
+			if k == "levels":
+				for b in d.buildings:
+					if b.type == "farm":
+						b.level += 10
+			else:
+				d.stats[k] = d.stats[k] + 1000000
+		for i in d.quests.picks.size():
+			if not d.quests.claimed.has(i):
+				book.claim(d, "daily", i, t)
+		var food: float = d.resources.food
+		var swords: int = d.troops.get("swordsman", 0)
+		check(book.claim(d, "chest", 0, t) == "", "the coffer opens on day %d" % day)
+		got.append([roundi(d.resources.food - food), d.troops.get("swordsman", 0) - swords])
+	check(got[0] == [150, 0] and got[1] == [188, 0], "the second day in a row gives a quarter more: %s" % [got.slice(0, 2)])
+	check(got[6] == [375, 4] and got[7] == [375, 4], "the seventh gives 2.5 times and swordsmen: %s" % [got.slice(6, 8)])
+	check(got[8] == [150, 0], "a missed day starts the streak over: %s" % [got[8]])
+	# Offline, the economy claims and saves.
+	var eco = load("res://scripts/core/economy.gd").new()
+	eco.save_dir = "user://test_saves"
+	eco.begin_new(1)
+	eco.quest_book.roll_day(eco.player_castle, eco.now())
+	check(eco.claim_quest("story") != "", "nothing to claim in a new game")
+	for b in eco.player_castle.buildings:
+		if b.type == "woodcutter":
+			b.level = 2
+	check(eco.claim_quest("story") == "", "the economy claims a finished quest")
+	check(int(eco.player_castle.quests.story) == 1, "and keeps it")
+	eco.free()

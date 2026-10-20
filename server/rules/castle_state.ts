@@ -28,6 +28,47 @@ export interface Batch {
   next: number;
 }
 
+/** Lifetime counts the quests check (server/rules/quests.ts). */
+export interface Stats {
+  /** Soldiers trained. */
+  trained: number;
+  /** Resources paid for buildings and soldiers, less what cancelling gave back. */
+  spent: number;
+  /** Robber baron camps beaten. */
+  barons: number;
+  /** Resources armies brought home. */
+  looted: number;
+}
+
+/** Where the castle stands with its quests (server/rules/quests.ts). */
+export interface QuestLog {
+  /** Index of the story quest being worked on (all done at the end of the chain). */
+  story: number;
+  /** The day (Unix days) the daily tasks were picked for, -1 before the first. */
+  day: number;
+  /** Keep level when the day began, which sets the tasks' targets and rewards. */
+  keep: number;
+  /** The kinds of daily task picked for today. */
+  picks: string[];
+  /** The counts when the day began; tasks count from here. */
+  base: Dict;
+  /** Daily tasks (indexes into picks) already claimed today. */
+  claimed: number[];
+  /** Today's coffer has been opened. */
+  chest: boolean;
+  /** Days in a row the coffer was opened, and the last such day. */
+  streak: number;
+  chest_day: number;
+}
+
+export function newStats(): Stats {
+  return { trained: 0, spent: 0, barons: 0, looted: 0 };
+}
+
+export function newQuestLog(): QuestLog {
+  return { story: 0, day: -1, keep: 1, picks: [], base: {}, claimed: [], chest: false, streak: 0, chest_day: -1 };
+}
+
 export interface CastleData {
   id: string;
   name: string;
@@ -42,6 +83,8 @@ export interface CastleData {
   field: Dict;
   field_ready: boolean;
   layout: Layout;
+  stats: Stats;
+  quests: QuestLog;
 }
 
 export class CastleState {
@@ -59,6 +102,8 @@ export class CastleState {
   fieldReady = false;
   /** Where the garrison stands when the castle is stormed (siege() in battle.ts). */
   layout: Layout = { ...DEFAULT_LAYOUT };
+  stats: Stats = newStats();
+  quests: QuestLog = newQuestLog();
   private nextId = 1;
 
   constructor(rules: BuildingRules) {
@@ -293,6 +338,7 @@ export class CastleState {
   private finishSoldier(): void {
     const batch = this.training[0];
     this.troops[batch.unit] = get(this.troops, batch.unit) + 1;
+    this.stats.trained += 1;
     batch.remaining -= 1;
     const doneAt = batch.next;
     if (batch.remaining > 0) {
@@ -367,6 +413,8 @@ export class CastleState {
       field: { ...this.field },
       field_ready: this.fieldReady,
       layout: { ...this.layout },
+      stats: { ...this.stats },
+      quests: structuredClone(this.quests),
     };
   }
 
@@ -406,6 +454,18 @@ export class CastleState {
     if (checkLayout(data.layout) === "") {
       for (const key of Object.keys(DEFAULT_LAYOUT) as (keyof Layout)[]) castle.layout[key] = data.layout[key];
     }
+    // Castles saved before quests have no stats or quest log yet.
+    const stats = data.stats ?? {};
+    castle.stats = { trained: Math.trunc(Number(stats.trained ?? 0)), spent: Number(stats.spent ?? 0),
+      barons: Math.trunc(Number(stats.barons ?? 0)), looted: Number(stats.looted ?? 0) };
+    const q = data.quests ?? {};
+    const base: Dict = {};
+    for (const k of Object.keys(q.base ?? {})) base[k] = Number(q.base[k]);
+    castle.quests = {
+      story: Math.trunc(Number(q.story ?? 0)), day: Math.trunc(Number(q.day ?? -1)), keep: Math.trunc(Number(q.keep ?? 1)),
+      picks: (q.picks ?? []).map(String), base, claimed: (q.claimed ?? []).map((i: unknown) => Math.trunc(Number(i))),
+      chest: Boolean(q.chest ?? false), streak: Math.trunc(Number(q.streak ?? 0)), chest_day: Math.trunc(Number(q.chest_day ?? -1)),
+    };
     return castle;
   }
 
@@ -418,7 +478,10 @@ export class CastleState {
   }
 
   private pay(cost: Dict): void {
-    for (const r of Object.keys(cost)) this.resources[r] = get(this.resources, r) - cost[r];
+    for (const r of Object.keys(cost)) {
+      this.resources[r] = get(this.resources, r) - cost[r];
+      this.stats.spent += cost[r];
+    }
   }
 
   private refund(cost: Dict): void {
@@ -426,6 +489,7 @@ export class CastleState {
     for (const r of Object.keys(cost)) {
       const have = get(this.resources, r);
       this.resources[r] = Math.max(have, Math.min(have + cost[r] * CANCEL_REFUND, cap));
+      this.stats.spent -= cost[r] * CANCEL_REFUND;
     }
   }
 

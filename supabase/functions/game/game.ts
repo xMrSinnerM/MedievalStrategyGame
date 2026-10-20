@@ -13,6 +13,7 @@ import type { AllianceRules } from "./alliances.ts";
 import { checkShipment, type Aid, type AidRules } from "./aid.ts";
 import { lastInvasion, type EventRules } from "../../../server/rules/events.ts";
 import { claimReward, eventPoints, invade, rewardTiers } from "./invasion.ts";
+import { claimQuest, rollDay, type QuestRules } from "../../../server/rules/quests.ts";
 
 /** A player as stored in the players table (the game columns). */
 export interface PlayerState {
@@ -113,6 +114,8 @@ export interface Context {
   aid?: AidRules;
   /** Timed events, for Baron Invasions; `offset` shifts their clock (local testing). */
   events?: { rules: EventRules; world: World; offset?: number };
+  /** The story quests and daily tasks (data/quests.json). */
+  quests?: QuestRules;
 }
 
 export interface World {
@@ -246,6 +249,7 @@ export function act(rules: Rules, given: PlayerState, req: Request, now: number,
   const castle = army.castle;
   for (const raid of [...(ctx.homecomings ?? [])].sort((x, y) => x.back - y.back)) comeHomeFromRaid(castle, raid);
   castle.advanceTo(now);
+  if (ctx.quests) rollDay(castle, ctx.quests, now);
   let error = "";
   let result: unknown = undefined;
   let raid: Omit<Raid, "id"> | undefined;
@@ -382,6 +386,9 @@ export function act(rules: Rules, given: PlayerState, req: Request, now: number,
       if (error === "") claimed = (current ? claimed : 0) + 1;
       break;
     }
+    case "claim_quest":
+      error = ctx.quests ? claimQuest(castle, ctx.quests, req.kind, req.index, now) : "Unknown order.";
+      break;
     default:
       error = "Unknown order.";
   }
@@ -427,6 +434,7 @@ function comeHomeFromRaid(castle: CastleState, raid: Homecoming): void {
     if (!(r in castle.resources)) continue;
     const have = castle.resources[r];
     castle.resources[r] = Math.max(have, Math.min(cap, have + raid.loot[r]));
+    castle.stats.looted += raid.loot[r];
   }
 }
 

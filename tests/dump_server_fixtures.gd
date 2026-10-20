@@ -10,12 +10,14 @@ const T0 := 1_000_000.0
 
 var rules: BuildingRules
 var baron_rules: BaronRules
+var quest_book: QuestBook
 var rng := RandomNumberGenerator.new()
 
 
 func _initialize() -> void:
 	rules = BuildingRules.load_default()
 	baron_rules = BaronRules.load_default()
+	quest_book = QuestBook.load_default()
 	rng.seed = 20261011
 	var data := {
 		"castles": [],
@@ -23,6 +25,7 @@ func _initialize() -> void:
 		"sieges": [],
 		"barons": [],
 		"camp_attacks": [],
+		"dailies": [],
 		"hashes": {},
 	}
 	for run in 4:
@@ -40,6 +43,8 @@ func _initialize() -> void:
 		})
 	for k in 4:
 		data.camp_attacks.append(camp_run(k))
+	for k in 60:
+		data.dailies.append(dailies_case())
 	for s in ["baron_0", "baron_7", "baron_29", "", "Ölberg", "a long camp id"]:
 		data.hashes[s] = hash(s)
 	var file := FileAccess.open(OUT, FileAccess.WRITE)
@@ -81,17 +86,29 @@ func castle_run(run: int) -> Dictionary:
 		elif roll < 79:
 			var index := rng.randi_range(-1, 3)
 			step = {"op": "cancel_training", "t": t, "index": index, "result": castle.cancel_training(index, t)}
-		elif roll < 84:
+		elif roll < 82:
 			var id := rng.randi_range(1, castle._next_id)
 			var cell := [rng.randi_range(0, rules.grid_size), rng.randi_range(0, rules.grid_size)]
 			step = {"op": "move", "id": id, "cell": cell, "result": castle.move(id, Vector2i(cell[0], cell[1]))}
-		elif roll < 88:
+		elif roll < 86:
 			# A windfall, so the castle can afford big things now and then.
 			var r: String = rules.resources[rng.randi() % rules.resources.size()]
 			var amount := float(rng.randi_range(100, 3000))
 			castle.resources[r] += amount
 			step = {"op": "grant", "resource": r, "amount": amount}
+		elif roll < 90:
+			# Quests: the day's tasks, then a claim that may or may not be allowed.
+			var kind: String = ["story", "daily", "daily", "daily", "chest"][rng.randi() % 5]
+			var index := rng.randi_range(-1, 2)
+			step = {"op": "quest", "t": t, "kind": kind, "index": index, "result": quest_book.claim(castle, kind, index, t)}
 		elif roll < 92:
+			# Battles fought elsewhere, so the barons and loot tasks move.
+			var barons := rng.randi_range(0, 3)
+			var looted := float(rng.randi_range(0, 4000))
+			castle.stats.barons += barons
+			castle.stats.looted += looted
+			step = {"op": "stats", "barons": barons, "looted": looted}
+		elif roll < 94:
 			# Soldiers from elsewhere, sometimes more than the farms can feed.
 			var unit: String = units[rng.randi() % units.size()]
 			var amount := rng.randi_range(5, 400)
@@ -107,9 +124,27 @@ func castle_run(run: int) -> Dictionary:
 				step.upgrade[str(b.id)] = castle.check_upgrade(b.id)
 			for unit: String in units:
 				step.recruit[unit] = castle.check_recruit(unit, 10)
+			step["story"] = quest_book.progress(castle, quest_book.current_story(castle).goal) \
+				if not quest_book.current_story(castle).is_empty() else []
+			step["daily"] = []
+			for k in castle.quests.picks.size():
+				step.daily.append(quest_book.daily_progress(castle, k))
+			step["coffer"] = quest_book.coffer_reward(int(castle.quests.keep), quest_book.coffer_streak(castle))
+			step["goals"] = quest_book.story.map(func(g: Dictionary) -> Array: return quest_book.progress(castle, g.goal))
 		step["state"] = castle.to_dict()
 		steps.append(step)
 	return {"id": castle.id, "name": castle.castle_name, "t0": T0, "steps": steps}
+
+
+func dailies_case() -> Dictionary:
+	## Which daily tasks a castle gets on some day, with and without a barracks.
+	var name: String = ["Your Castle", "Bob's Castle", "Ölberg's Castle", "x"][rng.randi() % 4] + str(rng.randi() % 50)
+	var castle := CastleState.create_new(rules, "c", name, "player", T0)
+	var day := rng.randi_range(0, 40000)
+	var out := {"name": name, "day": day, "none": quest_book.pick_dailies(castle, day)}
+	castle.buildings.append({"id": 99, "type": "barracks", "level": 1, "cell": Vector2i(0, 0), "target": 0, "finish": 0.0})
+	out["barracks"] = quest_book.pick_dailies(castle, day)
+	return out
 
 
 func random_army(max_each: int) -> Dictionary:

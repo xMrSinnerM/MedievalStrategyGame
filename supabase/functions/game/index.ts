@@ -9,6 +9,7 @@
 // POST { "action": "leaderboard" }               the mightiest castles, and your own rank
 // POST { "action": "event_board" }               the most event points in the Baron Invasion, and your rank
 // POST { "action": "claim_reward", "tier": n }   the invasion's next reward tier (data/events.json)
+// POST { "action": "claim_quest", "kind": "story" | "daily" | "chest", "index": n }   a quest reward (data/quests.json)
 // POST { "action": "place", "type", "cell": [x, y] }
 // POST { "action": "upgrade" | "cancel", "id" }
 // POST { "action": "move", "id", "cell": [x, y] }
@@ -57,6 +58,7 @@ import pvpData from "../../../data/pvp.json" with { type: "json" };
 import alliancesData from "../../../data/alliances.json" with { type: "json" };
 import aidData from "../../../data/aid.json" with { type: "json" };
 import eventsData from "../../../data/events.json" with { type: "json" };
+import questsData from "../../../data/quests.json" with { type: "json" };
 import world from "../../../server/world/world.json" with { type: "json" };
 import { makeRules } from "../../../server/rules/load.ts";
 import { effectAt, eventsView, lastInvasion, withOverrides, type EventOverride, type EventRules } from "../../../server/rules/events.ts";
@@ -71,6 +73,7 @@ import { chatView, send, type Speaker } from "./chat.ts";
 import { DatabaseChatStore } from "./chat_store.ts";
 import { deliver, recall, type Aid, type AidRules } from "./aid.ts";
 import { invade } from "./invasion.ts";
+import type { QuestRules } from "../../../server/rules/quests.ts";
 import {
   adminEvents, checkGift, giftReport, giveCastle, NOT_ADMIN, OVERRIDES_KEPT, startEvent, stopEvent, type Gift,
 } from "./admin.ts";
@@ -80,6 +83,7 @@ const pvp = pvpData as PvpRules;
 const allianceRules = alliancesData as AllianceRules;
 const aidRules = aidData as AidRules;
 const eventRules = eventsData as EventRules;
+const questRules = questsData as unknown as QuestRules;
 // The calendar with the game owner's changes (admin.ts), loaded with every request.
 let calendar: EventRules = eventRules;
 rules.barons.lootFactor = (t) => effectAt(calendar, t, "baron_loot");
@@ -541,7 +545,7 @@ Deno.serve(async (req: Request) => {
     const { version, ...stored } = row as PlayerState & { version: number };
     const t = now();
     const outcome = act(rules, stored, body, t, { pvp, target: target?.target, homecomings, alliances: allianceRules, aid: aidRules,
-      events: { rules: calendar, world: world as World } });
+      events: { rules: calendar, world: world as World }, quests: questRules });
     // Save only if nobody else changed the row meanwhile; otherwise start over.
     const { data: saved, error: saveError } = await admin.from("players")
       .update({ ...outcome.state, ...publicColumns(outcome.state), version: version + 1, updated_at: new Date().toISOString() })
