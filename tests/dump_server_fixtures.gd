@@ -11,6 +11,7 @@ const T0 := 1_000_000.0
 var rules: BuildingRules
 var baron_rules: BaronRules
 var quest_book: QuestBook
+var gear: GearRules
 var rng := RandomNumberGenerator.new()
 
 
@@ -18,6 +19,7 @@ func _initialize() -> void:
 	rules = BuildingRules.load_default()
 	baron_rules = BaronRules.load_default()
 	quest_book = QuestBook.load_default()
+	gear = GearRules.load_default()
 	rng.seed = 20261011
 	var data := {
 		"castles": [],
@@ -26,6 +28,8 @@ func _initialize() -> void:
 		"barons": [],
 		"camp_attacks": [],
 		"dailies": [],
+		"drops": [],
+		"armoury": {},
 		"hashes": {},
 	}
 	for run in 4:
@@ -45,6 +49,11 @@ func _initialize() -> void:
 		data.camp_attacks.append(camp_run(k))
 	for k in 60:
 		data.dailies.append(dailies_case())
+	for k in 300:
+		var level := rng.randi_range(1, 40)
+		var seed_value := rng.randi_range(0, 2_000_000_000)
+		data.drops.append({"level": level, "seed": seed_value, "item": gear.roll_drop(level, seed_value)})
+	data.armoury = armoury_run()
 	for s in ["baron_0", "baron_7", "baron_29", "", "Ölberg", "a long camp id"]:
 		data.hashes[s] = hash(s)
 	var file := FileAccess.open(OUT, FileAccess.WRITE)
@@ -223,6 +232,9 @@ func siege_case() -> Dictionary:
 	var tools := {}
 	if rng.randi() % 2 == 0:
 		tools = {"a": random_tools(8), "b": random_tools(8)}
+	if rng.randi() % 2 == 0:
+		tools["lead_a"] = random_fx("attack")
+		tools["lead_b"] = random_fx("defence")
 	var stock := {}
 	for tool: String in rules.tools:
 		stock[tool] = rng.randi_range(0, 10)
@@ -251,6 +263,67 @@ func camp_run(k: int) -> Dictionary:
 		if not camp.is_ready(t):
 			attacks.append({"t": t, "army": army, "seed": seed_value, "ready": false, "camp": camp.to_dict()})
 			continue
-		var result := camp.attack(baron_rules, rules, army, seed_value, t)
-		attacks.append({"t": t, "army": army, "seed": seed_value, "ready": true, "result": result, "camp": camp.to_dict()})
+		var lead := random_fx("attack") if rng.randi() % 2 == 0 else {}
+		var result := camp.attack(baron_rules, rules, army, seed_value, t, [], {}, lead)
+		attacks.append({"t": t, "army": army, "seed": seed_value, "ready": true, "lead": lead, "result": result, "camp": camp.to_dict()})
 	return {"start": start, "attacks": attacks}
+
+
+func random_fx(side: String) -> Dictionary:
+	## What a commander's or castellan's gear might add: some of a side's stats.
+	var out := {}
+	for stat: String in gear.stats:
+		if gear.stats[stat].side == side and rng.randi() % 2 == 0:
+			out[stat] = rng.randi_range(0, 60) / 100.0
+	return out
+
+
+func armoury_run() -> Dictionary:
+	## A castle's commanders and gear through random drops, equips, sales and xp.
+	var castle := CastleState.create_new(rules, "g", "Gear Castle", "player", T0)
+	for b in castle.buildings:
+		if b.type == "keep":
+			b.level = 5
+	gear.sync(castle)
+	castle.armoury.commanders[1].away_until = T0 + 100.0
+	var drops: Array = []
+	for k in 45:
+		var item := gear.roll_drop(rng.randi_range(1, 40), rng.randi_range(0, 2_000_000_000))
+		drops.append(item.duplicate(true))
+		if not item.is_empty():
+			gear.give(castle, item)
+	var whos: Array = [1, 2, 3, 4, "castellan", "nobody"]
+	var ops: Array = []
+	for k in 120:
+		var who: Variant = whos[rng.randi() % whos.size()]
+		var t := T0 + rng.randi_range(0, 200)
+		var op := {"t": t, "who": who}
+		match rng.randi() % 4:
+			0, 1:
+				op["kind"] = "equip"
+				op["item"] = rng.randi_range(0, int(castle.armoury.next_item))
+				op["result"] = gear.equip(castle, who, op.item, t)
+			2:
+				op["kind"] = "unequip"
+				op["slot"] = gear.slots[rng.randi() % gear.slots.size()] if rng.randi() % 5 != 0 else "boots"
+				op["result"] = gear.unequip(castle, who, op.slot, t)
+			3:
+				if rng.randi() % 3 == 0:
+					op["kind"] = "sell"
+					op["item"] = rng.randi_range(0, int(castle.armoury.next_item))
+					op["result"] = gear.sell(castle, op.item)
+				else:
+					op["kind"] = "xp"
+					op["id"] = rng.randi_range(0, 4)
+					op["xp"] = rng.randi_range(0, 60)
+					op["result"] = gear.add_xp(castle, op.id, op.xp)
+		ops.append(op)
+	var fx: Array = []
+	for c: Dictionary in castle.armoury.commanders:
+		fx.append(gear.commander_effects(c))
+	var leads: Array = []
+	for id in [0, 1, 2, 3, 9]:
+		var lead: Variant = gear.check_lead(castle, id, T0 + 50.0)
+		leads.append(lead if lead != null else "none")
+	return {"drops": drops, "ops": ops, "castle": castle.to_dict(), "fx": fx, "castellan": gear.castellan_effects(castle),
+			"leads": leads, "levels": range(0, 320, 7).map(func(x: int) -> int: return gear.level_for(x))}

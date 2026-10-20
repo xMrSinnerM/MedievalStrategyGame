@@ -621,7 +621,8 @@ func _lord_storm(lord: Party, castle_id: String) -> void:
 	if castle == null or mine == null:
 		return
 	var yours := castle.owner == "player"
-	var result := Battle.assault(mine, castle, hash(lord.id + castle_id) + Time.get_ticks_msec(), Economy.MAIN_CASTLE)
+	var result := Battle.assault(mine, castle, hash(lord.id + castle_id) + Time.get_ticks_msec(), Economy.MAIN_CASTLE,
+			Economy.castellan_effects(castle))
 	var report := {
 		"attacker": lord.party_name, "defender": castle.castle_name,
 		"attacker_faction": lord.faction_id, "defender_faction": castle.owner,

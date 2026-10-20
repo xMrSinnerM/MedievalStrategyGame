@@ -39,6 +39,8 @@ var quests := new_quest_log()
 var tools := {}
 var crafting: Array[Dictionary] = []
 var defence_tools := {}
+## Commanders, the castellan's gear and the bag of gear not worn (GearRules).
+var armoury := GearRules.new_armoury()
 
 var _next_id := 1
 
@@ -615,6 +617,7 @@ func copy_from(other: CastleState) -> void:
 	tools = other.tools
 	crafting = other.crafting
 	defence_tools = other.defence_tools
+	armoury = other.armoury
 	_next_id = other._next_id
 
 
@@ -635,6 +638,7 @@ func to_dict() -> Dictionary:
 		"field": field.duplicate(), "field_ready": field_ready, "layout": layout.duplicate(),
 		"stats": stats.duplicate(), "quests": quests.duplicate(true),
 		"tools": tools.duplicate(), "crafting": crafting.duplicate(true), "defence_tools": defence_tools.duplicate(true),
+		"armoury": armoury.duplicate(true),
 	}
 
 
@@ -710,6 +714,7 @@ static func from_dict(p_rules: BuildingRules, data: Dictionary) -> CastleState:
 				group[tool] = int(at[tool])
 		if not group.is_empty():
 			castle.defence_tools[w] = group
+	castle.armoury = GearRules.read_armoury(data.get("armoury"))
 	return castle
 
 

@@ -22,7 +22,11 @@
 // POST { "action": "attack_player", "target": "name", "army": { unit: count } }
 //   "attack" and "attack_player" also take "waves": [{ "left" | "front" | "right": { unit: count } }, ...]
 //   instead of "army": how the army storms the walls (up to wavesForKeep() waves, server/rules/battle.ts),
-//   and "tools": { "left" | "front" | "right": { tool: count } }, attack tools from your store
+//   and "tools": { "left" | "front" | "right": { tool: count } }, attack tools from your store,
+//   and "commander": id, the commander to lead the army (data/gear.json)
+// POST { "action": "equip", "who": commander id | "castellan", "item": id }   gear from your bag
+// POST { "action": "unequip", "who": commander id | "castellan", "slot": "helmet" | "armour" | "weapon" | "banner" }
+// POST { "action": "sell_gear", "item": id }     sells gear from your bag for gold
 // POST { "action": "set_layout", "layout": { "left", "front", "right", "courtyard" } }   percent of the garrison at each post
 // POST { "action": "spy", "target": "name" }
 // POST { "action": "found_alliance", "name", "tag" }  costs gold (data/alliances.json)
@@ -63,6 +67,7 @@ import alliancesData from "../../../data/alliances.json" with { type: "json" };
 import aidData from "../../../data/aid.json" with { type: "json" };
 import eventsData from "../../../data/events.json" with { type: "json" };
 import questsData from "../../../data/quests.json" with { type: "json" };
+import gearData from "../../../data/gear.json" with { type: "json" };
 import world from "../../../server/world/world.json" with { type: "json" };
 import { makeRules } from "../../../server/rules/load.ts";
 import { effectAt, eventsView, lastInvasion, withOverrides, type EventOverride, type EventRules } from "../../../server/rules/events.ts";
@@ -82,7 +87,7 @@ import {
   adminEvents, checkGift, giftReport, giveCastle, NOT_ADMIN, OVERRIDES_KEPT, startEvent, stopEvent, type Gift,
 } from "./admin.ts";
 
-const rules = makeRules(buildings, units, barons);
+const rules = makeRules(buildings, units, barons, gearData);
 const pvp = pvpData as PvpRules;
 const allianceRules = alliancesData as AllianceRules;
 const aidRules = aidData as AidRules;
@@ -120,7 +125,7 @@ function now(): number {
 function raidFromRow(r: Row): Raid {
   return {
     id: Number(r.id), attacker_name: r.attacker_name, defender_name: r.defender_name, army: r.army,
-    ...(r.waves ? { waves: r.waves } : {}), ...(r.tools ? { tools: r.tools } : {}), from: [r.from_x, r.from_y], to: [r.to_x, r.to_y], depart: r.depart, arrive: r.arrive, back: r.back,
+    ...(r.waves ? { waves: r.waves } : {}), ...(r.tools ? { tools: r.tools } : {}), ...(r.lead ? { lead: r.lead } : {}), from: [r.from_x, r.from_y], to: [r.to_x, r.to_y], depart: r.depart, arrive: r.arrive, back: r.back,
     state: r.state, survivors: r.survivors, loot: r.loot,
   };
 }
@@ -147,7 +152,7 @@ async function activeRaids(userId: string) {
     const mine = r.attacker === userId;
     const raid = raidFromRow(r);
     return { ...raid, mine, army: mine ? raid.army : {}, waves: mine ? raid.waves : undefined,
-      tools: mine ? raid.tools : undefined, survivors: mine ? raid.survivors : {}, loot: mine ? raid.loot : {} };
+      tools: mine ? raid.tools : undefined, lead: mine ? raid.lead : undefined, survivors: mine ? raid.survivors : {}, loot: mine ? raid.loot : {} };
   });
 }
 
@@ -230,7 +235,8 @@ async function resolveRaids(userId: string) {
       if (helpers.length > 0) outcome.defenderReport.helped_by = [...new Set(helpers.map((h) => String(h.sender_name)))];
       await saveReports(row.defender, [...outcome.campReports, outcome.defenderReport]);
       await saveReports(row.attacker, [outcome.attackerReport]);
-      await admin.from("raids").update({ state: "home", survivors: outcome.survivors, loot: outcome.loot }).eq("id", row.id);
+      await admin.from("raids").update({ state: "home", survivors: outcome.survivors, loot: outcome.loot,
+        ...(outcome.lead ? { lead: outcome.lead } : {}) }).eq("id", row.id);
       // Allied defenders who fought: what is left of them, and a word to whoever sent them.
       for (const [i, h] of helpers.entries()) {
         const left = outcome.helpers[i];
@@ -565,7 +571,7 @@ Deno.serve(async (req: Request) => {
       const r = outcome.raid;
       await admin.from("raids").insert({
         attacker: userId, defender: target.row.user_id, attacker_name: r.attacker_name, defender_name: r.defender_name,
-        army: r.army, waves: r.waves ?? null, tools: r.tools ?? null, from_x: r.from[0], from_y: r.from[1], to_x: r.to[0], to_y: r.to[1],
+        army: r.army, waves: r.waves ?? null, tools: r.tools ?? null, lead: r.lead ?? null, from_x: r.from[0], from_y: r.from[1], to_x: r.to[0], to_y: r.to[1],
         depart: r.depart, arrive: r.arrive, back: r.back,
       });
     }

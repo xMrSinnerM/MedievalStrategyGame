@@ -61,14 +61,21 @@ export type Wave = Partial<Record<Wall, Dict>>;
 /** Siege tools at each wall (data/units.json "tools"). */
 export type Tools = Partial<Record<Wall, Dict>>;
 
-/** The attackers' tools (a) and the defenders' (b) in a siege. */
+/**
+ * The attackers' tools (a) and the defenders' (b) in a siege, and what the
+ * attackers' commander (lead_a) and the defenders' castellan (lead_b) add
+ * (stat -> share, GearRules.effects() in gear.ts).
+ */
 export interface SiegeTools {
   a?: Tools;
   b?: Tools;
+  lead_a?: Dict;
+  lead_b?: Dict;
 }
 
 /** What the tools at one wall do to its fights: the wall's bonus and each side's damage. */
-export function wallMods(rules: BuildingRules, wall: number, a: Dict, b: Dict): { wall: number; a: number; b: number } {
+export function wallMods(rules: BuildingRules, wall: number, a: Dict, b: Dict, leadA: Dict = {}, leadB: Dict = {}):
+  { wall: number; a: number; b: number } {
   let cut = 0;
   let shield = 0;
   let moat = 0;
@@ -87,8 +94,11 @@ export function wallMods(rules: BuildingRules, wall: number, a: Dict, b: Dict): 
       scald += nb * rules.toolEffect(t, "scald");
     }
   }
+  cut += leadA.wall_cut ?? 0;
+  moat += leadB.wall_bonus ?? 0;
   const w = cut === 0 && moat === 0 ? wall : (1 + (wall - 1) * (1 - Math.min(cut, 1))) * (1 + moat);
-  return { wall: w, a: 1 - Math.min(scald, 0.5), b: (1 - Math.min(shield, 0.5)) * (1 + volley) };
+  return { wall: w, a: (1 - Math.min(scald, 0.5)) * (1 + (leadA.wall_attack ?? 0)),
+    b: (1 - Math.min(shield, 0.5)) * (1 + volley) * (1 + (leadB.wall_defence ?? 0)) };
 }
 
 /** Every tool in a set of walls' tools, by tool. */
@@ -161,7 +171,7 @@ export function siege(rules: BuildingRules, waves: Wave[], defenders: Dict, layo
     let held = posts[w];
     const fights: WallFight[] = [];
     let broken = false;
-    const mods = wallMods(rules, wall, tools.a?.[w] ?? {}, tools.b?.[w] ?? {});
+    const mods = wallMods(rules, wall, tools.a?.[w] ?? {}, tools.b?.[w] ?? {}, tools.lead_a, tools.lead_b);
     waves.forEach((wave, k) => {
       const troops = ints(wave[w] ?? {});
       if (Object.keys(troops).length === 0) return;
@@ -199,7 +209,8 @@ export function siege(rules: BuildingRules, waves: Wave[], defenders: Dict, layo
       courtyard = { open: true };
       add(home, through);
     } else {
-      const r = fight(rules, through, yard, seed + COURTYARD_SEED, wall * COURTYARD_BONUS);
+      const r = fight(rules, through, yard, seed + COURTYARD_SEED, wall * COURTYARD_BONUS,
+        1 + (tools.lead_a?.yard_attack ?? 0), 1 + (tools.lead_b?.yard_defence ?? 0));
       rounds += r.rounds;
       winner = r.winner;
       courtyard = { winner: r.winner, a: r.a, b: r.b };

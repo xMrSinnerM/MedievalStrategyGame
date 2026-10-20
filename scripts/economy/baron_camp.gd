@@ -42,22 +42,23 @@ func garrison(rules: BaronRules) -> Dictionary:
 
 
 func attack(rules: BaronRules, units: BuildingRules, army: Dictionary, seed_value: int, now: float, waves: Array = [],
-		tools := {}) -> Dictionary:
+		tools := {}, lead := {}) -> Dictionary:
 	## Storms the camp's palisade in `waves`, or with the army spread over its
 	## walls in one wave, with the attackers' siege `tools` (Battle.siege(), the garrison in
 	## Battle.DEFAULT_LAYOUT). Returns the
 	## siege result plus "level" (before), "leveled" (the camp rose a level),
 	## "loot" (resource -> amount carried off, empty if the attack failed)
-	## and "survivors" (the attackers coming home).
+	## and "survivors" (the attackers coming home). `lead` is what the army's
+	## commander adds (GearRules.effects()): harder blows, and "loot" more carried.
 	var result := Battle.siege(units, waves if not waves.is_empty() else Battle.auto_waves(army), garrison(rules), Battle.DEFAULT_LAYOUT,
-			seed_value, Battle.wall_from_defense(rules.palisade(level)), {"a": tools})
+			seed_value, Battle.wall_from_defense(rules.palisade(level)), {"a": tools, "lead_a": lead})
 	result["level"] = level
 	result["leveled"] = false
 	result["survivors"] = Battle.survivors(result.a)
 	result["loot"] = {}
 	if result.winner != "a":
 		return result
-	result["loot"] = _carried(rules.loot(level), rules.carry(result.survivors))
+	result["loot"] = _carried(rules.loot(level), rules.carry(result.survivors) * (1.0 + float(lead.get("loot", 0.0))))
 	rebuilt_at = now + rules.rebuild_time(level)
 	defeats += 1
 	if defeats >= rules.defeats_needed(level) and level < rules.max_level:

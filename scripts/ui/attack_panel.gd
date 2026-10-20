@@ -7,8 +7,9 @@ extends PanelContainer
 ## (Battle.waves_for_keep()). "Auto" tries a set of plans and picks the one
 ## with the best odds. Siege tools from the workshop (ladders, mantlets,
 ## rams) can go to each wall for the whole attack; your keep decides how many
-## fit. Against a player the odds use what your spy last saw, their defence
-## tools included.
+## fit. A commander can lead the army, adding their gear's bonuses and
+## earning xp. Against a player the odds use what your spy last saw, their
+## defence tools and castellan included.
 
 const WIN := Color(0.55, 0.9, 0.45)
 const LOSS := Color(0.95, 0.4, 0.3)
@@ -46,6 +47,8 @@ var _tools := {}               ## wall -> {tool: n}, siege tools for the whole a
 var _tool_rows: GridContainer
 var _tool_spins := {}          ## wall -> tool -> SpinBox
 var _tool_head: Label
+var _commander: OptionButton
+var _commander_fx: Label
 
 
 func _ready() -> void:
@@ -90,6 +93,17 @@ func _ready() -> void:
 		_new_plan()
 		_show_wave(_wave), 100))
 	mine.add_child(quick)
+	var lead_row := HBoxContainer.new()
+	lead_row.add_theme_constant_override("separation", 10)
+	lead_row.add_child(MenuStyle.label("Commander", 16, MenuStyle.GOLD))
+	_commander = OptionButton.new()
+	_commander.focus_mode = Control.FOCUS_NONE
+	_commander.custom_minimum_size = Vector2(240, 32)
+	_commander.item_selected.connect(func(_i: int) -> void: _update())
+	lead_row.add_child(_commander)
+	_commander_fx = MenuStyle.label("", 14, MenuStyle.MUTED)
+	lead_row.add_child(_commander_fx)
+	mine.add_child(lead_row)
 	_tool_head = MenuStyle.label("", 16, MenuStyle.GOLD)
 	mine.add_child(_tool_head)
 	_tool_rows = GridContainer.new()
@@ -153,6 +167,7 @@ func open_for(id: String) -> void:
 	_build_tabs()
 	_tools = {}
 	_build_tool_rows()
+	_build_commanders()
 	if _player != "":
 		_describe_player()
 	else:
@@ -372,9 +387,9 @@ func _score(waves: Array, foe: Dictionary) -> float:
 func _simulate(waves: Array, foe: Dictionary) -> Dictionary:
 	var wins := 0
 	var lost := 0
+	var kit := {"a": plan_tools(), "b": foe.get("tools", {}), "lead_a": _lead_fx(), "lead_b": foe.get("castellan", {})}
 	for k in SAMPLES:
-		var result := Battle.siege(Economy.rules, waves, foe.troops, foe.layout, 1000 + k, foe.wall,
-				{"a": plan_tools(), "b": foe.get("tools", {})})
+		var result := Battle.siege(Economy.rules, waves, foe.troops, foe.layout, 1000 + k, foe.wall, kit)
 		if result.winner == "a":
 			wins += 1
 		lost += Battle.lost_count(result.a)
@@ -391,7 +406,8 @@ func _defence() -> Dictionary:
 		var tools: Variant = seen.get("tools", {})
 		return {"troops": seen.get("troops", {}), "wall": float(seen.get("wall", 1.0)),
 				"layout": layout if Battle.check_layout(layout) == "" else Battle.DEFAULT_LAYOUT,
-				"tools": Battle.clean_tools(tools) if tools is Dictionary else {}}
+				"tools": Battle.clean_tools(tools) if tools is Dictionary else {},
+				"castellan": seen.get("castellan", {}) if seen.get("castellan") is Dictionary else {}}
 	var camp := Economy.get_baron(camp_id)
 	if camp == null:
 		return {}
@@ -526,6 +542,36 @@ func _auto_tools() -> void:
 					placed = true
 
 
+# --- Commander --------------------------------------------------------------------
+
+func _build_commanders() -> void:
+	## Every commander, those away greyed out; the first one at home is picked.
+	_commander.clear()
+	_commander.add_item("None", 0)
+	var picked := 0
+	var g := Economy.gear_rules
+	for c: Dictionary in Economy.player_castle.armoury.commanders:
+		var away := float(c.away_until) > Economy.now()
+		_commander.add_item("%s (level %d)%s" % [c.name, int(c.level), "  away" if away else ""], int(c.id))
+		var index := _commander.item_count - 1
+		_commander.set_item_disabled(index, away)
+		if not away and picked == 0:
+			picked = index
+	_commander.select(picked)
+	if g == null:
+		_commander.disabled = true
+
+
+func commander_id() -> int:
+	return _commander.get_selected_id() if _commander.selected >= 0 else 0
+
+
+func _lead_fx() -> Dictionary:
+	var g := Economy.gear_rules
+	var c := g.commander(Economy.player_castle, commander_id()) if g != null else {}
+	return g.commander_effects(c) if not c.is_empty() else {}
+
+
 # --- The other side --------------------------------------------------------------
 
 func _describe_camp(camp: BaronCamp) -> void:
@@ -563,6 +609,9 @@ func _describe_player() -> void:
 	for w: String in Battle.WALLS:
 		if tools.has(w):
 			lines.append("%s wall: %s" % [w.capitalize(), tools_text(tools[w])])
+	var castellan: Dictionary = _defence().castellan
+	if not castellan.is_empty():
+		lines.append("Castellan: " + Economy.gear_rules.effects_text(castellan))
 	lines.append("Seen %s ago" % _clock(Economy.now() - float(seen.get("at", Economy.now()))))
 	_enemy.text = "\n".join(lines)
 
@@ -610,6 +659,8 @@ func _update() -> void:
 		lines.append("Sending %d soldiers in %s: %s (%d%%), losing about %d" % [total, _waves_text(waves.size()),
 				Battle.odds_text(r.chance), roundi(r.chance * 100.0), roundi(r.lost)])
 		_summary.add_theme_color_override("font_color", LOSS.lerp(WIN, r.chance))
+	var fx := _lead_fx()
+	_commander_fx.text = Economy.gear_rules.effects_text(fx) if commander_id() != 0 else ""
 	var tools := plan_tools()
 	if total > 0 and not tools.is_empty():
 		var parts: PackedStringArray = []
@@ -621,10 +672,10 @@ func _update() -> void:
 	if _player != "":
 		if total > 0:
 			lines.append("A win carries off up to %d%% of each resource, as much as they can carry (%d)"
-					% [roundi(float(Economy.pvp.get("loot_share", 0.25)) * 100.0), int(br.carry(army))])
+					% [roundi(float(Economy.pvp.get("loot_share", 0.25)) * 100.0), int(br.carry(army) * (1.0 + float(fx.get("loot", 0.0))))])
 		var march := Economy.march_time_to_player(_player)
 		lines.append("March: %s there, %s back" % [_clock(march), _clock(march)])
-		why = Economy.check_raid(_player, army, waves, plan_tools())
+		why = Economy.check_raid(_player, army, waves, plan_tools(), commander_id())
 	else:
 		var camp := Economy.get_baron(camp_id)
 		if camp == null:
@@ -634,14 +685,14 @@ func _update() -> void:
 			var loot := Economy.baron_loot(camp.level)
 			for r: String in loot:
 				loot_total += int(loot[r])
-			var carry := br.carry(army)
+			var carry := br.carry(army) * (1.0 + float(fx.get("loot", 0.0)))
 			lines.append("They can carry %d of the camp's %d loot" % [mini(int(carry), loot_total), loot_total]
 					+ ("" if carry >= loot_total else " (send more to carry it all)"))
 		var march := Economy.march_time_to(camp)
 		lines.append("March: %s there, %s back" % [_clock(march), _clock(march)])
 		if not camp.is_ready(Economy.now()):
 			lines.append("The camp is rebuilding for %s." % _clock(camp.rebuilt_at - Economy.now()))
-		why = Economy.check_attack(camp_id, army, waves, plan_tools())
+		why = Economy.check_attack(camp_id, army, waves, plan_tools(), commander_id())
 	if why != "" and total > 0 and not lines[lines.size() - 1].begins_with("The camp is rebuilding"):
 		lines.append(why)
 	_summary.text = "\n".join(lines)
@@ -657,7 +708,8 @@ func _send_army() -> void:
 	var why := "Put some soldiers on the walls to attack."
 	if not waves.is_empty():
 		var tools := plan_tools()
-		why = Economy.send_raid(_player, {}, waves, tools) if _player != "" else Economy.send_attack(camp_id, {}, waves, tools)
+		why = Economy.send_raid(_player, {}, waves, tools, commander_id()) if _player != "" \
+				else Economy.send_attack(camp_id, {}, waves, tools, commander_id())
 	if why != "":
 		_note.text = why
 		_note.visible = true

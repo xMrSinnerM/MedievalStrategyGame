@@ -27,6 +27,11 @@ extends RefCounted
 ## them) and the defenders post their own (moats strengthen the wall, arrow
 ## slits and boiling pitch hurt the attackers). They change only the fights
 ## at their wall, not the courtyard.
+##
+## Commanders (GearRules): the attackers' commander and the defenders'
+## castellan add their gear's stats (`tools` "lead_a" and "lead_b", stat ->
+## share): harder blows at the walls and in the courtyard, a weaker or
+## stronger wall.
 
 ## Share of an army's attack that lands each round.
 const DAMAGE := 0.3
@@ -134,17 +139,19 @@ static func can_capture(castle: CastleState, main_castle_id: String) -> bool:
 	return castle.id != main_castle_id
 
 
-static func assault(attacker: CastleState, castle: CastleState, seed_value: int, main_castle_id := "player_castle") -> Dictionary:
+static func assault(attacker: CastleState, castle: CastleState, seed_value: int, main_castle_id := "player_castle",
+		castellan := {}) -> Dictionary:
 	## Storms `castle` with `attacker`'s warband. Both keep their survivors
 	## (the warband in its field, the castle in its garrison) and the winner
 	## plunders as in resolve(). If the attackers win, "outcome" says what
 	## happens to the castle: "captured" (the caller hands it over, see
 	## Economy.capture) or "sacked" (SACK_SHARE of its stock is carried off
 	## here, up to the attacker's storage); otherwise "held". The castle's
-	## defence tools fight on its walls and are lost with any wall that falls.
+	## defence tools fight on its walls and are lost with any wall that falls,
+	## and `castellan` is what its castellan's gear adds (GearRules.effects()).
 	## "sacked" adds "spoils" (resource -> amount) to the result.
 	var result := siege(attacker.rules, auto_waves(attacker.field), castle.troops, castle.layout, seed_value, wall_bonus(castle),
-			{"b": castle.defence_tools})
+			{"b": castle.defence_tools, "lead_b": castellan})
 	if result.has("tools"):
 		castle.lose_defence_tools(result.tools.lost)
 	attacker.field = survivors(result.a)
@@ -191,7 +198,8 @@ static func siege(rules: BuildingRules, waves: Array, defenders: Dictionary, lay
 	## if nobody was there, or {"winner", "a", "b"}) and "waves" (how many).
 	## `tools` is {"a": attackers' tools, "b": defenders'}, each wall -> {tool:
 	## count}; with any, the result has "tools": {"a", "b", "lost"}, "lost"
-	## being the defence tools at walls that fell.
+	## being the defence tools at walls that fell. Its "lead_a" and "lead_b"
+	## are the commander's and castellan's effects (GearRules.effects()).
 	var posts := split(defenders, layout, ["left", "right", "courtyard", "front"])
 	var sent := {}
 	var home := {}       # attackers going home
@@ -206,7 +214,8 @@ static func siege(rules: BuildingRules, waves: Array, defenders: Dictionary, lay
 		var held: Dictionary = posts[w]
 		var fights: Array = []
 		var broken := false
-		var mods := wall_mods(rules, wall, tools.get("a", {}).get(w, {}), tools.get("b", {}).get(w, {}))
+		var mods := wall_mods(rules, wall, tools.get("a", {}).get(w, {}), tools.get("b", {}).get(w, {}),
+				tools.get("lead_a", {}), tools.get("lead_b", {}))
 		for k in waves.size():
 			var troops := _ints(waves[k].get(w, {}))
 			if troops.is_empty():
@@ -240,7 +249,8 @@ static func siege(rules: BuildingRules, waves: Array, defenders: Dictionary, lay
 			courtyard = {"open": true}
 			_add(home, through)
 		else:
-			var r := fight(rules, through, yard, seed_value + COURTYARD_SEED, wall * COURTYARD_BONUS)
+			var r := fight(rules, through, yard, seed_value + COURTYARD_SEED, wall * COURTYARD_BONUS,
+					1.0 + float(tools.get("lead_a", {}).get("yard_attack", 0.0)), 1.0 + float(tools.get("lead_b", {}).get("yard_defence", 0.0)))
 			rounds += r.rounds
 			winner = r.winner
 			courtyard = {"winner": r.winner, "a": r.a, "b": r.b}
@@ -261,9 +271,10 @@ static func siege(rules: BuildingRules, waves: Array, defenders: Dictionary, lay
 	return result
 
 
-static func wall_mods(rules: BuildingRules, wall: float, a: Dictionary, b: Dictionary) -> Dictionary:
-	## What the tools at one wall do to its fights: {"wall": the wall's bonus,
-	## "a": the attackers' damage, "b": the defenders' damage}.
+static func wall_mods(rules: BuildingRules, wall: float, a: Dictionary, b: Dictionary, lead_a := {}, lead_b := {}) -> Dictionary:
+	## What the tools at one wall (and the commander's and castellan's gear) do
+	## to its fights: {"wall": the wall's bonus, "a": the attackers' damage,
+	## "b": the defenders' damage}.
 	var cut := 0.0
 	var shield := 0.0
 	var moat := 0.0
@@ -279,8 +290,11 @@ static func wall_mods(rules: BuildingRules, wall: float, a: Dictionary, b: Dicti
 			moat += nb * rules.tool_effect(t, "moat")
 			volley += nb * rules.tool_effect(t, "volley")
 			scald += nb * rules.tool_effect(t, "scald")
+	cut += float(lead_a.get("wall_cut", 0.0))
+	moat += float(lead_b.get("wall_bonus", 0.0))
 	var w := wall if cut == 0.0 and moat == 0.0 else (1.0 + (wall - 1.0) * (1.0 - minf(cut, 1.0))) * (1.0 + moat)
-	return {"wall": w, "a": 1.0 - minf(scald, 0.5), "b": (1.0 - minf(shield, 0.5)) * (1.0 + volley)}
+	return {"wall": w, "a": (1.0 - minf(scald, 0.5)) * (1.0 + float(lead_a.get("wall_attack", 0.0))),
+			"b": (1.0 - minf(shield, 0.5)) * (1.0 + volley) * (1.0 + float(lead_b.get("wall_defence", 0.0)))}
 
 
 static func tools_total(tools: Dictionary) -> Dictionary:

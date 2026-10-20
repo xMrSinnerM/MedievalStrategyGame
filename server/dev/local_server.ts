@@ -34,7 +34,7 @@ import {
 
 const root = new URL("../../", import.meta.url);
 const json = (path: string) => JSON.parse(readFileSync(new URL(path, root), "utf8"));
-const rules = makeRules(json("data/buildings.json"), json("data/units.json"), json("data/barons.json"));
+const rules = makeRules(json("data/buildings.json"), json("data/units.json"), json("data/barons.json"), json("data/gear.json"));
 const world: World = json("server/world/world.json");
 const pvp: PvpRules = json("data/pvp.json");
 const allianceRules: AllianceRules = json("data/alliances.json");
@@ -126,7 +126,7 @@ function view(user: string, state: PlayerState, extra: Record<string, unknown> =
   const moving = raids.filter((r) => (r.attacker === user || r.defender === user) && r.state !== "done")
     .map(({ attacker, defender: _d, ...r }) => {
       const own = attacker === user;
-      return { ...r, mine: own, army: own ? r.army : {}, waves: own ? r.waves : undefined, tools: own ? r.tools : undefined, survivors: own ? r.survivors : {},
+      return { ...r, mine: own, army: own ? r.army : {}, waves: own ? r.waves : undefined, tools: own ? r.tools : undefined, lead: own ? r.lead : undefined, survivors: own ? r.survivors : {},
         loot: own ? r.loot : {} };
     });
   const helping = aid.filter((a) => (a.sender === user || a.receiver === user) && a.state === "out")
@@ -218,7 +218,7 @@ function resolveRaids(user: string) {
     if (helpers.length > 0) outcome.defenderReport.helped_by = [...new Set(helpers.map((h) => h.sender_name))];
     report(raid.defender, outcome.defenderReport);
     report(raid.attacker, outcome.attackerReport);
-    Object.assign(raid, { state: "home", survivors: outcome.survivors, loot: outcome.loot });
+    Object.assign(raid, { state: "home", survivors: outcome.survivors, loot: outcome.loot, ...(outcome.lead ? { lead: outcome.lead } : {}) });
     for (const [i, h] of helpers.entries()) {
       const left = outcome.helpers[i];
       const lost: Record<string, number> = {};

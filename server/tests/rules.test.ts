@@ -14,8 +14,9 @@ import { claimQuest, cofferReward, cofferStreak, currentStory, dailyProgress, pi
 
 const root = new URL("../../", import.meta.url);
 const json = (path: string) => JSON.parse(readFileSync(new URL(path, root), "utf8"));
-const rules = makeRules(json("data/buildings.json"), json("data/units.json"), json("data/barons.json"));
+const rules = makeRules(json("data/buildings.json"), json("data/units.json"), json("data/barons.json"), json("data/gear.json"));
 const fixtures = json("server/tests/fixtures.json");
+const T0 = 1_000_000;
 const quests: QuestRules = json("data/quests.json");
 
 /** Deep equality where numbers may differ by a hair (pow() in C and in JS). */
@@ -175,8 +176,41 @@ test("camp attacks", () => {
     run.attacks.forEach((a: any, i: number) => {
       const where = `camp ${k} attack ${i}`;
       assert.equal(isReady(camp, a.t), a.ready, where);
-      if (a.ready) same(attackCamp(camp, rules.barons, rules.buildings, a.army, a.seed, a.t), a.result, where);
+      if (a.ready) same(attackCamp(camp, rules.barons, rules.buildings, a.army, a.seed, a.t, undefined, {}, a.lead), a.result, where);
       same(camp, a.camp, where);
     });
   });
+});
+
+test("gear drops", () => {
+  assert.ok(fixtures.drops.length > 0);
+  fixtures.drops.forEach((d: any, i: number) => {
+    same(rules.gear.rollDrop(d.level, d.seed) ?? {}, d.item, `drop ${i} (level ${d.level})`);
+  });
+});
+
+test("commanders and gear", () => {
+  const run = fixtures.armoury;
+  const g = rules.gear;
+  const castle = CastleState.createNew(rules.buildings, "g", "Gear Castle", "player", T0);
+  for (const b of castle.buildings) if (b.type === "keep") b.level = 5;
+  g.sync(castle);
+  castle.armoury.commanders[1].away_until = T0 + 100;
+  for (const d of run.drops) {
+    if (Object.keys(d).length > 0) g.give(castle, structuredClone(d));
+  }
+  run.ops.forEach((op: any, i: number) => {
+    const where = `op ${i} (${op.kind})`;
+    if (op.kind === "equip") assert.equal(g.equip(castle, op.who, op.item, op.t), op.result, where);
+    else if (op.kind === "unequip") assert.equal(g.unequip(castle, op.who, op.slot, op.t), op.result, where);
+    else if (op.kind === "sell") assert.equal(g.sell(castle, op.item), op.result, where);
+    else same(g.addXp(castle, op.id, op.xp) ?? {}, op.result, where);
+  });
+  same(castle.toDict(), run.castle, "castle");
+  same(castle.armoury.commanders.map((c) => g.effects(c.gear, c.level)), run.fx, "commander effects");
+  same(g.castellanEffects(castle), run.castellan, "castellan effects");
+  same([0, 1, 2, 3, 9].map((id) => g.checkLead(castle, id, T0 + 50) ?? "none"), run.leads, "leads");
+  const levels: number[] = [];
+  for (let x = 0; x < 320; x += 7) levels.push(g.levelFor(x));
+  same(levels, run.levels, "levels");
 });

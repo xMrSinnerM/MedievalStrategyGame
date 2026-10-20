@@ -38,6 +38,7 @@ func _initialize() -> void:
 	test_set_layout()
 	test_quests()
 	test_tools()
+	test_gear()
 	print("%d checks, %d failed" % [checks, failures])
 	quit(1 if failures > 0 else 0)
 
@@ -951,6 +952,62 @@ func test_tools() -> void:
 	check(reports.size() == 1 and reports[0].tools.a == {"front": {"ladder": 2}}, "the report shows the ladders")
 	var panel: GDScript = load("res://scripts/ui/battle_report.gd")
 	check(panel.has_method("tools_line"), "the battle report can show tools")
+	eco.delete_slot(1)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://test_saves"))
+	eco.free()
+
+
+func test_gear() -> void:
+	var gear := GearRules.load_default()
+	var c := fresh()
+	gear.sync(c)
+	check(c.armoury.commanders.size() == 1 and c.armoury.commanders[0].name == "Sir Edric Vane", "one commander at keep 1")
+	for b in c.buildings:
+		if b.type == "keep":
+			b.level = 5
+	gear.sync(c)
+	check(c.armoury.commanders.size() == 3, "three at keep 5")
+	# Drops: the same seed, the same item; better gear from stronger camps.
+	check(gear.roll_drop(12, 4242) == gear.roll_drop(12, 4242), "drops are fixed by their seed")
+	var best := {"common": 0, "legendary": 0}
+	for level in [1, 40]:
+		for k in 400:
+			var item := gear.roll_drop(level, k)
+			if not item.is_empty() and best.has(item.rarity):
+				best[item.rarity] += 1
+	check(best.legendary > 0 and best.common > 0, "common and legendary gear both drop: %s" % [best])
+	# Wearing gear.
+	var helm := {"id": 0, "slot": "helmet", "side": "attack", "rarity": "rare", "name": "Runed Sallet", "stats": {"wall_attack": 9}}
+	var flag := {"id": 0, "slot": "banner", "side": "defence", "rarity": "epic", "name": "Keep Banner", "stats": {"wall_bonus": 11}}
+	check(gear.give(c, helm) and gear.give(c, flag) and helm.id == 1 and flag.id == 2, "drops get ids in the bag")
+	check(gear.equip(c, 1, 2, T0) == "Commanders wear attack gear.", "no defence gear on a commander")
+	check(gear.equip(c, 1, 1, T0) == "" and gear.equip(c, "castellan", 2, T0) == "", "worn")
+	check(gear.commander_effects(c.armoury.commanders[0]) == {"wall_attack": 0.09}, "the helmet's bonus")
+	check(gear.castellan_effects(c) == {"wall_bonus": 0.11}, "the castellan's banner")
+	c.armoury.commanders[0].xp = 30
+	c.armoury.commanders[0].level = gear.level_for(30)
+	near(gear.commander_effects(c.armoury.commanders[0]).wall_attack, 0.15, "level 4 adds 6% to the helmet's 9%")
+	var saved := CastleState.from_dict(rules, JSON.parse_string(JSON.stringify(c.to_dict())))
+	check(saved.armoury == c.armoury, "the armoury is saved")
+	check(gear.unequip(c, 1, "helmet", T0) == "" and gear.sell(c, 1) == "", "taken off and sold")
+	near(c.resources.gold, start("gold") + 250.0, "a rare item sells for 250 gold")
+	# Offline: a commander leads an attack, earns xp and is away meanwhile.
+	var eco = load("res://scripts/core/economy.gd").new()
+	eco.save_dir = "user://test_saves"
+	eco.begin_new(1)
+	eco.castle_positions[eco.MAIN_CASTLE] = Vector2(0, 0)
+	eco.sync_barons([{"id": "near", "name": "Near", "position": [60, 0]}])
+	eco.player_castle.troops = {"swordsman": 60}
+	var reports: Array = []
+	eco.attack_resolved.connect(func(r: Dictionary) -> void: reports.append(r))
+	check(eco.send_attack("near", {"swordsman": 30}, [], {}, 9) == "No such commander.", "no such commander")
+	check(eco.send_attack("near", {"swordsman": 30}, [], {}, 1) == "", "Sir Edric leads the army")
+	check(eco.send_attack("near", {"swordsman": 10}, [], {}, 1) == "Sir Edric Vane is still away with an army.", "and can't lead two")
+	eco.advance_marches(float(eco.marches[0].arrive) + 1.0)
+	check(reports.size() == 1 and reports[0].lead.xp == 1 and int(eco.player_castle.armoury.commanders[0].xp) == 1,
+			"a level 1 camp gives 1 xp: %s" % [reports[0].get("lead")])
+	var report: GDScript = load("res://scripts/ui/battle_report.gd")
+	check(report.has_method("gear_line"), "the battle report shows commanders and gear")
 	eco.delete_slot(1)
 	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://test_saves"))
 	eco.free()

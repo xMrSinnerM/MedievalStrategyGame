@@ -7,7 +7,11 @@ import { attackCamp, isReady, type CampData } from "./baron_camp.ts";
 import { BaronRules } from "./baron_rules.ts";
 import { checkTools, type Side, type SiegeResult, type Tools, type Wave } from "./battle.ts";
 import { CastleState } from "./castle_state.ts";
+import type { GearRules, Item, Lead, LeadReport } from "./gear.ts";
 import { godotHash, type Dict } from "./util.ts";
+
+/** Seed offset for what a beaten camp drops. */
+export const DROP_SEED = 31337;
 
 export interface March {
   id: number;
@@ -17,6 +21,8 @@ export interface March {
   waves?: Wave[];
   /** Siege tools brought to each wall (used up in the fight). */
   tools?: Tools;
+  /** The commander leading the army, with what their gear does. */
+  lead?: Lead;
   depart: number;
   arrive: number;
   back: number;
@@ -39,6 +45,11 @@ export interface Report {
   courtyard?: SiegeResult["courtyard"];
   /** Siege tools used, when there were any. */
   tools?: SiegeResult["tools"];
+  /** The commander who led the army and the xp they earned. */
+  lead?: LeadReport;
+  /** Gear the camp dropped; `bag_full` when there was no room for it. */
+  gear?: Item;
+  bag_full?: boolean;
   spoils: Dict;
   level: number;
   leveled: boolean;
@@ -56,6 +67,8 @@ export interface Army {
   marches: March[];
   nextMarch: number;
   home: [number, number];
+  /** Commanders and gear (data/gear.json); without them no drops or xp. */
+  gear?: GearRules;
 }
 
 export function marchTimeTo(world: Army, rules: BaronRules, camp: CampData): number {
@@ -81,16 +94,19 @@ export function checkAttack(world: Army, campId: string, army: Dict, now: number
 
 /**
  * Sends soldiers from the garrison against a camp, in `waves` if given, with
- * siege `tools` for its walls (taken from the store). Returns "" or why not.
+ * siege `tools` for its walls (taken from the store), led by `commander` (an
+ * id, or none). Returns "" or why not.
  */
 export function sendAttack(world: Army, rules: BaronRules, campId: string, army: Dict, now: number, waves?: Wave[],
-  tools?: unknown): string {
+  tools?: unknown, commander?: unknown): string {
   world.castle.advanceTo(now);
   const why = checkAttack(world, campId, army, now);
   if (why !== "") return why;
   const castle = world.castle;
   const kit = checkTools(castle.rules, tools, "attack", castle.rules.toolSlots(castle.keepLevel()), castle.tools);
   if (typeof kit === "string") return kit;
+  const lead = world.gear ? world.gear.checkLead(castle, commander, now) : commander ? "No such commander." : null;
+  if (typeof lead === "string") return lead;
   castle.useTools(kit);
   const sent: Dict = {};
   for (const unit of Object.keys(army)) {
@@ -100,9 +116,10 @@ export function sendAttack(world: Army, rules: BaronRules, campId: string, army:
     }
   }
   const travel = marchTimeTo(world, rules, world.camps.find((c) => c.id === campId)!);
+  if (lead) world.gear!.commander(castle, lead.id)!.away_until = now + 2 * travel;
   world.marches.push({ id: world.nextMarch, camp: campId, army: sent, depart: now, arrive: now + travel,
     back: now + 2 * travel, state: "out", survivors: {}, loot: {}, ...(waves ? { waves } : {}),
-    ...(Object.keys(kit).length > 0 ? { tools: kit } : {}) });
+    ...(Object.keys(kit).length > 0 ? { tools: kit } : {}), ...(lead ? { lead } : {}) });
   world.nextMarch += 1;
   return "";
 }
@@ -149,12 +166,26 @@ function fightCamp(world: Army, rules: BaronRules, m: March): Report {
     report.empty = true;
     return report;
   }
-  const result = attackCamp(camp, rules, world.castle.rules, m.army, m.id * 7919 + godotHash(m.camp), m.arrive, m.waves, m.tools);
+  const seed = m.id * 7919 + godotHash(m.camp);
+  const result = attackCamp(camp, rules, world.castle.rules, m.army, seed, m.arrive, m.waves, m.tools, m.lead?.fx);
   m.survivors = result.survivors;
   m.loot = result.loot;
   if (result.winner === "a") world.castle.stats.barons += 1;
   const out: Report = { ...report, winner: result.winner, a: result.a, b: result.b, walls: result.walls, courtyard: result.courtyard, ...(result.tools ? { tools: result.tools } : {}), spoils: result.loot, level: result.level,
     leveled: result.leveled, new_level: camp.level, defeats: camp.defeats, needed: rules.defeatsNeeded(camp.level) };
+  const gear = world.gear;
+  if (gear) {
+    if (m.lead) {
+      const xp = result.winner === "a" ? gear.xpWinPerLevel * result.level : gear.xpLoss;
+      const lead = gear.addXp(world.castle, m.lead.id, xp);
+      if (lead) out.lead = lead;
+    }
+    const item = result.winner === "a" ? gear.rollDrop(result.level, seed + DROP_SEED) : null;
+    if (item) {
+      out.gear = item;
+      if (!gear.give(world.castle, item)) out.bag_full = true;
+    }
+  }
   if (camp.event !== undefined) {
     out.event = camp.event;
     out.points = result.winner === "a" ? (camp.points ?? 0) * result.level : 0;
