@@ -3,7 +3,7 @@
 // while before it can be attacked again.
 
 import { BaronRules } from "./baron_rules.ts";
-import { autoWaves, DEFAULT_LAYOUT, siege, survivors, wallFromDefense, type SiegeResult, type Wave } from "./battle.ts";
+import { autoWaves, DEFAULT_LAYOUT, siege, survivors, wallFromDefense, type SiegeResult, type Tools, type Wave } from "./battle.ts";
 import { BuildingRules } from "./building_rules.ts";
 import type { Dict } from "./util.ts";
 
@@ -35,12 +35,13 @@ export function isReady(camp: CampData, now: number): boolean {
 
 /**
  * Storms the camp's palisade with `waves` (by default the army in one wave,
- * autoWaves()), the garrison in DEFAULT_LAYOUT, and updates the camp.
+ * autoWaves()) and the attackers' siege `tools`, the garrison in
+ * DEFAULT_LAYOUT, and updates the camp.
  */
 export function attackCamp(camp: CampData, rules: BaronRules, units: BuildingRules, army: Dict, seed: number, now: number,
-  waves?: Wave[]): CampAttack {
+  waves?: Wave[], tools: Tools = {}): CampAttack {
   const result = siege(units, waves ?? autoWaves(army), rules.garrison(camp.level), DEFAULT_LAYOUT, seed,
-    wallFromDefense(rules.palisade(camp.level)));
+    wallFromDefense(rules.palisade(camp.level)), { a: tools });
   const out: CampAttack = { ...result, level: camp.level, leveled: false, survivors: survivors(result.a), loot: {} };
   if (result.winner !== "a") return out;
   const factor = rules.lootFactor(now);

@@ -50,5 +50,70 @@
 			"defense": 12,
 			"bonus": { "archer": 1.6 }
 		}
+	},
+	"tools_comment": "Siege tools, built in the Siege Workshop (one at a time from a queue like the barracks', faster by `time_per_barracks_level` each workshop level). Attack tools go with an attack, up to `tool_slots` per wall by your keep level, and are used up. Defence tools are posted on your walls in the Defence screen, up to `tool_slots` per wall by your wall level; they are lost only when their wall falls. Effects, each per tool at that wall: wall_cut takes that share off the wall's bonus (all of it at most); shield cuts what the defenders there deal (by half at most); moat makes the wall that much stronger; volley makes the defenders there deal that much more; scald cuts what the attackers there deal (by half at most). `walls` limits where a tool can go (the front wall is the gate).",
+	"tool_slots": [2, 4, 6, 8, 10],
+	"tools": {
+		"ladder": {
+			"name": "Siege ladder",
+			"plural": "Siege ladders",
+			"side": "attack",
+			"workshop_level": 1,
+			"cost": { "wood": 60 },
+			"time": 20,
+			"effect": { "wall_cut": 0.08 },
+			"description": "Gets your soldiers over the wall: each takes 8% off the wall's bonus where it is used."
+		},
+		"mantlet": {
+			"name": "Mantlet",
+			"plural": "Mantlets",
+			"side": "attack",
+			"workshop_level": 3,
+			"cost": { "wood": 60, "gold": 20 },
+			"time": 40,
+			"effect": { "shield": 0.05 },
+			"description": "A wheeled shield: the defenders on that wall deal 5% less damage per mantlet."
+		},
+		"ram": {
+			"name": "Battering ram",
+			"plural": "Battering rams",
+			"side": "attack",
+			"workshop_level": 5,
+			"cost": { "wood": 200, "stone": 60, "gold": 60 },
+			"time": 90,
+			"walls": ["front"],
+			"effect": { "wall_cut": 0.2 },
+			"description": "Breaks the gate: only at the front wall, each takes 20% off its bonus."
+		},
+		"arrow_slits": {
+			"name": "Arrow slits",
+			"plural": "Arrow slits",
+			"side": "defence",
+			"workshop_level": 1,
+			"cost": { "stone": 100, "wood": 30 },
+			"time": 30,
+			"effect": { "volley": 0.05 },
+			"description": "Your defenders on that wall deal 5% more damage per arrow slit."
+		},
+		"moat": {
+			"name": "Moat",
+			"plural": "Moat sections",
+			"side": "defence",
+			"workshop_level": 3,
+			"cost": { "stone": 150, "gold": 30 },
+			"time": 60,
+			"effect": { "moat": 0.05 },
+			"description": "Water and stakes before the wall: it holds 5% stronger per section."
+		},
+		"pitch": {
+			"name": "Boiling pitch",
+			"plural": "Cauldrons of pitch",
+			"side": "defence",
+			"workshop_level": 5,
+			"cost": { "wood": 80, "gold": 50 },
+			"time": 60,
+			"effect": { "scald": 0.05 },
+			"description": "Poured on the climbers: attackers at that wall deal 5% less damage per cauldron."
+		}
 	}
 }

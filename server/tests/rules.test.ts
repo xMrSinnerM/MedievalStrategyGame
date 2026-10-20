@@ -6,7 +6,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { attackCamp, isReady, type CampData } from "../rules/baron_camp.ts";
-import { autoWaves, fight, odds, siege, siegeOdds, split } from "../rules/battle.ts";
+import { autoWaves, checkTools, fight, odds, siege, siegeOdds, split } from "../rules/battle.ts";
 import { CastleState } from "../rules/castle_state.ts";
 import { makeRules } from "../rules/load.ts";
 import { godotHash } from "../rules/util.ts";
@@ -73,6 +73,17 @@ for (const run of fixtures.castles) {
         case "cancel_training":
           assert.equal(castle.cancelTraining(step.index, step.t), step.result, where);
           break;
+        case "craft":
+          assert.equal(castle.craft(step.tool, step.amount, step.t), step.result, where);
+          break;
+        case "cancel_crafting":
+          assert.equal(castle.cancelCrafting(step.index, step.t), step.result, where);
+          break;
+        case "set_tools":
+          castle.tools[step.gift] = (castle.tools[step.gift] ?? 0) + step.n;
+          assert.equal(castle.setDefenceTools(step.tools), step.result, where);
+          if (step.lost) castle.loseDefenceTools(step.lost);
+          break;
         case "move":
           assert.equal(castle.move(step.id, step.cell), step.result, where);
           break;
@@ -95,6 +106,7 @@ for (const run of fixtures.castles) {
           for (const type of Object.keys(step.build)) assert.equal(castle.checkBuild(type), step.build[type], `${where} build ${type}`);
           for (const id of Object.keys(step.upgrade)) assert.equal(castle.checkUpgrade(Number(id)), step.upgrade[id], `${where} upgrade ${id}`);
           for (const unit of Object.keys(step.recruit)) assert.equal(castle.checkRecruit(unit, 10), step.recruit[unit], `${where} recruit ${unit}`);
+          for (const tool of Object.keys(step.craft)) assert.equal(castle.checkCraft(tool, 10), step.craft[tool], `${where} craft ${tool}`);
           {
             const story = currentStory(castle, quests);
             same(story ? progress(castle, story.goal) : [], step.story, `${where} story`);
@@ -126,8 +138,12 @@ test("battles", () => {
 test("siege waves", () => {
   assert.ok(fixtures.sieges.length > 0);
   fixtures.sieges.forEach((c: any, i: number) => {
-    same(siege(rules.buildings, c.waves, c.defenders, c.layout, c.seed, c.wall), c.result, `siege ${i}`);
-    same(siegeOdds(rules.buildings, c.waves, c.defenders, c.layout, c.seed, c.wall), c.odds, `siege ${i} odds`);
+    same(siege(rules.buildings, c.waves, c.defenders, c.layout, c.seed, c.wall, c.tools), c.result, `siege ${i}`);
+    same(siegeOdds(rules.buildings, c.waves, c.defenders, c.layout, c.seed, c.wall, c.tools), c.odds, `siege ${i} odds`);
+    for (const side of ["attack", "defence"]) {
+      const r = checkTools(rules.buildings, c.tools.a ?? {}, side, c.checks[side].slots, c.stock);
+      assert.equal(typeof r === "string" ? r : "", c.checks[side].result, `siege ${i} ${side} tools`);
+    }
     same(autoWaves(c.army), c.auto, `siege ${i} auto waves`);
     same(split(c.defenders, c.layout, ["left", "right", "courtyard", "front"]), c.split, `siege ${i} split`);
   });

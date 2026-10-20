@@ -113,6 +113,17 @@
 			"time_growth": 2.2,
 			"storage": 1000,
 			"storage_growth": 1.55
+		},
+		"workshop": {
+			"name": "Siege Workshop",
+			"description": "Builds siege tools: ladders, mantlets and rams for your attacks, and arrow slits, moats and boiling pitch for your walls. Higher levels unlock more tools and build faster.",
+			"size": [3, 3],
+			"unique": true,
+			"max_level": 10,
+			"cost": { "wood": 160, "stone": 120, "gold": 40 },
+			"cost_growth": 1.7,
+			"time": 60,
+			"time_growth": 2.2
 		}
 	}
 }

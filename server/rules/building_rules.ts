@@ -16,6 +16,9 @@ export class BuildingRules {
   queueSize = 5;
   maxBatch = 50;
   timePerBarracksLevel = 0.92;
+  /** Siege tools (data/units.json "tools"), and how many fit on each wall by level. */
+  tools: Record<string, Json> = {};
+  toolSlotTable: number[] = [];
 
   constructor(buildings: Json, units: Json) {
     this.resources = (buildings.resources ?? []).map(String);
@@ -26,6 +29,8 @@ export class BuildingRules {
     this.queueSize = Number(units.queue_size ?? 5);
     this.maxBatch = Number(units.max_batch ?? 50);
     this.timePerBarracksLevel = Number(units.time_per_barracks_level ?? 0.92);
+    this.tools = units.tools ?? {};
+    this.toolSlotTable = (units.tool_slots ?? [0]).map(Number);
   }
 
   hasType(type: string): boolean {
@@ -127,5 +132,49 @@ export class BuildingRules {
 
   unitBonus(unit: string, against: string): number {
     return Number(this.units[unit].bonus?.[against] ?? 1.0);
+  }
+
+  // --- Siege tools ----------------------------------------------------------
+
+  hasTool(tool: string): boolean {
+    return Object.hasOwn(this.tools, tool);
+  }
+
+  /** "attack" or "defence". */
+  toolSide(tool: string): string {
+    return String(this.tools[tool].side ?? "attack");
+  }
+
+  toolCost(tool: string, count = 1): Dict {
+    const out: Dict = {};
+    const cost = this.tools[tool].cost ?? {};
+    for (const r of Object.keys(cost)) out[r] = Number(cost[r]) * count;
+    return out;
+  }
+
+  /** Seconds to build one tool; each workshop level above 1 builds faster. */
+  toolTime(tool: string, workshopLevel: number): number {
+    return round(Number(this.tools[tool].time ?? 30) *
+      Math.pow(this.timePerBarracksLevel, Math.max(workshopLevel - 1, 0)));
+  }
+
+  toolWorkshopLevel(tool: string): number {
+    return Number(this.tools[tool].workshop_level ?? 1);
+  }
+
+  /** Whether the tool can be used at this wall. */
+  toolFits(tool: string, wall: string): boolean {
+    const walls = this.tools[tool].walls;
+    return walls === undefined || walls.includes(wall);
+  }
+
+  toolEffect(tool: string, effect: string): number {
+    return Number(this.tools[tool].effect?.[effect] ?? 0);
+  }
+
+  /** How many tools fit on one wall: attack tools by keep level, defence tools by wall level. */
+  toolSlots(level: number): number {
+    if (level < 1) return 0;
+    return this.toolSlotTable[clamp(level - 1, 0, this.toolSlotTable.length - 1)];
   }
 }

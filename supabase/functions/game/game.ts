@@ -3,8 +3,8 @@
 // an order. index.ts loads and saves the player and calls in here.
 
 import type { CampData } from "../../../server/rules/baron_camp.ts";
-import { autoWaves, checkLayout, checkWaves, siege, survivors, wallFromDefense, wavesArmy, wavesForKeep, type Layout, type Side, type SiegeResult,
-  type Wave } from "../../../server/rules/battle.ts";
+import { autoWaves, checkLayout, checkTools, checkWaves, siege, survivors, wallFromDefense, wavesArmy, wavesForKeep, type Layout, type Side,
+  type SiegeResult, type Tools, type Wave } from "../../../server/rules/battle.ts";
 import { CastleState, type CastleData } from "../../../server/rules/castle_state.ts";
 import type { Rules } from "../../../server/rules/load.ts";
 import { advanceMarches, sendAttack, type Army, type March, type Report } from "../../../server/rules/marches.ts";
@@ -56,6 +56,8 @@ export interface Raid {
   army: Dict;
   /** How the army storms the walls; without it, one wave (autoWaves()). */
   waves?: Wave[];
+  /** Siege tools brought to each wall. */
+  tools?: Tools;
   from: [number, number];
   to: [number, number];
   depart: number;
@@ -91,6 +93,8 @@ export interface RaidReport {
   /** How each wall and the courtyard went (Battle.siege()). */
   walls: SiegeResult["walls"];
   courtyard: SiegeResult["courtyard"];
+  /** Siege tools on both sides, when there were any. */
+  tools?: SiegeResult["tools"];
   spoils: Dict;
   wall: number;
   /** Defender's report: the allies whose soldiers fought beside the garrison. */
@@ -292,7 +296,7 @@ export function act(rules: Rules, given: PlayerState, req: Request, now: number,
         break;
       }
       const sent = waves ? wavesArmy(waves) : isArmy(req.army) ? req.army : null;
-      error = sent === null ? "Bad army." : sendAttack(army, rules.barons, String(req.camp), sent, now, waves);
+      error = sent === null ? "Bad army." : sendAttack(army, rules.barons, String(req.camp), sent, now, waves, req.tools);
       break;
     }
     case "attack_player": {
@@ -310,7 +314,10 @@ export function act(rules: Rules, given: PlayerState, req: Request, now: number,
       else if (tooSmall(castle.keepLevel(), target.level, ctx.pvp)) error = "That castle is too small for you to attack.";
       else if (sent === null) error = "Bad army.";
       else error = checkArmy(castle, sent);
-      if (error !== "" || target === undefined || sent === null) break;
+      const kit = checkTools(rules.buildings, req.tools, "attack", rules.buildings.toolSlots(castle.keepLevel()), castle.tools);
+      if (error === "" && typeof kit === "string") error = kit;
+      if (error !== "" || target === undefined || sent === null || typeof kit === "string") break;
+      castle.useTools(kit);
       const army: Dict = {};
       for (const unit of Object.keys(sent)) {
         if (sent[unit] > 0) {
@@ -321,11 +328,22 @@ export function act(rules: Rules, given: PlayerState, req: Request, now: number,
       const from: [number, number] = [stored.home_x, stored.home_y];
       const travel = rules.barons.marchTime(Math.hypot(target.home[0] - from[0], target.home[1] - from[1]));
       raid = { attacker_name: stored.name, defender_name: target.name, army, from, to: target.home, depart: now,
-        arrive: now + travel, back: now + 2 * travel, state: "out", survivors: {}, loot: {}, ...(waves ? { waves } : {}) };
+        arrive: now + travel, back: now + 2 * travel, state: "out", survivors: {}, loot: {}, ...(waves ? { waves } : {}),
+        ...(Object.keys(kit).length > 0 ? { tools: kit } : {}) };
       // Attacking someone ends your own beginner protection.
       protectedUntil = 0;
       break;
     }
+    case "craft":
+      error = castle.checkCraft(String(req.tool), Number(req.amount));
+      if (error === "") castle.craft(String(req.tool), Number(req.amount), now);
+      break;
+    case "cancel_crafting":
+      if (!castle.cancelCrafting(Number(req.index), now)) error = "No such batch.";
+      break;
+    case "set_tools":
+      error = castle.setDefenceTools(req.tools);
+      break;
     case "set_layout": {
       error = checkLayout(req.layout);
       if (error === "") castle.layout = { ...(req.layout as Layout) };
@@ -474,7 +492,8 @@ export function fightRaid(rules: Rules, pvp: PvpRules, stored: PlayerState, raid
   const defenders: Dict = {};
   for (const g of groups) for (const unit of Object.keys(g)) defenders[unit] = (defenders[unit] ?? 0) + g[unit];
   const result = siege(rules.buildings, raid.waves ?? autoWaves(raid.army), defenders, castle.layout, raid.id * 7919 + godotHash(raid.defender_name),
-    wall);
+    wall, { a: raid.tools ?? {}, b: castle.defenceTools });
+  if (result.tools) castle.loseDefenceTools(result.tools.lost);
   for (const unit of Object.keys(result.b)) shareLosses(groups, unit, result.b[unit].lost);
   const back = survivors(result.a);
   const loot: Dict = {};
@@ -493,7 +512,7 @@ export function fightRaid(rules: Rules, pvp: PvpRules, stored: PlayerState, raid
   }
   const report = (role: "attacker" | "defender", name: string): RaidReport => ({
     kind: "raid", role, raid: raid.id, name, at: raid.arrive, winner: result.winner, a: result.a, b: result.b,
-    walls: result.walls, courtyard: result.courtyard, spoils: loot, wall,
+    walls: result.walls, courtyard: result.courtyard, ...(result.tools ? { tools: result.tools } : {}), spoils: loot, wall,
   });
   return {
     defender: {
@@ -550,7 +569,8 @@ export function spyReport(rules: Rules, pvp: PvpRules, stored: PlayerState, now:
   }
   return {
     name: stored.name, at: now, level: castleLevel(stored.castle), troops,
-    wall: wallFromDefense(world.castle.defense()), layout: world.castle.layout, protected: isProtected(stored, pvp, now),
+    wall: wallFromDefense(world.castle.defense()), layout: world.castle.layout, tools: world.castle.defenceTools,
+    protected: isProtected(stored, pvp, now),
   };
 }
 

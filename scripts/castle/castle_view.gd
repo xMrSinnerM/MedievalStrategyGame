@@ -151,6 +151,24 @@ func cancel_training(index: int) -> void:
 		Economy.changed.emit()
 
 
+func craft(tool: String, amount: int) -> void:
+	if not editable:
+		return
+	var reason := castle.check_craft(tool, amount)
+	if reason != "" or not castle.craft(tool, amount, Economy.now()):
+		message.emit(reason if reason != "" else "Can't build them now")
+		return
+	_tell_server({"action": "craft", "tool": tool, "amount": amount})
+	Economy.changed.emit()
+
+
+func cancel_crafting(index: int) -> void:
+	if editable and castle.cancel_crafting(index, Economy.now()):
+		_tell_server({"action": "cancel_crafting", "index": index})
+		message.emit("Building cancelled, %d%% of the cost refunded" % int(CastleState.CANCEL_REFUND * 100.0))
+		Economy.changed.emit()
+
+
 func move_troops(unit: String, amount: int, to_field: bool) -> void:
 	## Moves soldiers between the garrison and your warband, which must be at the castle.
 	if not editable:

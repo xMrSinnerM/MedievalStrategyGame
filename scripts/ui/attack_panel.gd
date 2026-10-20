@@ -5,7 +5,10 @@ extends PanelContainer
 ## your chances, the losses to expect, how much loot they can carry and how
 ## long the march takes. Your keep decides how many waves you can send
 ## (Battle.waves_for_keep()). "Auto" tries a set of plans and picks the one
-## with the best odds. Against a player the odds use what your spy last saw.
+## with the best odds. Siege tools from the workshop (ladders, mantlets,
+## rams) can go to each wall for the whole attack; your keep decides how many
+## fit. Against a player the odds use what your spy last saw, their defence
+## tools included.
 
 const WIN := Color(0.55, 0.9, 0.45)
 const LOSS := Color(0.95, 0.4, 0.3)
@@ -39,6 +42,10 @@ var _note: Label
 var _quiet := false            ## true while setting spin boxes from code
 var _plan: Array = []          ## one {wall: {unit: soldiers}} per wave the keep allows
 var _wave := 0                 ## the wave on show
+var _tools := {}               ## wall -> {tool: n}, siege tools for the whole attack
+var _tool_rows: GridContainer
+var _tool_spins := {}          ## wall -> tool -> SpinBox
+var _tool_head: Label
 
 
 func _ready() -> void:
@@ -83,6 +90,13 @@ func _ready() -> void:
 		_new_plan()
 		_show_wave(_wave), 100))
 	mine.add_child(quick)
+	_tool_head = MenuStyle.label("", 16, MenuStyle.GOLD)
+	mine.add_child(_tool_head)
+	_tool_rows = GridContainer.new()
+	_tool_rows.columns = 5
+	_tool_rows.add_theme_constant_override("h_separation", 10)
+	_tool_rows.add_theme_constant_override("v_separation", 6)
+	mine.add_child(_tool_rows)
 	columns.add_child(mine)
 	var theirs := VBoxContainer.new()
 	theirs.custom_minimum_size = Vector2(250, 0)
@@ -137,6 +151,8 @@ func open_for(id: String) -> void:
 	_note.text = ""
 	_note.visible = false
 	_build_tabs()
+	_tools = {}
+	_build_tool_rows()
 	if _player != "":
 		_describe_player()
 	else:
@@ -322,6 +338,8 @@ func _auto(share: float) -> void:
 		for k in best.size():
 			for w: String in best[k]:
 				_plan[k][w] = best[k][w].duplicate()
+	_auto_tools()
+	_refresh_tool_spins()
 	_show_wave(0)
 
 
@@ -355,7 +373,8 @@ func _simulate(waves: Array, foe: Dictionary) -> Dictionary:
 	var wins := 0
 	var lost := 0
 	for k in SAMPLES:
-		var result := Battle.siege(Economy.rules, waves, foe.troops, foe.layout, 1000 + k, foe.wall)
+		var result := Battle.siege(Economy.rules, waves, foe.troops, foe.layout, 1000 + k, foe.wall,
+				{"a": plan_tools(), "b": foe.get("tools", {})})
 		if result.winner == "a":
 			wins += 1
 		lost += Battle.lost_count(result.a)
@@ -369,14 +388,142 @@ func _defence() -> Dictionary:
 		if seen.is_empty():
 			return {}
 		var layout: Variant = seen.get("layout", Battle.DEFAULT_LAYOUT)
+		var tools: Variant = seen.get("tools", {})
 		return {"troops": seen.get("troops", {}), "wall": float(seen.get("wall", 1.0)),
-				"layout": layout if Battle.check_layout(layout) == "" else Battle.DEFAULT_LAYOUT}
+				"layout": layout if Battle.check_layout(layout) == "" else Battle.DEFAULT_LAYOUT,
+				"tools": Battle.clean_tools(tools) if tools is Dictionary else {}}
 	var camp := Economy.get_baron(camp_id)
 	if camp == null:
 		return {}
 	var br := Economy.baron_rules
 	return {"troops": camp.garrison(br), "layout": Battle.DEFAULT_LAYOUT,
 			"wall": Battle.wall_from_defense(br.palisade(camp.level))}
+
+
+# --- Siege tools ------------------------------------------------------------------
+
+func plan_tools() -> Dictionary:
+	## The siege tools as planned, {wall: {tool: n}} with empty ones left out.
+	return Battle.clean_tools(_tools)
+
+
+func _tool_placed(tool: String, skip_wall := "") -> int:
+	var n := 0
+	for w: String in _tools:
+		if w != skip_wall:
+			n += int(_tools[w].get(tool, 0))
+	return n
+
+
+func _wall_tools(wall: String, skip_tool := "") -> int:
+	var n := 0
+	for tool: String in _tools.get(wall, {}):
+		if tool != skip_tool:
+			n += int(_tools[wall][tool])
+	return n
+
+
+func _build_tool_rows() -> void:
+	## A row per attack tool in store, a number box per wall it fits.
+	for child in _tool_rows.get_children():
+		_tool_rows.remove_child(child)
+		child.queue_free()
+	_tool_spins.clear()
+	var rules := Economy.rules
+	var stock: Dictionary = Economy.player_castle.tools
+	var slots := Economy.tool_slots()
+	var have: Array = []
+	for tool: String in rules.tools:
+		if rules.tool_side(tool) == "attack" and int(stock.get(tool, 0)) > 0:
+			have.append(tool)
+	_tool_rows.visible = not have.is_empty()
+	if have.is_empty():
+		_tool_head.text = "Siege tools: none in store. Ladders, mantlets and rams are built in the siege workshop."
+		_tool_head.add_theme_color_override("font_color", MenuStyle.MUTED)
+		_tool_head.add_theme_font_size_override("font_size", 14)
+		return
+	_tool_head.text = "Siege tools: up to %d on each wall (keep level %d), used up in the attack" % [slots, Economy.player_castle.keep_level()]
+	_tool_head.add_theme_color_override("font_color", MenuStyle.GOLD)
+	_tool_head.add_theme_font_size_override("font_size", 16)
+	for text in ["", "Left wall", "Front wall", "Right wall", "In store"]:
+		_tool_rows.add_child(MenuStyle.label(text, 14, MenuStyle.MUTED))
+	for w: String in Battle.WALLS:
+		_tool_spins[w] = {}
+	for tool: String in have:
+		var name_label := MenuStyle.label(rules.tool_plural(tool), 16, MenuStyle.TEXT)
+		name_label.tooltip_text = String(rules.tools[tool].get("description", ""))
+		name_label.mouse_filter = Control.MOUSE_FILTER_STOP
+		_tool_rows.add_child(name_label)
+		for w: String in Battle.WALLS:
+			if not rules.tool_fits(tool, w):
+				_tool_rows.add_child(MenuStyle.label("  not here", 14, MenuStyle.MUTED))
+				continue
+			var spin := SpinBox.new()
+			spin.min_value = 0
+			spin.step = 1
+			spin.custom_minimum_size = Vector2(104, 0)
+			var wall := w
+			var t := tool
+			spin.value_changed.connect(func(v: float) -> void:
+				if _quiet:
+					return
+				if not _tools.has(wall):
+					_tools[wall] = {}
+				_tools[wall][t] = int(v)
+				_refresh_tool_spins()
+				_update())
+			_tool_rows.add_child(spin)
+			_tool_spins[w][tool] = spin
+		_tool_rows.add_child(MenuStyle.label(str(int(stock[tool])), 15, MenuStyle.MUTED))
+	_refresh_tool_spins()
+
+
+func _refresh_tool_spins() -> void:
+	## Each tool box allowed what's left in store and room on its wall.
+	var stock: Dictionary = Economy.player_castle.tools
+	var slots := Economy.tool_slots()
+	_quiet = true
+	for w: String in _tool_spins:
+		for tool: String in _tool_spins[w]:
+			var spin: SpinBox = _tool_spins[w][tool]
+			spin.max_value = maxi(0, mini(int(stock.get(tool, 0)) - _tool_placed(tool, w), slots - _wall_tools(w, tool)))
+			spin.value = int(_tools.get(w, {}).get(tool, 0))
+	_quiet = false
+
+
+func _auto_tools() -> void:
+	## Hands out the tools in store: rams to the front, then ladders and
+	## mantlets in turn to the walls the plan attacks, most soldiers first.
+	_tools = {}
+	var rules := Economy.rules
+	var stock: Dictionary = Economy.player_castle.tools
+	var slots := Economy.tool_slots()
+	if slots < 1:
+		return
+	var men := {}
+	for wave: Dictionary in plan_waves():
+		for w: String in wave:
+			for unit: String in wave[w]:
+				men[w] = int(men.get(w, 0)) + int(wave[w][unit])
+	var walls: Array = men.keys()
+	walls.sort_custom(func(x: String, y: String) -> bool: return int(men[x]) > int(men[y]))
+	var left := {}
+	for tool: String in rules.tools:
+		if rules.tool_side(tool) == "attack":
+			left[tool] = int(stock.get(tool, 0))
+	for tool: String in ["ram", "ladder", "mantlet"]:
+		if not left.has(tool):
+			continue
+		var placed := true
+		while int(left[tool]) > 0 and placed:
+			placed = false
+			for w: String in walls:
+				if int(left[tool]) > 0 and rules.tool_fits(tool, w) and _wall_tools(w) < slots:
+					if not _tools.has(w):
+						_tools[w] = {}
+					_tools[w][tool] = int(_tools[w].get(tool, 0)) + 1
+					left[tool] = int(left[tool]) - 1
+					placed = true
 
 
 # --- The other side --------------------------------------------------------------
@@ -412,8 +559,22 @@ func _describe_player() -> void:
 	lines.append("Walls: +%d%% defence" % roundi((float(seen.get("wall", 1.0)) - 1.0) * 100.0))
 	if not troops.is_empty():
 		lines.append_array(_posts(troops, _defence().layout))
+	var tools: Dictionary = _defence().tools
+	for w: String in Battle.WALLS:
+		if tools.has(w):
+			lines.append("%s wall: %s" % [w.capitalize(), tools_text(tools[w])])
 	lines.append("Seen %s ago" % _clock(Economy.now() - float(seen.get("at", Economy.now()))))
 	_enemy.text = "\n".join(lines)
+
+
+static func tools_text(at: Dictionary) -> String:
+	## "2 ladders, 1 battering ram".
+	var parts: PackedStringArray = []
+	for tool: String in at:
+		var n := int(at[tool])
+		if n > 0 and Economy.rules.has_tool(tool):
+			parts.append("%d %s" % [n, (Economy.rules.tool_name(tool) if n == 1 else Economy.rules.tool_plural(tool)).to_lower()])
+	return ", ".join(parts)
 
 
 static func _posts(troops: Dictionary, layout: Dictionary) -> PackedStringArray:
@@ -449,6 +610,13 @@ func _update() -> void:
 		lines.append("Sending %d soldiers in %s: %s (%d%%), losing about %d" % [total, _waves_text(waves.size()),
 				Battle.odds_text(r.chance), roundi(r.chance * 100.0), roundi(r.lost)])
 		_summary.add_theme_color_override("font_color", LOSS.lerp(WIN, r.chance))
+	var tools := plan_tools()
+	if total > 0 and not tools.is_empty():
+		var parts: PackedStringArray = []
+		for w: String in Battle.WALLS:
+			if tools.has(w):
+				parts.append("%s %s" % [w, tools_text(tools[w])])
+		lines.append("Siege tools: " + "; ".join(parts))
 	var why := ""
 	if _player != "":
 		if total > 0:
@@ -456,7 +624,7 @@ func _update() -> void:
 					% [roundi(float(Economy.pvp.get("loot_share", 0.25)) * 100.0), int(br.carry(army))])
 		var march := Economy.march_time_to_player(_player)
 		lines.append("March: %s there, %s back" % [_clock(march), _clock(march)])
-		why = Economy.check_raid(_player, army, waves)
+		why = Economy.check_raid(_player, army, waves, plan_tools())
 	else:
 		var camp := Economy.get_baron(camp_id)
 		if camp == null:
@@ -473,7 +641,7 @@ func _update() -> void:
 		lines.append("March: %s there, %s back" % [_clock(march), _clock(march)])
 		if not camp.is_ready(Economy.now()):
 			lines.append("The camp is rebuilding for %s." % _clock(camp.rebuilt_at - Economy.now()))
-		why = Economy.check_attack(camp_id, army, waves)
+		why = Economy.check_attack(camp_id, army, waves, plan_tools())
 	if why != "" and total > 0 and not lines[lines.size() - 1].begins_with("The camp is rebuilding"):
 		lines.append(why)
 	_summary.text = "\n".join(lines)
@@ -488,7 +656,8 @@ func _send_army() -> void:
 	var waves := plan_waves()
 	var why := "Put some soldiers on the walls to attack."
 	if not waves.is_empty():
-		why = Economy.send_raid(_player, {}, waves) if _player != "" else Economy.send_attack(camp_id, {}, waves)
+		var tools := plan_tools()
+		why = Economy.send_raid(_player, {}, waves, tools) if _player != "" else Economy.send_attack(camp_id, {}, waves, tools)
 	if why != "":
 		_note.text = why
 		_note.visible = true

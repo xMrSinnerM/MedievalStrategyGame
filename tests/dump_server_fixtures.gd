@@ -59,7 +59,8 @@ func castle_run(run: int) -> Dictionary:
 	var castle := CastleState.create_new(rules, "c%d" % run, "Castle %d" % run, "player", T0)
 	var t := T0
 	var steps: Array = []
-	var types := ["woodcutter", "quarry", "farm", "house", "barracks", "storehouse", "keep", "wall"]
+	var types := ["woodcutter", "quarry", "farm", "house", "barracks", "storehouse", "keep", "wall", "workshop"]
+	var tool_ids := rules.tools.keys()
 	var units := rules.units.keys()
 	for i in 220:
 		var step := {}
@@ -79,13 +80,20 @@ func castle_run(run: int) -> Dictionary:
 		elif roll < 60:
 			var id := rng.randi_range(1, castle._next_id)
 			step = {"op": "cancel", "t": t, "id": id, "result": castle.cancel(id, t)}
-		elif roll < 75:
+		elif roll < 70:
 			var unit: String = units[rng.randi() % units.size()]
 			var amount := rng.randi_range(0, 30)
 			step = {"op": "recruit", "t": t, "unit": unit, "amount": amount, "result": castle.recruit(unit, amount, t)}
-		elif roll < 79:
+		elif roll < 75:
+			var tool: String = tool_ids[rng.randi() % tool_ids.size()]
+			var amount := rng.randi_range(0, 12)
+			step = {"op": "craft", "t": t, "tool": tool, "amount": amount, "result": castle.craft(tool, amount, t)}
+		elif roll < 77:
 			var index := rng.randi_range(-1, 3)
 			step = {"op": "cancel_training", "t": t, "index": index, "result": castle.cancel_training(index, t)}
+		elif roll < 79:
+			var index := rng.randi_range(-1, 3)
+			step = {"op": "cancel_crafting", "t": t, "index": index, "result": castle.cancel_crafting(index, t)}
 		elif roll < 82:
 			var id := rng.randi_range(1, castle._next_id)
 			var cell := [rng.randi_range(0, rules.grid_size), rng.randi_range(0, rules.grid_size)]
@@ -101,6 +109,17 @@ func castle_run(run: int) -> Dictionary:
 			var kind: String = ["story", "daily", "daily", "daily", "chest"][rng.randi() % 5]
 			var index := rng.randi_range(-1, 2)
 			step = {"op": "quest", "t": t, "kind": kind, "index": index, "result": quest_book.claim(castle, kind, index, t)}
+		elif roll < 91:
+			# Defence tools on the walls, often more than the castle has.
+			var gift: String = tool_ids[rng.randi() % tool_ids.size()]
+			var n := rng.randi_range(0, 6)
+			castle.tools[gift] = int(castle.tools.get(gift, 0)) + n
+			var posted := random_tools(rng.randi_range(0, 4), "defence")
+			step = {"op": "set_tools", "gift": gift, "n": n, "tools": posted, "result": castle.set_defence_tools(posted)}
+			if rng.randi() % 3 == 0 and step.result == "":
+				var lost := random_tools(2)
+				castle.lose_defence_tools(lost)
+				step["lost"] = lost
 		elif roll < 92:
 			# Battles fought elsewhere, so the barons and loot tasks move.
 			var barons := rng.randi_range(0, 3)
@@ -124,6 +143,9 @@ func castle_run(run: int) -> Dictionary:
 				step.upgrade[str(b.id)] = castle.check_upgrade(b.id)
 			for unit: String in units:
 				step.recruit[unit] = castle.check_recruit(unit, 10)
+			step["craft"] = {}
+			for tool: String in tool_ids:
+				step.craft[tool] = castle.check_craft(tool, 10)
 			step["story"] = quest_book.progress(castle, quest_book.current_story(castle).goal) \
 				if not quest_book.current_story(castle).is_empty() else []
 			step["daily"] = []
@@ -164,6 +186,19 @@ func battle_case() -> Dictionary:
 			"odds": Battle.odds(rules, a, b, seed_value, wall)}
 
 
+func random_tools(max_each: int, side := "") -> Dictionary:
+	## Tools (of one side, or any) on random walls (the checks sort out which are allowed).
+	var out := {}
+	for w: String in Battle.WALLS:
+		if rng.randi() % 2 == 0:
+			var group := {}
+			for tool: String in rules.tools:
+				if (side == "" or rules.tool_side(tool) == side) and rng.randi() % 2 == 0:
+					group[tool] = rng.randi_range(0, max_each)
+			out[w] = group
+	return out
+
+
 func siege_case() -> Dictionary:
 	## Random waves against a random layout, sometimes with empty walls.
 	var waves: Array = []
@@ -185,9 +220,20 @@ func siege_case() -> Dictionary:
 	var seed_value := rng.randi_range(0, 2_000_000_000)
 	var wall := Battle.wall_from_defense(rng.randf_range(0.0, 900.0))
 	var army := random_army(rng.randi_range(1, 300))
-	return {"waves": waves, "layout": layout, "defenders": defenders, "seed": seed_value, "wall": wall,
-			"result": Battle.siege(rules, waves, defenders, layout, seed_value, wall),
-			"odds": Battle.siege_odds(rules, waves, defenders, layout, seed_value, wall),
+	var tools := {}
+	if rng.randi() % 2 == 0:
+		tools = {"a": random_tools(8), "b": random_tools(8)}
+	var stock := {}
+	for tool: String in rules.tools:
+		stock[tool] = rng.randi_range(0, 10)
+	var checks := {}
+	for side: String in ["attack", "defence"]:
+		var slots := rng.randi_range(0, 12)
+		checks[side] = {"slots": slots, "result": Battle.check_tools(rules, tools.get("a", {}), side, slots, stock)}
+	return {"waves": waves, "layout": layout, "defenders": defenders, "seed": seed_value, "wall": wall, "tools": tools,
+			"stock": stock, "checks": checks,
+			"result": Battle.siege(rules, waves, defenders, layout, seed_value, wall, tools),
+			"odds": Battle.siege_odds(rules, waves, defenders, layout, seed_value, wall, tools),
 			"army": army, "auto": Battle.auto_waves(army),
 			"split": Battle.split(defenders, layout, ["left", "right", "courtyard", "front"])}
 

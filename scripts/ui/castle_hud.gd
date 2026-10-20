@@ -14,6 +14,7 @@ var _warband: PanelContainer
 var _defence_button: Button
 var _defence: PanelContainer
 var _recruit: VBoxContainer
+var _workshop: VBoxContainer
 var _build_menu: PanelContainer
 var _build_buttons := {}       ## type -> Button
 var _side_panel: PanelContainer
@@ -234,6 +235,10 @@ func _build_side_panel() -> void:
 	_recruit.hud = self
 	_recruit.visible = false
 	box.add_child(_recruit)
+	_workshop = preload("res://scripts/ui/workshop_panel.gd").new()
+	_workshop.hud = self
+	_workshop.visible = false
+	box.add_child(_workshop)
 
 
 func _build_queue_panel() -> void:
@@ -273,6 +278,8 @@ func _process(delta: float) -> void:
 			_side_level.text = ("Being built, %s left" % left) if sel.level == 0 else ("Level %d → %d, %s left" % [sel.level, sel.target, left])
 	if _recruit.visible:
 		_recruit.update_progress(t)
+	if _workshop.visible:
+		_workshop.update_progress(t)
 	if _toast_time > 0.0:
 		_toast_time -= delta
 		_toast.modulate.a = clampf(_toast_time, 0.0, 1.0)
@@ -382,6 +389,9 @@ func _refresh_side_panel() -> void:
 	_recruit.visible = type == "barracks" and b.level > 0
 	if _recruit.visible:
 		_recruit.refresh()
+	_workshop.visible = type == "workshop" and b.level > 0
+	if _workshop.visible:
+		_workshop.refresh()
 	_fit_side_panel.call_deferred()
 
 

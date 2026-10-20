@@ -433,15 +433,19 @@ func march_time_to(camp: BaronCamp) -> float:
 	return baron_rules.march_time(home_position().distance_to(camp.position))
 
 
-func check_attack(camp_id: String, army: Dictionary, waves: Array = []) -> String:
+func check_attack(camp_id: String, army: Dictionary, waves: Array = [], tools := {}) -> String:
 	## Why this army can't be sent against the camp ("" if it can). With
-	## `waves`, the army must be their sum (Battle.waves_army()).
+	## `waves`, the army must be their sum (Battle.waves_army()); `tools` are
+	## attack tools from your store for each wall.
 	var camp := get_baron(camp_id)
 	if camp == null:
 		return "No such camp."
 	if not camp.is_ready(now()):
 		return "The camp is still rebuilding."
 	var bad := _check_waves(waves)
+	if bad != "":
+		return bad
+	bad = check_tools(tools)
 	if bad != "":
 		return bad
 	var total := 0
@@ -454,13 +458,14 @@ func check_attack(camp_id: String, army: Dictionary, waves: Array = []) -> Strin
 	return ""
 
 
-func send_attack(camp_id: String, army: Dictionary, waves: Array = []) -> String:
+func send_attack(camp_id: String, army: Dictionary, waves: Array = [], tools := {}) -> String:
 	## Sends soldiers from your main castle's garrison against a camp, in
-	## `waves` if given (see Battle.siege(); the army is then their sum). They
-	## march there, fight, and come home with what they can carry.
+	## `waves` if given (see Battle.siege(); the army is then their sum), with
+	## siege `tools` for its walls. They march there, fight, and come home
+	## with what they can carry; the tools are used up.
 	if not waves.is_empty():
 		army = Battle.waves_army(waves)
-	var why := check_attack(camp_id, army, waves)
+	var why := check_attack(camp_id, army, waves, tools)
 	if why != "":
 		return why
 	var sent := {}
@@ -476,6 +481,11 @@ func send_attack(camp_id: String, army: Dictionary, waves: Array = []) -> String
 	if not waves.is_empty():
 		march["waves"] = waves
 		order["waves"] = waves
+	var kit := Battle.clean_tools(tools)
+	if not kit.is_empty():
+		player_castle.use_tools(kit)
+		march["tools"] = kit
+		order["tools"] = kit
 	marches.append(march)
 	_next_march += 1
 	if online:
@@ -533,7 +543,8 @@ func _fight_camp(m: Dictionary) -> void:
 		attack_resolved.emit({"player": "a", "baron": true, "empty": true, "defender": camp.camp_name if camp else "",
 				"winner": "a", "a": {}, "b": {}, "loot": 0, "place": ""})
 		return
-	var result := camp.attack(baron_rules, rules, m.army, int(m.id) * 7919 + hash(m.camp), float(m.arrive), m.get("waves", []))
+	var result := camp.attack(baron_rules, rules, m.army, int(m.id) * 7919 + hash(m.camp), float(m.arrive), m.get("waves", []),
+			m.get("tools", {}))
 	m.survivors = result.survivors
 	m.loot = result.loot
 	if result.winner == "a":
@@ -542,7 +553,7 @@ func _fight_camp(m: Dictionary) -> void:
 		"player": "a", "baron": true, "attacker": "Your army", "defender": camp.camp_name,
 		"attacker_faction": player_faction, "defender_faction": "barons", "place": camp.camp_name,
 		"winner": result.winner, "a": result.a, "b": result.b, "loot": 0, "spoils": result.loot,
-		"walls": result.walls, "courtyard": result.courtyard,
+		"walls": result.walls, "courtyard": result.courtyard, "tools": result.get("tools", {}),
 		"level": result.level, "leveled": result.leveled, "new_level": camp.level,
 		"defeats": camp.defeats, "needed": baron_rules.defeats_needed(camp.level),
 		"home_in": maxf(0.0, float(m.back) - now()),
@@ -999,7 +1010,7 @@ func spy_cost() -> Dictionary:
 	return pvp.get("spy_cost", {})
 
 
-func check_raid(player_name: String, army: Dictionary, waves: Array = []) -> String:
+func check_raid(player_name: String, army: Dictionary, waves: Array = [], tools := {}) -> String:
 	## Why this army can't be sent against that player ("" if it can). With
 	## `waves`, the army must be their sum (Battle.waves_army()).
 	var target := get_other(player_name)
@@ -1014,6 +1025,9 @@ func check_raid(player_name: String, army: Dictionary, waves: Array = []) -> Str
 	var bad := _check_waves(waves)
 	if bad != "":
 		return bad
+	bad = check_tools(tools)
+	if bad != "":
+		return bad
 	var total := 0
 	for unit: String in army:
 		var n := int(army[unit])
@@ -1023,13 +1037,13 @@ func check_raid(player_name: String, army: Dictionary, waves: Array = []) -> Str
 	return "" if total > 0 else "Choose some soldiers to send."
 
 
-func send_raid(player_name: String, army: Dictionary, waves: Array = []) -> String:
+func send_raid(player_name: String, army: Dictionary, waves: Array = [], tools := {}) -> String:
 	## Sends soldiers from your garrison against another player's castle, in
-	## `waves` if given. The server decides; the soldiers leave your garrison
-	## here straight away.
+	## `waves` if given, with siege `tools`. The server decides; the soldiers
+	## and tools leave your castle here straight away.
 	if not waves.is_empty():
 		army = Battle.waves_army(waves)
-	var why := check_raid(player_name, army, waves)
+	var why := check_raid(player_name, army, waves, tools)
 	if why != "":
 		return why
 	var sent := {}
@@ -1041,6 +1055,10 @@ func send_raid(player_name: String, army: Dictionary, waves: Array = []) -> Stri
 	var order := {"action": "attack_player", "target": player_name, "army": sent}
 	if not waves.is_empty():
 		order["waves"] = waves
+	var kit := Battle.clean_tools(tools)
+	if not kit.is_empty():
+		player_castle.use_tools(kit)
+		order["tools"] = kit
 	get_node("/root/Online").order(order)
 	changed.emit()
 	return ""
@@ -1058,6 +1076,28 @@ func set_layout(castle: CastleState, layout: Dictionary) -> String:
 	castle.layout = clean
 	if online and castle == player_castle:
 		get_node("/root/Online").order({"action": "set_layout", "layout": clean})
+	save_game()
+	changed.emit()
+	return ""
+
+
+func check_tools(tools: Dictionary) -> String:
+	## Why these attack tools can't go with an attack ("" if they can).
+	return Battle.check_tools(rules, tools, "attack", tool_slots(), player_castle.tools)
+
+
+func tool_slots() -> int:
+	## How many attack tools your keep lets you bring to each wall.
+	return rules.tool_slots(player_castle.keep_level())
+
+
+func set_defence_tools(castle: CastleState, tools: Dictionary) -> String:
+	## Posts defence tools on a castle's walls. Returns "" or why not.
+	var why := castle.set_defence_tools(tools)
+	if why != "":
+		return why
+	if online and castle == player_castle:
+		get_node("/root/Online").order({"action": "set_tools", "tools": castle.defence_tools})
 	save_game()
 	changed.emit()
 	return ""
