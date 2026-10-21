@@ -519,6 +519,38 @@ The numbers live in `data/gear.json`. `GearRules`
 (`scripts/economy/gear_rules.gd`) and the server's `server/rules/gear.ts`
 give the same drops, bonuses and xp (checked by the server fixtures).
 
+## Outpost: your second castle
+
+Press **P** (or the **Outpost** button on the map). Once your keep reaches
+level 3 you can found an outpost for 4,000 wood, 4,000 stone, 2,000 food and
+2,000 gold, paid from your main castle. It goes on the free castle spot
+nearest your home, and you pick the land it works:
+
+| Region | Bonus |
+|---|---|
+| Timberland | +50% wood |
+| Quarry Hills | +50% stone |
+| Farmlands | +50% food |
+| Trade Post | +50% gold |
+
+The outpost is a castle of its own: click it on the map and **Enter
+outpost** to build there. It has its own storage, builders and production,
+and the region's bonus applies to everything it makes of that resource. It
+can build woodcutters, quarries, farms, houses, storehouses, its wall and a
+keep up to level 3, but no barracks or workshop, and it can't be attacked.
+
+**Carts** carry resources between your two castles (the **Carts** button in
+the outpost screen or on either castle's panel). One trip carries up to half
+of the sending castle's storage (at least 500) and takes as long as an army
+would to march the distance; you see the carts on the map. What doesn't fit
+in the storage when they arrive is lost, so build storehouses.
+
+Online, other players see your outpost on the map (and you theirs). The
+numbers live in `data/outposts.json`; `OutpostRules`
+(`scripts/economy/outpost_rules.gd`) and the server's
+`server/rules/outposts.ts` follow the same rules (checked by the server
+fixtures).
+
 ## Multiplayer (in progress)
 
 The multiplayer server runs on Supabase. It uses the same rules as the game,

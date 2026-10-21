@@ -98,6 +98,14 @@ export interface CastleData {
   crafting: Craft[];
   defence_tools: Tools;
   armoury: Armoury;
+  boost: Dict;
+  limits: Limits | null;
+}
+
+/** What an outpost may build (outposts.ts): only these types, its keep up to `keep`. */
+export interface Limits {
+  types: string[];
+  keep: number;
 }
 
 export class CastleState {
@@ -123,6 +131,10 @@ export class CastleState {
   defenceTools: Tools = {};
   /** Commanders, the castellan's gear and the bag of gear (gear.ts). */
   armoury: Armoury = newArmoury();
+  /** Extra production by resource (0.5 for half as much again): an outpost's region. */
+  boost: Dict = {};
+  /** An outpost's building limits; null for a normal castle. */
+  limits: Limits | null = null;
   private nextId = 1;
 
   constructor(rules: BuildingRules) {
@@ -173,6 +185,7 @@ export class CastleState {
       const p = this.rules.production(b.type, b.level);
       for (const r of Object.keys(p)) out[r] = get(out, r) + p[r];
     }
+    for (const r of Object.keys(this.boost)) if (r in out) out[r] *= 1 + this.boost[r];
     return out;
   }
 
@@ -257,6 +270,7 @@ export class CastleState {
     const r = this.rules;
     if (!r.hasType(type)) return "Unknown building";
     if (r.isPerimeter(type)) return "This is built around the castle, not placed";
+    if (this.limits && !this.limits.types.includes(type)) return "An outpost can't have one of these";
     if (this.count(type) >= r.maxCount(type, this.keepLevel())) {
       return r.isUnique(type) ? "The castle already has one" : "Upgrade the keep to build more of these";
     }
@@ -274,6 +288,7 @@ export class CastleState {
     const b = this.getBuilding(id);
     if (b === undefined) return "No such building";
     if (b.target > 0) return "Already under construction";
+    if (this.limits && b.type === "keep" && b.level >= this.limits.keep) return "An outpost's keep can't go higher";
     if (b.level >= this.rules.maxLevel(b.type, this.keepLevel())) {
       if (b.type !== "keep" && b.level < Number(this.rules.types[b.type].max_level ?? 10)) return "Upgrade the keep first";
       return "Fully upgraded";
@@ -532,6 +547,8 @@ export class CastleState {
       crafting: this.crafting.map((c) => ({ ...c })),
       defence_tools: structuredClone(this.defenceTools),
       armoury: structuredClone(this.armoury),
+      boost: { ...this.boost },
+      limits: this.limits ? { types: [...this.limits.types], keep: this.limits.keep } : null,
     };
   }
 
@@ -604,6 +621,10 @@ export class CastleState {
       if (Object.keys(set).length > 0) castle.defenceTools[w] = set;
     }
     castle.armoury = readArmoury(data.armoury);
+    for (const r of Object.keys(data.boost ?? {})) {
+      if (rules.resources.includes(r)) castle.boost[r] = Number(data.boost[r]);
+    }
+    if (data.limits) castle.limits = { types: (data.limits.types ?? []).map(String), keep: Number(data.limits.keep ?? 1) };
     return castle;
   }
 

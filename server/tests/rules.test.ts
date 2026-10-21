@@ -9,12 +9,14 @@ import { attackCamp, isReady, type CampData } from "../rules/baron_camp.ts";
 import { autoWaves, checkTools, fight, odds, siege, siegeOdds, split } from "../rules/battle.ts";
 import { CastleState } from "../rules/castle_state.ts";
 import { makeRules } from "../rules/load.ts";
+import { deliverCarts, nearestSpot, type Cart } from "../rules/outposts.ts";
 import { godotHash } from "../rules/util.ts";
 import { claimQuest, cofferReward, cofferStreak, currentStory, dailyProgress, pickDailies, progress, type QuestRules } from "../rules/quests.ts";
 
 const root = new URL("../../", import.meta.url);
 const json = (path: string) => JSON.parse(readFileSync(new URL(path, root), "utf8"));
-const rules = makeRules(json("data/buildings.json"), json("data/units.json"), json("data/barons.json"), json("data/gear.json"));
+const rules = makeRules(json("data/buildings.json"), json("data/units.json"), json("data/barons.json"), json("data/gear.json"),
+  json("data/outposts.json"));
 const fixtures = json("server/tests/fixtures.json");
 const T0 = 1_000_000;
 const quests: QuestRules = json("data/quests.json");
@@ -213,4 +215,63 @@ test("commanders and gear", () => {
   const levels: number[] = [];
   for (let x = 0; x < 320; x += 7) levels.push(g.levelFor(x));
   same(levels, run.levels, "levels");
+});
+
+test("outposts", () => {
+  const run = fixtures.outpost;
+  const o = rules.outposts;
+  const main = CastleState.createNew(rules.buildings, "c", "Main Castle", "player", run.t0);
+  const checks: Record<string, string> = { too_low: o.checkFound(main, false, "wood", [1, 1]) };
+  for (const b of main.buildings) if (b.type === "keep") b.level = o.keepNeeded;
+  checks.poor = o.checkFound(main, false, "wood", [1, 1]);
+  for (const r of Object.keys(main.resources)) main.resources[r] = 9000;
+  checks.has = o.checkFound(main, true, "wood", [1, 1]);
+  checks.region = o.checkFound(main, false, "silk", [1, 1]);
+  checks.spot = o.checkFound(main, false, "stone", null);
+  checks.ok = o.checkFound(main, false, "stone", [1, 1]);
+  same(checks, run.checks, "checks");
+  const outpost = o.found(main, run.region, run.t0);
+  let carts: Cart[] = [];
+  let nextCart = 1;
+  run.steps.forEach((step: any, i: number) => {
+    const where = `outpost step ${i} (${step.op})`;
+    switch (step.op) {
+      case "advance":
+        carts = deliverCarts(main, outpost, carts, step.t);
+        main.advanceTo(step.t);
+        outpost.advanceTo(step.t);
+        break;
+      case "place":
+        assert.equal(outpost.place(step.type, step.cell, step.t), step.result, where);
+        break;
+      case "upgrade":
+        assert.equal(outpost.upgrade(step.id, step.t), step.result, where);
+        break;
+      case "grant":
+        outpost.resources[step.resource] += step.amount;
+        break;
+      case "carts": {
+        const from = step.home ? main : outpost;
+        assert.equal(o.checkCarts(from, step.load), step.result, where);
+        assert.equal(o.cartCapacity(from), step.cap, `${where} capacity`);
+        if (step.result === "") {
+          for (const r of Object.keys(step.load)) from.resources[r] -= step.load[r];
+          carts.push({ id: nextCart++, to: step.home ? "outpost" : "home", resources: step.load, depart: step.t,
+            arrive: step.t + step.travel });
+        }
+        break;
+      }
+      case "checks":
+        for (const type of Object.keys(step.build)) assert.equal(outpost.checkBuild(type), step.build[type], `${where} build ${type}`);
+        for (const id of Object.keys(step.upgrade)) assert.equal(outpost.checkUpgrade(Number(id)), step.upgrade[id], `${where} upgrade ${id}`);
+        break;
+      default:
+        assert.fail(`unknown op ${step.op}`);
+    }
+    same(main.toDict(), step.main, `${where} main`);
+    same(outpost.toDict(), step.outpost, `${where} outpost`);
+    same(carts, step.carts, `${where} carts`);
+  });
+  same(CastleState.fromDict(rules.buildings, run.steps.at(-1).outpost).toDict(), run.steps.at(-1).outpost, "outpost save round trip");
+  for (const c of run.nearest) same(nearestSpot(run.spots, c.home, c.taken), c.spot, `nearest to ${c.home}`);
 });

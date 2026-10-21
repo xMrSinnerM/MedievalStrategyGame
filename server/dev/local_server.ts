@@ -15,6 +15,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { makeRules } from "../rules/load.ts";
+import { nearestSpot } from "../rules/outposts.ts";
 import { effectAt, eventsView, lastInvasion, withOverrides, type EventOverride, type EventRules } from "../rules/events.ts";
 import { CastleState } from "../rules/castle_state.ts";
 import {
@@ -34,7 +35,8 @@ import {
 
 const root = new URL("../../", import.meta.url);
 const json = (path: string) => JSON.parse(readFileSync(new URL(path, root), "utf8"));
-const rules = makeRules(json("data/buildings.json"), json("data/units.json"), json("data/barons.json"), json("data/gear.json"));
+const rules = makeRules(json("data/buildings.json"), json("data/units.json"), json("data/barons.json"), json("data/gear.json"),
+  json("data/outposts.json"));
 const world: World = json("server/world/world.json");
 const pvp: PvpRules = json("data/pvp.json");
 const allianceRules: AllianceRules = json("data/alliances.json");
@@ -277,13 +279,15 @@ createServer(async (req, res) => {
     if (auth === undefined || auth.expires < now()) return send(res, 401, { code: 401, message: "Invalid JWT" });
     const user = auth.user;
     if (typeof body.action === "string" && body.action.startsWith("admin")) return send(res, 200, adminOrder(user, body));
+    const takenSpots = () => [...players.values()].flatMap((p) =>
+      [[p.home_x, p.home_y] as [number, number], ...(p.outpost ? [[p.outpost.x, p.outpost.y] as [number, number]] : [])]);
     if (body.action === "join") {
       const why = checkName(body.name);
       if (why !== "") return send(res, 200, { ok: false, error: why });
       if (players.has(user)) return send(res, 200, { ok: false, error: "You already have a castle." });
       const taken = [...players.values()].some((p) => p.name.toLowerCase() === String(body.name).trim().toLowerCase());
       if (taken) return send(res, 200, { ok: false, error: "That name is taken." });
-      const spot = pickSpot(world, [...players.values()].map((p) => [p.home_x, p.home_y] as [number, number]));
+      const spot = pickSpot(world, takenSpots());
       if (spot === null) return send(res, 200, { ok: false, error: "The world is full. Try again later." });
       const state = newPlayer(rules, world, String(body.name), now(), spot, pvp);
       state.castle.troops = { ...START_TROOPS };
@@ -297,7 +301,8 @@ createServer(async (req, res) => {
     if (body.action === "world") {
       const others = [...players.entries()].filter(([id]) => id !== user)
         .map(([id, p]) => ({ name: p.name, home_x: p.home_x, home_y: p.home_y, level: castleLevel(p.castle),
-          protected: isProtected(p, pvp, now()), tag: tagOf(id), ally: allies(user, id) }));
+          protected: isProtected(p, pvp, now()), tag: tagOf(id), ally: allies(user, id),
+          outpost: p.outpost ? { name: p.outpost.name, x: p.outpost.x, y: p.outpost.y } : null }));
       return send(res, 200, { ok: true, now: now(), error: "", players: others });
     }
     if (body.action === "leaderboard") {
@@ -363,8 +368,10 @@ createServer(async (req, res) => {
     for (const r of raids) if (r.attacker === user && r.state === "home" && r.back <= now()) r.state = "done";
     for (const a of aid) if (a.sender === user && a.kind === "troops" && a.state === "out" && a.back <= now()) a.state = "done";
     const t = now();
-    const outcome = act(rules, players.get(user)!, body, t,
-      { pvp, target: target?.target, homecomings, alliances: allianceRules, aid: aidRules,
+    const me = players.get(user)!;
+    const outpostSpot = body.action === "found_outpost" && !me.outpost ? nearestSpot(world.spots, [me.home_x, me.home_y], takenSpots()) : null;
+    const outcome = act(rules, me, body, t,
+      { pvp, outpostSpot, target: target?.target, homecomings, alliances: allianceRules, aid: aidRules,
         events: { rules: eventRules, world, offset: EVENTS_OFFSET }, quests: questRules });
     players.set(user, outcome.state);
     for (const r of outcome.reports) report(user, r);

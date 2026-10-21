@@ -134,6 +134,15 @@ then the xp earned, in the `lead` column of `raids`
 (`supabase/migrations/20261021120000_raid_lead.sql`); the xp is given when
 the army is home. A spy report shows the defender's `castellan` bonuses.
 
+A player's outpost (`server/rules/outposts.ts`, `data/outposts.json`) is the
+`outpost` column of `players` (`supabase/migrations/20261022120000_outpost.sql`):
+its name, region, spot, castle state and the carts on the road. Orders:
+`found_outpost` (`region`), `send_carts` (`from`: "home" or "outpost",
+`resources`), and `place`, `upgrade`, `cancel` and `move` with
+`"castle": "outpost"`. The server picks the spot (the free one nearest your
+home, counting other players' homes and outposts), and `world` lists each
+player's `outpost`.
+
 The game owner's tools (`supabase/functions/game/admin.ts`) work only for
 accounts in the `admins` table, which the game can never change. Add one in
 the SQL editor:

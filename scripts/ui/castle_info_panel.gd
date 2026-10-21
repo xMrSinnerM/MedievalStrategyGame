@@ -13,6 +13,7 @@ var _owner: Label
 var _details: Label
 var _enter: Button
 var _travel: Button
+var _carts: Button
 var _siege_info: Label
 var _besiege: Button
 
@@ -52,6 +53,11 @@ func _ready() -> void:
 		EventBus.travel_requested.emit(settlement_id)
 		show_settlement(""))
 	buttons.add_child(_travel)
+	_carts = Button.new()
+	_carts.text = "Carts (P)"
+	_carts.focus_mode = Control.FOCUS_NONE
+	_carts.pressed.connect(func() -> void: get_tree().call_group("outpost_panel", "open_panel"))
+	buttons.add_child(_carts)
 	_siege_info = _label(14, TEXT)
 	box.add_child(_siege_info)
 	_besiege = Button.new()
@@ -91,6 +97,11 @@ func _refresh() -> void:
 		_owner.text = "Held by the %s" % faction.get("name", castle.owner)
 		_owner.add_theme_color_override("font_color", faction.get("color", MUTED).lerp(Color.WHITE, 0.35))
 		_enter.text = "Look inside"
+	elif castle.id == OutpostRules.OUTPOST_ID:
+		var region: Dictionary = Economy.outpost_rules.regions.get(Economy.outpost.get("region", ""), {})
+		_owner.text = "Your outpost: +%d%% %s" % [roundi(float(region.get("bonus", 0.0)) * 100.0), Economy.outpost.get("region", "")]
+		_owner.add_theme_color_override("font_color", Color(1.0, 0.84, 0.4))
+		_enter.text = "Enter outpost"
 	else:
 		_owner.text = "Your castle"
 		_owner.add_theme_color_override("font_color", Color(1.0, 0.84, 0.4))
@@ -113,6 +124,9 @@ func _refresh() -> void:
 		income.append("%s %+d" % [r.capitalize(), int(rates.get(r, 0.0))])
 	lines.append("Per hour: " + "  ".join(income))
 	_details.text = "\n".join(lines)
+	var is_outpost := castle.id == OutpostRules.OUTPOST_ID
+	_travel.visible = not is_outpost
+	_carts.visible = is_outpost or (castle == Economy.player_castle and not Economy.outpost.is_empty())
 	var settlement := GameData.get_settlement(settlement_id)
 	var hostile: bool = castle.is_npc() and settlement.get("faction", "") != Economy.player_faction
 	_siege_info.visible = hostile
