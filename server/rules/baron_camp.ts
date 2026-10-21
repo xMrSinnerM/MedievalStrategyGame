@@ -36,18 +36,19 @@ export function isReady(camp: CampData, now: number): boolean {
 /**
  * Storms the camp's palisade with `waves` (by default the army in one wave,
  * autoWaves()) and the attackers' siege `tools`, the garrison in
- * DEFAULT_LAYOUT, and updates the camp.
+ * DEFAULT_LAYOUT, and updates the camp. `lead` is what the army's commander
+ * adds (gear.ts effects()): harder blows, and `loot` more carried home.
  */
 export function attackCamp(camp: CampData, rules: BaronRules, units: BuildingRules, army: Dict, seed: number, now: number,
-  waves?: Wave[], tools: Tools = {}): CampAttack {
+  waves?: Wave[], tools: Tools = {}, lead: Dict = {}): CampAttack {
   const result = siege(units, waves ?? autoWaves(army), rules.garrison(camp.level), DEFAULT_LAYOUT, seed,
-    wallFromDefense(rules.palisade(camp.level)), { a: tools });
+    wallFromDefense(rules.palisade(camp.level)), { a: tools, lead_a: lead });
   const out: CampAttack = { ...result, level: camp.level, leveled: false, survivors: survivors(result.a), loot: {} };
   if (result.winner !== "a") return out;
   const factor = rules.lootFactor(now);
   const stock: Dict = {};
   for (const [r, n] of Object.entries(rules.loot(camp.level))) stock[r] = Math.floor(n * factor);
-  out.loot = carried(stock, rules.carry(out.survivors));
+  out.loot = carried(stock, rules.carry(out.survivors) * (1 + (lead.loot ?? 0)));
   camp.rebuilt_at = now + (camp.rebuild ?? rules.rebuildTime(camp.level));
   camp.defeats += 1;
   // An invader camp rises a level with every win.

@@ -480,6 +480,45 @@ workshop in `data/buildings.json`. The rules are `Battle.wall_mods()` and
 `Battle.check_tools()` (`scripts/economy/battle.gd`), the same as
 `server/rules/battle.ts` (checked by the server fixtures).
 
+## Commanders and gear
+
+Press **H** (or the **Commanders** button on the map) for the commanders
+screen. It works the same offline and online.
+
+**Commanders** lead your attacks. You start with Sir Edric Vane; Dame Isolde
+Marsh joins at keep level 3 and Sir Gareth Holt at keep 5. Pick one on the
+attack screen (the first one at home is picked for you). A commander is away
+until the army is home, earns xp from every fight (a camp's level for a win,
+15 for beating a player, 1 for a loss) and rises up to level 10, each level
+adding 2% to their army's attack at the walls and in the courtyard. Your
+**castellan** stays home and leads your castle's defence.
+
+**Gear.** Beaten robber barons drop gear: 30% of the time from a level 1
+camp, up to 90% from level 31. Each piece is attack gear (for commanders) or
+defence gear (for the castellan), for one of four slots (helmet, armour,
+weapon, banner), in five rarities: common (one bonus of 2-4%), uncommon (one
+of 4-7%), rare (two of 5-9%), epic (two of 8-12%) and legendary (three of
+11-15%, with names like "Gatebreaker" or "Crown of the Black Baron").
+Stronger camps drop rarer gear: legendaries only from level 20 up.
+
+| Bonus | Side | What it does |
+|---|---|---|
+| attack at the walls / in the courtyard | attack | Your soldiers hit harder there |
+| off the wall's bonus | attack | Like ladders: takes that share off the wall's bonus |
+| loot carried | attack | The army carries that much more home |
+| defence on the walls / in the courtyard | defence | Your defenders hit harder there |
+| wall strength | defence | Like a moat: the wall is that much stronger |
+
+Bonuses add up over the four slots, up to 60% each (50% for the wall ones,
+100% for loot). Click gear in your bag (30 places) to give it to someone or
+sell it for gold (40 to 1,500 by rarity); click worn gear to take it off. A
+commander's gear can't change while they are away. When the bag is full, new
+drops are lost. Spies see the castellan's bonuses.
+
+The numbers live in `data/gear.json`. `GearRules`
+(`scripts/economy/gear_rules.gd`) and the server's `server/rules/gear.ts`
+give the same drops, bonuses and xp (checked by the server fixtures).
+
 ## Multiplayer (in progress)
 
 The multiplayer server runs on Supabase. It uses the same rules as the game,
@@ -668,6 +707,7 @@ How the parts work:
 - [x] Siege waves: set your defenders on the walls
 - [x] Quests and daily tasks
 - [x] Siege workshop: attack and defence tools
+- [x] Commanders and gear
 
 ## Known limitations
 

@@ -126,6 +126,14 @@ keeps its tools in the `tools` column of `raids`
 (`supabase/migrations/20261020120000_raid_tools.sql`), and a spy report
 shows the defender's `tools`.
 
+Commanders and gear (`server/rules/gear.ts`, `data/gear.json`) are in the
+castle's JSON as `armoury` (commanders, the castellan's gear, the bag).
+Orders: `equip`, `unequip` and `sell_gear`; `attack` and `attack_player`
+take `commander` (an id). A raid keeps its commander, with their bonuses and
+then the xp earned, in the `lead` column of `raids`
+(`supabase/migrations/20261021120000_raid_lead.sql`); the xp is given when
+the army is home. A spy report shows the defender's `castellan` bonuses.
+
 The game owner's tools (`supabase/functions/game/admin.ts`) work only for
 accounts in the `admins` table, which the game can never change. Add one in
 the SQL editor:

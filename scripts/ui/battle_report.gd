@@ -193,6 +193,9 @@ func _add_siege_line(report: Dictionary, attacking: bool) -> void:
 	var tools := tools_line(report, attacking)
 	if tools != "":
 		line = tools if line == "" else line + "\n" + tools
+	var gear := gear_line(report) if attacking else ""
+	if gear != "":
+		line = gear if line == "" else line + "\n" + gear
 	if line != "":
 		_footer.text = line + "\n" + _footer.text
 	_fill_walls(report, attacking)
@@ -277,6 +280,30 @@ static func siege_line(report: Dictionary, attacking: bool) -> String:
 		var won_yard: bool = yard.winner == "a"
 		return line + (" and won in the courtyard." if won_yard else " but lost in the courtyard.")
 	return line + "."
+
+
+static func gear_line(report: Dictionary) -> String:
+	## The commander who led the army and what they earned, and gear the camp dropped.
+	var lines: PackedStringArray = []
+	var lead: Variant = report.get("lead")
+	if lead is Dictionary and not lead.is_empty():
+		var xp := int(lead.get("xp", 0))
+		if report.get("raid", false):
+			lines.append("%s led the army and earns %d xp when they are home." % [lead.name, xp])
+		elif lead.get("leveled", false):
+			lines.append("%s led the army: +%d xp, and rises to level %d!" % [lead.name, xp, int(lead.level)])
+		else:
+			lines.append("%s led the army: +%d xp." % [lead.name, xp])
+	var item: Variant = report.get("gear")
+	if item is Dictionary and not item.is_empty():
+		var g: GearRules = Economy.gear_rules
+		var what := "%s (%s %s: %s)" % [item.name, String(g.rarities.get(item.rarity, {}).get("name", item.rarity)).to_lower(),
+				String(g.slot_names.get(item.slot, item.slot)).to_lower(), g.item_text(item)]
+		if report.get("bag_full", false):
+			lines.append("The baron dropped %s, but your bag was full, so it was left behind." % what)
+		else:
+			lines.append("Spoils of war: %s. Find it under Commanders." % what)
+	return "\n".join(lines)
 
 
 static func tools_line(report: Dictionary, attacking: bool) -> String:

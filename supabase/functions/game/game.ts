@@ -14,6 +14,7 @@ import { checkShipment, type Aid, type AidRules } from "./aid.ts";
 import { lastInvasion, type EventRules } from "../../../server/rules/events.ts";
 import { claimReward, eventPoints, invade, rewardTiers } from "./invasion.ts";
 import { claimQuest, rollDay, type QuestRules } from "../../../server/rules/quests.ts";
+import type { GearRules, Lead } from "../../../server/rules/gear.ts";
 
 /** A player as stored in the players table (the game columns). */
 export interface PlayerState {
@@ -58,6 +59,8 @@ export interface Raid {
   waves?: Wave[];
   /** Siege tools brought to each wall. */
   tools?: Tools;
+  /** The commander leading the army; `xp` is filled in once the battle is fought. */
+  lead?: Lead;
   from: [number, number];
   to: [number, number];
   depart: number;
@@ -95,6 +98,8 @@ export interface RaidReport {
   courtyard: SiegeResult["courtyard"];
   /** Siege tools on both sides, when there were any. */
   tools?: SiegeResult["tools"];
+  /** Attacker's report: their commander and the xp earned (given when the army is home). */
+  lead?: { id: number; name: string; xp: number };
   spoils: Dict;
   wall: number;
   /** Defender's report: the allies whose soldiers fought beside the garrison. */
@@ -106,6 +111,8 @@ export interface Homecoming {
   back: number;
   survivors: Dict;
   loot: Dict;
+  /** The commander who led the army, with the xp the battle earned. */
+  lead?: Lead;
 }
 
 /** What act() needs besides the player: other players and armies coming home. */
@@ -248,11 +255,13 @@ export function act(rules: Rules, given: PlayerState, req: Request, now: number,
     marches: structuredClone(stored.marches),
     nextMarch: stored.next_march,
     home: [stored.home_x, stored.home_y],
+    gear: rules.gear,
   };
   const reports = advanceMarches(army, rules.barons, now);
   const castle = army.castle;
-  for (const raid of [...(ctx.homecomings ?? [])].sort((x, y) => x.back - y.back)) comeHomeFromRaid(castle, raid);
+  for (const raid of [...(ctx.homecomings ?? [])].sort((x, y) => x.back - y.back)) comeHomeFromRaid(rules.gear, castle, raid);
   castle.advanceTo(now);
+  rules.gear.sync(castle);
   if (ctx.quests) rollDay(castle, ctx.quests, now);
   let error = "";
   let result: unknown = undefined;
@@ -296,7 +305,7 @@ export function act(rules: Rules, given: PlayerState, req: Request, now: number,
         break;
       }
       const sent = waves ? wavesArmy(waves) : isArmy(req.army) ? req.army : null;
-      error = sent === null ? "Bad army." : sendAttack(army, rules.barons, String(req.camp), sent, now, waves, req.tools);
+      error = sent === null ? "Bad army." : sendAttack(army, rules.barons, String(req.camp), sent, now, waves, req.tools, req.commander);
       break;
     }
     case "attack_player": {
@@ -316,7 +325,9 @@ export function act(rules: Rules, given: PlayerState, req: Request, now: number,
       else error = checkArmy(castle, sent);
       const kit = checkTools(rules.buildings, req.tools, "attack", rules.buildings.toolSlots(castle.keepLevel()), castle.tools);
       if (error === "" && typeof kit === "string") error = kit;
-      if (error !== "" || target === undefined || sent === null || typeof kit === "string") break;
+      const lead = rules.gear.checkLead(castle, req.commander, now);
+      if (error === "" && typeof lead === "string") error = lead;
+      if (error !== "" || target === undefined || sent === null || typeof kit === "string" || typeof lead === "string") break;
       castle.useTools(kit);
       const army: Dict = {};
       for (const unit of Object.keys(sent)) {
@@ -327,9 +338,10 @@ export function act(rules: Rules, given: PlayerState, req: Request, now: number,
       }
       const from: [number, number] = [stored.home_x, stored.home_y];
       const travel = rules.barons.marchTime(Math.hypot(target.home[0] - from[0], target.home[1] - from[1]));
+      if (lead) rules.gear.commander(castle, lead.id)!.away_until = now + 2 * travel;
       raid = { attacker_name: stored.name, defender_name: target.name, army, from, to: target.home, depart: now,
         arrive: now + travel, back: now + 2 * travel, state: "out", survivors: {}, loot: {}, ...(waves ? { waves } : {}),
-        ...(Object.keys(kit).length > 0 ? { tools: kit } : {}) };
+        ...(Object.keys(kit).length > 0 ? { tools: kit } : {}), ...(lead ? { lead } : {}) };
       // Attacking someone ends your own beginner protection.
       protectedUntil = 0;
       break;
@@ -343,6 +355,15 @@ export function act(rules: Rules, given: PlayerState, req: Request, now: number,
       break;
     case "set_tools":
       error = castle.setDefenceTools(req.tools);
+      break;
+    case "equip":
+      error = rules.gear.equip(castle, req.who, req.item, now);
+      break;
+    case "unequip":
+      error = rules.gear.unequip(castle, req.who, req.slot, now);
+      break;
+    case "sell_gear":
+      error = rules.gear.sell(castle, req.item);
       break;
     case "set_layout": {
       error = checkLayout(req.layout);
@@ -441,9 +462,13 @@ function checkArmy(castle: CastleState, army: Dict): string {
   return total > 0 ? "" : "Choose some soldiers to send.";
 }
 
-/** Survivors of an attack on a player, or defenders back from an ally, walk back in with what they carry. */
-function comeHomeFromRaid(castle: CastleState, raid: Homecoming): void {
+/**
+ * Survivors of an attack on a player, or defenders back from an ally, walk
+ * back in with what they carry, and their commander with the xp earned.
+ */
+function comeHomeFromRaid(gear: GearRules, castle: CastleState, raid: Homecoming): void {
   castle.advanceTo(raid.back);
+  if (raid.lead?.xp) gear.addXp(castle, raid.lead.id, raid.lead.xp);
   for (const unit of Object.keys(raid.survivors)) {
     if (castle.rules.hasUnit(unit)) castle.troops[unit] = (castle.troops[unit] ?? 0) + raid.survivors[unit];
   }
@@ -467,6 +492,8 @@ export interface RaidOutcome {
   loot: Dict;
   /** What is left of each group of allied defenders, in the order given. */
   helpers: Dict[];
+  /** The attackers' commander with the xp earned, to keep on the raid until the army is home. */
+  lead?: Lead;
 }
 
 /**
@@ -483,6 +510,7 @@ export function fightRaid(rules: Rules, pvp: PvpRules, stored: PlayerState, raid
     marches: structuredClone(stored.marches),
     nextMarch: stored.next_march,
     home: [stored.home_x, stored.home_y],
+    gear: rules.gear,
   };
   const campReports = advanceMarches(world, rules.barons, raid.arrive);
   const castle = world.castle;
@@ -492,7 +520,7 @@ export function fightRaid(rules: Rules, pvp: PvpRules, stored: PlayerState, raid
   const defenders: Dict = {};
   for (const g of groups) for (const unit of Object.keys(g)) defenders[unit] = (defenders[unit] ?? 0) + g[unit];
   const result = siege(rules.buildings, raid.waves ?? autoWaves(raid.army), defenders, castle.layout, raid.id * 7919 + godotHash(raid.defender_name),
-    wall, { a: raid.tools ?? {}, b: castle.defenceTools });
+    wall, { a: raid.tools ?? {}, b: castle.defenceTools, lead_a: raid.lead?.fx ?? {}, lead_b: rules.gear.castellanEffects(castle) });
   if (result.tools) castle.loseDefenceTools(result.tools.lost);
   for (const unit of Object.keys(result.b)) shareLosses(groups, unit, result.b[unit].lost);
   const back = survivors(result.a);
@@ -503,16 +531,18 @@ export function fightRaid(rules: Rules, pvp: PvpRules, stored: PlayerState, raid
       loot[r] = Math.floor(castle.resources[r] * pvp.loot_share);
       all += loot[r];
     }
-    const capacity = rules.barons.carry(back);
+    const capacity = rules.barons.carry(back) * (1 + (raid.lead?.fx.loot ?? 0));
     const share = all <= capacity ? 1 : capacity / all;
     for (const r of Object.keys(loot)) {
       loot[r] = Math.floor(loot[r] * share);
       castle.resources[r] -= loot[r];
     }
   }
+  const lead = raid.lead ? { ...raid.lead, xp: result.winner === "a" ? rules.gear.xpPlayerWin : rules.gear.xpLoss } : undefined;
   const report = (role: "attacker" | "defender", name: string): RaidReport => ({
     kind: "raid", role, raid: raid.id, name, at: raid.arrive, winner: result.winner, a: result.a, b: result.b,
     walls: result.walls, courtyard: result.courtyard, ...(result.tools ? { tools: result.tools } : {}), spoils: loot, wall,
+    ...(role === "attacker" && lead ? { lead: { id: lead.id, name: lead.name, xp: lead.xp } } : {}),
   });
   return {
     defender: {
@@ -528,6 +558,7 @@ export function fightRaid(rules: Rules, pvp: PvpRules, stored: PlayerState, raid
     defenderReport: report("defender", raid.attacker_name),
     survivors: back,
     loot,
+    ...(lead ? { lead } : {}),
     helpers: groups.slice(1).map((g) => {
       const left: Dict = {};
       for (const unit of Object.keys(g)) if (g[unit] > 0) left[unit] = g[unit];
@@ -560,6 +591,7 @@ export function spyReport(rules: Rules, pvp: PvpRules, stored: PlayerState, now:
     marches: structuredClone(stored.marches),
     nextMarch: stored.next_march,
     home: [stored.home_x, stored.home_y],
+    gear: rules.gear,
   };
   advanceMarches(world, rules.barons, now);
   world.castle.advanceTo(now);
@@ -570,6 +602,7 @@ export function spyReport(rules: Rules, pvp: PvpRules, stored: PlayerState, now:
   return {
     name: stored.name, at: now, level: castleLevel(stored.castle), troops,
     wall: wallFromDefense(world.castle.defense()), layout: world.castle.layout, tools: world.castle.defenceTools,
+    castellan: rules.gear.castellanEffects(world.castle),
     protected: isProtected(stored, pvp, now),
   };
 }

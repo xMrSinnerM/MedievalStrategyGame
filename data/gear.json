@@ -1,0 +1,83 @@
+{
+	"_comment": "Commanders and gear. Commanders lead your attacks (one per army, away until it is home); the castellan leads your castle's defence. Each wears gear in four slots, which robber barons drop when beaten: attack gear for commanders, defence gear for the castellan. Stats are percent: wall_attack (your soldiers' damage at the walls), yard_attack (in the courtyard), wall_cut (takes that share off the wall's bonus, like ladders), loot (more carried home); wall_defence (defenders' damage at the walls), yard_defence (in the courtyard), wall_bonus (the wall is that much stronger, like a moat). Every stat adds up over a commander's gear (plus per_level for each level past the first on wall_attack and yard_attack) up to `caps`. A camp of level L drops an item with chance drop_base + drop_per_level * (L - 1) (at most drop_max); its rarity is picked with weights base + per_level * (L - 1) (never below 0). Commanders gain xp by fighting: xp_win_per_level per camp level for a win, xp_player_win for beating a player, xp_loss for a lost fight; `levels` is the total xp each level needs.",
+	"slots": ["helmet", "armour", "weapon", "banner"],
+	"slot_names": { "helmet": "Helmet", "armour": "Armour", "weapon": "Weapon", "banner": "Banner" },
+	"stats": {
+		"wall_attack": { "side": "attack", "name": "attack at the walls" },
+		"yard_attack": { "side": "attack", "name": "attack in the courtyard" },
+		"wall_cut": { "side": "attack", "name": "off the wall's bonus" },
+		"loot": { "side": "attack", "name": "loot carried" },
+		"wall_defence": { "side": "defence", "name": "defence on the walls" },
+		"yard_defence": { "side": "defence", "name": "defence in the courtyard" },
+		"wall_bonus": { "side": "defence", "name": "wall strength" }
+	},
+	"slot_stats": {
+		"attack": {
+			"helmet": ["wall_attack", "wall_cut", "yard_attack"],
+			"armour": ["yard_attack", "wall_attack", "loot"],
+			"weapon": ["wall_attack", "yard_attack", "wall_cut"],
+			"banner": ["loot", "wall_cut", "yard_attack"]
+		},
+		"defence": {
+			"helmet": ["wall_defence", "yard_defence", "wall_bonus"],
+			"armour": ["yard_defence", "wall_defence", "wall_bonus"],
+			"weapon": ["wall_defence", "yard_defence", "wall_bonus"],
+			"banner": ["wall_bonus", "wall_defence", "yard_defence"]
+		}
+	},
+	"caps": { "wall_attack": 60, "yard_attack": 60, "wall_cut": 50, "loot": 100, "wall_defence": 60, "yard_defence": 60, "wall_bonus": 50 },
+	"rarities": {
+		"common": { "name": "Common", "color": "#c9c3b5", "stats": 1, "range": [2, 4], "sell": 40, "weight": [100, -4] },
+		"uncommon": { "name": "Uncommon", "color": "#7fd36a", "stats": 1, "range": [4, 7], "sell": 100, "weight": [30, 2] },
+		"rare": { "name": "Rare", "color": "#6aa9ff", "stats": 2, "range": [5, 9], "sell": 250, "weight": [5, 2] },
+		"epic": { "name": "Epic", "color": "#c27bff", "stats": 2, "range": [8, 12], "sell": 600, "weight": [-10, 1.5] },
+		"legendary": { "name": "Legendary", "color": "#ffb340", "stats": 3, "range": [11, 15], "sell": 1500, "weight": [-15, 0.8] }
+	},
+	"drop_base": 0.3,
+	"drop_per_level": 0.02,
+	"drop_max": 0.9,
+	"bag_size": 30,
+	"commander_slots": [1, 1, 2, 2, 3],
+	"per_level": 2,
+	"levels": [0, 5, 15, 30, 50, 80, 120, 170, 230, 300],
+	"xp_win_per_level": 1,
+	"xp_player_win": 15,
+	"xp_loss": 1,
+	"commander_names": ["Sir Edric Vane", "Dame Isolde Marsh", "Sir Gareth Holt", "Lady Rowena Fell", "Sir Bors Ashby"],
+	"names": {
+		"adjectives": {
+			"common": ["Rusty", "Battered", "Plain", "Worn"],
+			"uncommon": ["Sturdy", "Tempered", "Keen", "Fine"],
+			"rare": ["Masterwork", "Gilded", "Runed", "Knight's"],
+			"epic": ["Lionheart", "Dragonforged", "Champion's", "Royal"]
+		},
+		"nouns": {
+			"attack": {
+				"helmet": ["Sallet", "Barbute", "Great Helm"],
+				"armour": ["Brigandine", "Hauberk", "Coat of Plates"],
+				"weapon": ["Longsword", "War Axe", "Morning Star"],
+				"banner": ["War Banner", "Battle Standard", "Raider's Pennon"]
+			},
+			"defence": {
+				"helmet": ["Kettle Hat", "Bascinet", "Warden's Helm"],
+				"armour": ["Gambeson", "Plate Cuirass", "Scale Coat"],
+				"weapon": ["Halberd", "Pike", "Glaive"],
+				"banner": ["Castle Pennant", "Garrison Flag", "Keep Banner"]
+			}
+		},
+		"legendary": {
+			"attack": {
+				"helmet": ["Crown of the Black Baron", "Helm of the Ninth Siege"],
+				"armour": ["Mail of the Thousand Raids", "The Ashen Hauberk"],
+				"weapon": ["Gatebreaker", "Ashbringer, Blade of Kings"],
+				"banner": ["The Burning Standard", "Banner of the Wolf Lords"]
+			},
+			"defence": {
+				"helmet": ["Helm of the Last Watch", "The Iron Vigil"],
+				"armour": ["Bulwark of Saint Aldwyn", "The Unbroken Plate"],
+				"weapon": ["Wallwarden's Halberd", "The Gatekeeper"],
+				"banner": ["Banner of the Undying Keep", "The Ever-Standing Flag"]
+			}
+		}
+	}
+}

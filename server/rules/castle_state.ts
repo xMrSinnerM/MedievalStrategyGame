@@ -7,6 +7,7 @@
 
 import { checkLayout, checkTools, DEFAULT_LAYOUT, WALLS, type Layout, type Tools } from "./battle.ts";
 import { BuildingRules } from "./building_rules.ts";
+import { newArmoury, readArmoury, type Armoury } from "./gear.ts";
 import { get, type Dict } from "./util.ts";
 
 /** Share of the cost given back when a construction is cancelled. */
@@ -96,6 +97,7 @@ export interface CastleData {
   tools: Dict;
   crafting: Craft[];
   defence_tools: Tools;
+  armoury: Armoury;
 }
 
 export class CastleState {
@@ -119,6 +121,8 @@ export class CastleState {
   tools: Dict = {};
   crafting: Craft[] = [];
   defenceTools: Tools = {};
+  /** Commanders, the castellan's gear and the bag of gear (gear.ts). */
+  armoury: Armoury = newArmoury();
   private nextId = 1;
 
   constructor(rules: BuildingRules) {
@@ -527,6 +531,7 @@ export class CastleState {
       tools: { ...this.tools },
       crafting: this.crafting.map((c) => ({ ...c })),
       defence_tools: structuredClone(this.defenceTools),
+      armoury: structuredClone(this.armoury),
     };
   }
 
@@ -598,6 +603,7 @@ export class CastleState {
       }
       if (Object.keys(set).length > 0) castle.defenceTools[w] = set;
     }
+    castle.armoury = readArmoury(data.armoury);
     return castle;
   }
 

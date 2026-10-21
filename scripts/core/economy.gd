@@ -48,6 +48,8 @@ const TICK := 1.0              ## seconds between economy updates
 const AUTOSAVE := 30.0           ## seconds between autosaves
 const DIPLOMACY_TICK := 30.0     ## seconds between rounds of AI diplomacy
 const MAIN_CASTLE := "player_castle"   ## id of your first castle, which can't be captured
+## Seed offset for what a beaten camp drops (server/rules/marches.ts DROP_SEED).
+const DROP_SEED := 31337
 ## Lords leave your main castle alone until its keep reaches this level.
 const PROTECTED_BELOW_KEEP := 2
 ## A new NPC castle starts with this many hours of building behind it (by seed).
@@ -62,6 +64,8 @@ var diplomacy: Diplomacy
 var baron_rules: BaronRules
 ## The story quests and daily tasks (data/quests.json).
 var quest_book: QuestBook
+## Commanders and gear (data/gear.json).
+var gear_rules: GearRules
 var barons: Array[BaronCamp] = []
 ## Your armies on the road: {"id", "camp", "army", "depart", "arrive", "back",
 ## "state" ("out" or "home"), "survivors", "loot"}. Times are unix seconds.
@@ -181,8 +185,10 @@ func ensure_loaded() -> void:
 	rules = BuildingRules.load_default()
 	baron_rules = BaronRules.load_default()
 	quest_book = QuestBook.load_default()
+	gear_rules = GearRules.load_default()
 	if not load_game():
 		new_game()
+	gear_rules.sync(player_castle)
 
 
 func save_path(n := -1) -> String:
@@ -245,9 +251,11 @@ func begin_new(n := 1) -> void:
 	rules = BuildingRules.load_default()
 	baron_rules = BaronRules.load_default()
 	quest_book = QuestBook.load_default()
+	gear_rules = GearRules.load_default()
 	slot = n
 	_loaded = true
 	new_game()
+	gear_rules.sync(player_castle)
 
 
 func begin_load(n := 1) -> void:
@@ -255,10 +263,12 @@ func begin_load(n := 1) -> void:
 	rules = BuildingRules.load_default()
 	baron_rules = BaronRules.load_default()
 	quest_book = QuestBook.load_default()
+	gear_rules = GearRules.load_default()
 	slot = n
 	_loaded = true
 	if not load_game():
 		new_game()
+	gear_rules.sync(player_castle)
 
 
 func _move_old_save() -> void:
@@ -433,10 +443,11 @@ func march_time_to(camp: BaronCamp) -> float:
 	return baron_rules.march_time(home_position().distance_to(camp.position))
 
 
-func check_attack(camp_id: String, army: Dictionary, waves: Array = [], tools := {}) -> String:
+func check_attack(camp_id: String, army: Dictionary, waves: Array = [], tools := {}, commander := 0) -> String:
 	## Why this army can't be sent against the camp ("" if it can). With
 	## `waves`, the army must be their sum (Battle.waves_army()); `tools` are
-	## attack tools from your store for each wall.
+	## attack tools from your store for each wall; `commander` the id of the
+	## commander to lead it (0 for none).
 	var camp := get_baron(camp_id)
 	if camp == null:
 		return "No such camp."
@@ -448,6 +459,9 @@ func check_attack(camp_id: String, army: Dictionary, waves: Array = [], tools :=
 	bad = check_tools(tools)
 	if bad != "":
 		return bad
+	var lead: Variant = gear_rules.check_lead(player_castle, commander, now())
+	if lead is String:
+		return lead
 	var total := 0
 	for unit: String in army:
 		if int(army[unit]) < 0 or int(army[unit]) > int(player_castle.troops.get(unit, 0)):
@@ -458,14 +472,15 @@ func check_attack(camp_id: String, army: Dictionary, waves: Array = [], tools :=
 	return ""
 
 
-func send_attack(camp_id: String, army: Dictionary, waves: Array = [], tools := {}) -> String:
+func send_attack(camp_id: String, army: Dictionary, waves: Array = [], tools := {}, commander := 0) -> String:
 	## Sends soldiers from your main castle's garrison against a camp, in
 	## `waves` if given (see Battle.siege(); the army is then their sum), with
-	## siege `tools` for its walls. They march there, fight, and come home
-	## with what they can carry; the tools are used up.
+	## siege `tools` for its walls, led by `commander` (an id, 0 for none).
+	## They march there, fight, and come home with what they can carry; the
+	## tools are used up, and the commander is away until they are home.
 	if not waves.is_empty():
 		army = Battle.waves_army(waves)
-	var why := check_attack(camp_id, army, waves, tools)
+	var why := check_attack(camp_id, army, waves, tools, commander)
 	if why != "":
 		return why
 	var sent := {}
@@ -486,6 +501,11 @@ func send_attack(camp_id: String, army: Dictionary, waves: Array = [], tools := 
 		player_castle.use_tools(kit)
 		march["tools"] = kit
 		order["tools"] = kit
+	var lead: Variant = gear_rules.check_lead(player_castle, commander, t)
+	if lead is Dictionary:
+		gear_rules.commander(player_castle, lead.id).away_until = float(march.back)
+		march["lead"] = lead
+		order["commander"] = int(lead.id)
 	marches.append(march)
 	_next_march += 1
 	if online:
@@ -543,13 +563,22 @@ func _fight_camp(m: Dictionary) -> void:
 		attack_resolved.emit({"player": "a", "baron": true, "empty": true, "defender": camp.camp_name if camp else "",
 				"winner": "a", "a": {}, "b": {}, "loot": 0, "place": ""})
 		return
-	var result := camp.attack(baron_rules, rules, m.army, int(m.id) * 7919 + hash(m.camp), float(m.arrive), m.get("waves", []),
-			m.get("tools", {}))
+	var lead: Dictionary = m.get("lead", {})
+	var seed_value := int(m.id) * 7919 + hash(m.camp)
+	var result := camp.attack(baron_rules, rules, m.army, seed_value, float(m.arrive), m.get("waves", []),
+			m.get("tools", {}), lead.get("fx", {}))
 	m.survivors = result.survivors
 	m.loot = result.loot
 	if result.winner == "a":
 		player_castle.stats.barons = int(player_castle.stats.barons) + 1
+	var led := {}
+	if not lead.is_empty():
+		var xp: int = gear_rules.xp_win_per_level * int(result.level) if result.winner == "a" else gear_rules.xp_loss
+		led = gear_rules.add_xp(player_castle, int(lead.id), xp)
+	var item := gear_rules.roll_drop(int(result.level), seed_value + DROP_SEED) if result.winner == "a" else {}
+	var bag_full := not item.is_empty() and not gear_rules.give(player_castle, item)
 	attack_resolved.emit({
+		"lead": led, "gear": item, "bag_full": bag_full,
 		"player": "a", "baron": true, "attacker": "Your army", "defender": camp.camp_name,
 		"attacker_faction": player_faction, "defender_faction": "barons", "place": camp.camp_name,
 		"winner": result.winner, "a": result.a, "b": result.b, "loot": 0, "spoils": result.loot,
@@ -746,6 +775,7 @@ func _process(delta: float) -> void:
 				NpcBrain.think(c, t)
 		advance_marches(t)
 		quest_book.roll_day(player_castle, t)
+		gear_rules.sync(player_castle)
 		changed.emit()
 	_diplomacy_timer += delta
 	if _diplomacy_timer >= DIPLOMACY_TICK and diplomacy != null:
@@ -771,6 +801,7 @@ func begin_online(answer: Dictionary) -> void:
 	rules = BuildingRules.load_default()
 	baron_rules = BaronRules.load_default()
 	quest_book = QuestBook.load_default()
+	gear_rules = GearRules.load_default()
 	online = true
 	_loaded = true
 	slot = 0
@@ -901,7 +932,8 @@ func _server_report(r: Dictionary) -> Dictionary:
 				"attacker_faction": player_faction, "defender_faction": "", "place": "",
 				"winner": r.get("winner", "b"), "a": r.get("a", {}), "b": r.get("b", {}), "loot": 0,
 				"spoils": r.get("spoils", {}), "wall": float(r.get("wall", 1.0)), "helped_by": r.get("helped_by", []),
-				"walls": r.get("walls", {}), "courtyard": r.get("courtyard", {}), "tools": r.get("tools", {})}
+				"walls": r.get("walls", {}), "courtyard": r.get("courtyard", {}), "tools": r.get("tools", {}),
+				"lead": r.get("lead", {})}
 	if r.get("empty", false):
 		return {"player": "a", "baron": true, "empty": true, "defender": r.get("name", ""),
 				"winner": "a", "a": {}, "b": {}, "loot": 0, "place": ""}
@@ -918,6 +950,7 @@ func _server_report(r: Dictionary) -> Dictionary:
 		"needed": int(r.get("needed", 1)), "home_in": maxf(0.0, back - now()),
 		"invader": r.has("event"), "points": int(r.get("points", 0)),
 		"walls": r.get("walls", {}), "courtyard": r.get("courtyard", {}), "tools": r.get("tools", {}),
+		"lead": r.get("lead", {}), "gear": r.get("gear", {}), "bag_full": r.get("bag_full", false),
 	}
 
 
@@ -929,6 +962,7 @@ func _process_online(delta: float) -> void:
 		_tick_timer = 0.0
 		player_castle.advance_to(now())
 		quest_book.roll_day(player_castle, now())
+		gear_rules.sync(player_castle)
 		changed.emit()
 	# Ask the server for news now and then, and as soon as an army is due
 	# to fight or come home.
@@ -1010,7 +1044,7 @@ func spy_cost() -> Dictionary:
 	return pvp.get("spy_cost", {})
 
 
-func check_raid(player_name: String, army: Dictionary, waves: Array = [], tools := {}) -> String:
+func check_raid(player_name: String, army: Dictionary, waves: Array = [], tools := {}, commander := 0) -> String:
 	## Why this army can't be sent against that player ("" if it can). With
 	## `waves`, the army must be their sum (Battle.waves_army()).
 	var target := get_other(player_name)
@@ -1028,6 +1062,9 @@ func check_raid(player_name: String, army: Dictionary, waves: Array = [], tools 
 	bad = check_tools(tools)
 	if bad != "":
 		return bad
+	var lead: Variant = gear_rules.check_lead(player_castle, commander, now())
+	if lead is String:
+		return lead
 	var total := 0
 	for unit: String in army:
 		var n := int(army[unit])
@@ -1037,13 +1074,14 @@ func check_raid(player_name: String, army: Dictionary, waves: Array = [], tools 
 	return "" if total > 0 else "Choose some soldiers to send."
 
 
-func send_raid(player_name: String, army: Dictionary, waves: Array = [], tools := {}) -> String:
+func send_raid(player_name: String, army: Dictionary, waves: Array = [], tools := {}, commander := 0) -> String:
 	## Sends soldiers from your garrison against another player's castle, in
-	## `waves` if given, with siege `tools`. The server decides; the soldiers
-	## and tools leave your castle here straight away.
+	## `waves` if given, with siege `tools`, led by `commander` (an id, 0 for
+	## none). The server decides; the soldiers, tools and commander leave
+	## your castle here straight away.
 	if not waves.is_empty():
 		army = Battle.waves_army(waves)
-	var why := check_raid(player_name, army, waves, tools)
+	var why := check_raid(player_name, army, waves, tools, commander)
 	if why != "":
 		return why
 	var sent := {}
@@ -1059,6 +1097,9 @@ func send_raid(player_name: String, army: Dictionary, waves: Array = [], tools :
 	if not kit.is_empty():
 		player_castle.use_tools(kit)
 		order["tools"] = kit
+	if commander != 0:
+		gear_rules.commander(player_castle, commander).away_until = now() + 2.0 * march_time_to_player(player_name)
+		order["commander"] = commander
 	get_node("/root/Online").order(order)
 	changed.emit()
 	return ""
@@ -1275,6 +1316,39 @@ func claim_reward(tier: int) -> String:
 	if why == "":
 		get_node("/root/Online").order({"action": "claim_reward", "tier": tier})
 	return why
+
+
+func castellan_effects(castle: CastleState) -> Dictionary:
+	## What the castellan's gear adds to a castle's defence: only your main castle has one.
+	if gear_rules == null or castle != player_castle:
+		return {}
+	return gear_rules.castellan_effects(castle)
+
+
+func equip_gear(who: Variant, item_id: int) -> String:
+	## Puts gear from your bag on a commander (an id) or the castellan ("castellan").
+	return _gear_order(gear_rules.equip(player_castle, who, item_id, now()), {"action": "equip", "who": who, "item": item_id})
+
+
+func unequip_gear(who: Variant, slot: String) -> String:
+	## Takes gear off a commander or the castellan and puts it in your bag.
+	return _gear_order(gear_rules.unequip(player_castle, who, slot, now()), {"action": "unequip", "who": who, "slot": slot})
+
+
+func sell_gear(item_id: int) -> String:
+	## Sells gear from your bag for gold.
+	return _gear_order(gear_rules.sell(player_castle, item_id), {"action": "sell_gear", "item": item_id})
+
+
+func _gear_order(why: String, order: Dictionary) -> String:
+	if why != "":
+		return why
+	if online:
+		get_node("/root/Online").order(order)
+	else:
+		save_game()
+	changed.emit()
+	return ""
 
 
 func claim_quest(kind: String, index := 0) -> String:
