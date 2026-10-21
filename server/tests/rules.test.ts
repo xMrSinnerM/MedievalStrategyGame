@@ -10,11 +10,13 @@ import { autoWaves, fight, odds, siege, siegeOdds, split } from "../rules/battle
 import { CastleState } from "../rules/castle_state.ts";
 import { makeRules } from "../rules/load.ts";
 import { godotHash } from "../rules/util.ts";
+import { claimQuest, cofferReward, cofferStreak, currentStory, dailyProgress, pickDailies, progress, type QuestRules } from "../rules/quests.ts";
 
 const root = new URL("../../", import.meta.url);
 const json = (path: string) => JSON.parse(readFileSync(new URL(path, root), "utf8"));
 const rules = makeRules(json("data/buildings.json"), json("data/units.json"), json("data/barons.json"));
 const fixtures = json("server/tests/fixtures.json");
+const quests: QuestRules = json("data/quests.json");
 
 /** Deep equality where numbers may differ by a hair (pow() in C and in JS). */
 function same(actual: unknown, expected: unknown, path = "$"): void {
@@ -77,6 +79,13 @@ for (const run of fixtures.castles) {
         case "grant":
           castle.resources[step.resource] += step.amount;
           break;
+        case "quest":
+          assert.equal(claimQuest(castle, quests, step.kind, step.index, step.t), step.result, where);
+          break;
+        case "stats":
+          castle.stats.barons += step.barons;
+          castle.stats.looted += step.looted;
+          break;
         case "soldiers": {
           const group = step.field ? castle.field : castle.troops;
           group[step.unit] = (group[step.unit] ?? 0) + step.amount;
@@ -86,6 +95,13 @@ for (const run of fixtures.castles) {
           for (const type of Object.keys(step.build)) assert.equal(castle.checkBuild(type), step.build[type], `${where} build ${type}`);
           for (const id of Object.keys(step.upgrade)) assert.equal(castle.checkUpgrade(Number(id)), step.upgrade[id], `${where} upgrade ${id}`);
           for (const unit of Object.keys(step.recruit)) assert.equal(castle.checkRecruit(unit, 10), step.recruit[unit], `${where} recruit ${unit}`);
+          {
+            const story = currentStory(castle, quests);
+            same(story ? progress(castle, story.goal) : [], step.story, `${where} story`);
+            same(castle.quests.picks.map((_, i) => dailyProgress(castle, quests, i)), step.daily, `${where} daily`);
+            same(cofferReward(quests, castle.quests.keep, cofferStreak(castle, quests)), step.coffer, `${where} coffer`);
+            same(quests.story.map((q) => progress(castle, q.goal)), step.goals, `${where} goals`);
+          }
           break;
         default:
           assert.fail(`unknown op ${step.op}`);
@@ -124,6 +140,16 @@ test("baron rules by level", () => {
       defeats_needed: r.defeatsNeeded(b.level), rebuild_time: r.rebuildTime(b.level), march_time: r.marchTime(b.level * 37.5) },
       { garrison: b.garrison, palisade: b.palisade, loot: b.loot, defeats_needed: b.defeats_needed,
         rebuild_time: b.rebuild_time, march_time: b.march_time }, `level ${b.level}`);
+  }
+});
+
+test("daily task picks", () => {
+  assert.ok(fixtures.dailies.length > 0);
+  for (const c of fixtures.dailies) {
+    const castle = CastleState.createNew(rules.buildings, "c", c.name, "player", 0);
+    same(pickDailies(castle, quests, c.day), c.none, `${c.name} day ${c.day}`);
+    castle.buildings.push({ id: 99, type: "barracks", level: 1, cell: [0, 0], target: 0, finish: 0 });
+    same(pickDailies(castle, quests, c.day), c.barracks, `${c.name} day ${c.day} with a barracks`);
   }
 });
 

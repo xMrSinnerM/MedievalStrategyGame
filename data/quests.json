@@ -1,0 +1,622 @@
+{
+	"_comment": "Quests. `story` is one chain in order: each quest's goal is checked against your castle and its reward (resources, soldiers) is given in full when you claim it, even past the storage cap. Daily tasks show `text` with the target, or `one` when the target is 1. Goal kinds: building (`count` buildings of `type` at `level` or higher), soldiers (in the garrison), stat (lifetime: trained soldiers, spent resources, beaten robber barons, looted resources), production (`resource` per hour), storage, levels (all building levels added up). `daily` tasks are picked anew every day at 00:00 UTC: `picks` of the `kinds` (fewer without a barracks for the kinds that need one), with the target and reward for the keep level you had when the day began. The reward of each kind is multiplied by `scale` for that keep level. Finishing every daily task opens the coffer; days in a row raise it by `streak_bonus` each, up to `max_streak`, and on the last one it also gives `streak_troops` (times `scale`).",
+	"narrator": "Steward Bertram",
+	"chapters": [
+		{
+			"title": "Ashes and Timber",
+			"intro": "My lord, the Black Baron's riders burned this valley before you came. Little is left but ash and good soil. Let us rebuild."
+		},
+		{
+			"title": "Steel and Bread",
+			"intro": "Smoke rises on the eastern road again. The Baron's men are robbing the farms. We need soldiers, and bread to feed them."
+		},
+		{
+			"title": "The Black Baron",
+			"intro": "A captured raider talked: the robber camps all pay tribute to one man, the Black Baron. Every camp we burn makes him weaker."
+		},
+		{
+			"title": "Walls of Stone",
+			"intro": "The Baron knows your name now. He is gathering his lieutenants. Thick walls and a deep keep will keep your people safe."
+		},
+		{
+			"title": "The Black Baron Falls",
+			"intro": "His lieutenants are dead or fled. Only the Baron's own hoard and pride remain. Finish this, and the valley is yours."
+		}
+	],
+	"story": [
+		{
+			"chapter": 0,
+			"title": "Fresh Timber",
+			"text": "Every castle starts with wood. Put the woodcutters to work properly.",
+			"goal": {
+				"kind": "building",
+				"type": "woodcutter",
+				"level": 2,
+				"count": 1
+			},
+			"reward": {
+				"resources": {
+					"wood": 150,
+					"stone": 100
+				}
+			}
+		},
+		{
+			"chapter": 0,
+			"title": "Stone from the Hills",
+			"text": "The hills behind the keep are full of good stone. Open a quarry.",
+			"goal": {
+				"kind": "building",
+				"type": "quarry",
+				"level": 1,
+				"count": 1
+			},
+			"reward": {
+				"resources": {
+					"wood": 150,
+					"stone": 150
+				}
+			}
+		},
+		{
+			"chapter": 0,
+			"title": "Full Granaries",
+			"text": "Hungry people don't build. Two farms will do for now.",
+			"goal": {
+				"kind": "building",
+				"type": "farm",
+				"level": 1,
+				"count": 2
+			},
+			"reward": {
+				"resources": {
+					"wood": 100,
+					"food": 200
+				}
+			}
+		},
+		{
+			"chapter": 0,
+			"title": "Townsfolk",
+			"text": "Craftsmen pay taxes, my lord. Give them a decent house.",
+			"goal": {
+				"kind": "building",
+				"type": "house",
+				"level": 2,
+				"count": 1
+			},
+			"reward": {
+				"resources": {
+					"wood": 150,
+					"gold": 120
+				}
+			}
+		},
+		{
+			"chapter": 0,
+			"title": "A Lord's Seat",
+			"text": "A bigger keep means more builders and more room. Raise it.",
+			"goal": {
+				"kind": "building",
+				"type": "keep",
+				"level": 2,
+				"count": 1
+			},
+			"reward": {
+				"resources": {
+					"wood": 400,
+					"stone": 400,
+					"gold": 150
+				}
+			}
+		},
+		{
+			"chapter": 1,
+			"title": "Raise the Barracks",
+			"text": "We can't fight the Baron with pitchforks. Build a barracks.",
+			"goal": {
+				"kind": "building",
+				"type": "barracks",
+				"level": 1,
+				"count": 1
+			},
+			"reward": {
+				"resources": {
+					"food": 300,
+					"gold": 200
+				}
+			}
+		},
+		{
+			"chapter": 1,
+			"title": "First Recruits",
+			"text": "Train some spearmen. Twenty would be a good start.",
+			"goal": {
+				"kind": "stat",
+				"stat": "trained",
+				"amount": 20
+			},
+			"reward": {
+				"troops": {
+					"spearman": 10
+				}
+			}
+		},
+		{
+			"chapter": 1,
+			"title": "Smoke on the Road",
+			"text": "There's a robber camp on the map. Send your soldiers and burn it.",
+			"goal": {
+				"kind": "stat",
+				"stat": "barons",
+				"amount": 1
+			},
+			"reward": {
+				"resources": {
+					"wood": 400,
+					"stone": 400,
+					"gold": 200
+				}
+			}
+		},
+		{
+			"chapter": 1,
+			"title": "Bread for an Army",
+			"text": "Soldiers eat all day. Grow 150 food an hour.",
+			"goal": {
+				"kind": "production",
+				"resource": "food",
+				"amount": 150
+			},
+			"reward": {
+				"resources": {
+					"food": 600
+				}
+			}
+		},
+		{
+			"chapter": 1,
+			"title": "Room to Store",
+			"text": "Our cellars overflow. A storehouse keeps the harvest safe.",
+			"goal": {
+				"kind": "building",
+				"type": "storehouse",
+				"level": 1,
+				"count": 1
+			},
+			"reward": {
+				"resources": {
+					"wood": 500,
+					"stone": 500
+				}
+			}
+		},
+		{
+			"chapter": 1,
+			"title": "Bowmen",
+			"text": "A level 2 barracks can train archers. The Baron's spearmen fear them.",
+			"goal": {
+				"kind": "building",
+				"type": "barracks",
+				"level": 2,
+				"count": 1
+			},
+			"reward": {
+				"troops": {
+					"archer": 15
+				}
+			}
+		},
+		{
+			"chapter": 2,
+			"title": "Stone Walls",
+			"text": "Wooden palisades burn. Raise the castle wall to level 2.",
+			"goal": {
+				"kind": "building",
+				"type": "wall",
+				"level": 2,
+				"count": 1
+			},
+			"reward": {
+				"resources": {
+					"stone": 800,
+					"gold": 300
+				}
+			}
+		},
+		{
+			"chapter": 2,
+			"title": "Seat of Power",
+			"text": "A level 3 keep tells the Baron you're here to stay.",
+			"goal": {
+				"kind": "building",
+				"type": "keep",
+				"level": 3,
+				"count": 1
+			},
+			"reward": {
+				"resources": {
+					"wood": 1500,
+					"stone": 1500,
+					"gold": 500
+				}
+			}
+		},
+		{
+			"chapter": 2,
+			"title": "Burn the Outposts",
+			"text": "Beat 5 robber camps. Each one is a tooth pulled from the Baron's mouth.",
+			"goal": {
+				"kind": "stat",
+				"stat": "barons",
+				"amount": 5
+			},
+			"reward": {
+				"resources": {
+					"food": 1000,
+					"gold": 600
+				}
+			}
+		},
+		{
+			"chapter": 2,
+			"title": "Spoils of War",
+			"text": "What the robbers stole should come home. Bring back 3,000 loot.",
+			"goal": {
+				"kind": "stat",
+				"stat": "looted",
+				"amount": 3000
+			},
+			"reward": {
+				"troops": {
+					"spearman": 30,
+					"archer": 20
+				}
+			}
+		},
+		{
+			"chapter": 2,
+			"title": "A Proper Garrison",
+			"text": "Keep 100 soldiers at home, so no raider dares come near.",
+			"goal": {
+				"kind": "soldiers",
+				"amount": 100
+			},
+			"reward": {
+				"resources": {
+					"food": 1500,
+					"gold": 800
+				}
+			}
+		},
+		{
+			"chapter": 2,
+			"title": "Swordsmiths",
+			"text": "A level 3 barracks trains swordsmen, the backbone of any army.",
+			"goal": {
+				"kind": "building",
+				"type": "barracks",
+				"level": 3,
+				"count": 1
+			},
+			"reward": {
+				"troops": {
+					"swordsman": 20
+				}
+			}
+		},
+		{
+			"chapter": 2,
+			"title": "A Growing Town",
+			"text": "Your town is growing fast. Reach 80 building levels in total.",
+			"goal": {
+				"kind": "levels",
+				"amount": 80
+			},
+			"reward": {
+				"resources": {
+					"wood": 3000,
+					"stone": 3000
+				}
+			}
+		},
+		{
+			"chapter": 3,
+			"title": "The Great Keep",
+			"text": "Raise the keep to level 4. More builders, more storage, more respect.",
+			"goal": {
+				"kind": "building",
+				"type": "keep",
+				"level": 4,
+				"count": 1
+			},
+			"reward": {
+				"resources": {
+					"wood": 5000,
+					"stone": 5000,
+					"gold": 2000
+				}
+			}
+		},
+		{
+			"chapter": 3,
+			"title": "Unbreakable",
+			"text": "The Baron is gathering siege ladders. Raise the wall to level 4.",
+			"goal": {
+				"kind": "building",
+				"type": "wall",
+				"level": 4,
+				"count": 1
+			},
+			"reward": {
+				"resources": {
+					"stone": 6000,
+					"gold": 2500
+				}
+			}
+		},
+		{
+			"chapter": 3,
+			"title": "Hunt the Lieutenants",
+			"text": "His lieutenants hide in the bigger camps. Beat 20 robber camps in all.",
+			"goal": {
+				"kind": "stat",
+				"stat": "barons",
+				"amount": 20
+			},
+			"reward": {
+				"troops": {
+					"swordsman": 50
+				}
+			}
+		},
+		{
+			"chapter": 3,
+			"title": "Coin of the Realm",
+			"text": "Wars are won with gold. Earn 800 gold an hour.",
+			"goal": {
+				"kind": "production",
+				"resource": "gold",
+				"amount": 800
+			},
+			"reward": {
+				"resources": {
+					"gold": 5000
+				}
+			}
+		},
+		{
+			"chapter": 3,
+			"title": "Riders",
+			"text": "A level 4 barracks can train horsemen. Nothing runs down archers faster.",
+			"goal": {
+				"kind": "building",
+				"type": "barracks",
+				"level": 4,
+				"count": 1
+			},
+			"reward": {
+				"troops": {
+					"horseman": 30
+				}
+			}
+		},
+		{
+			"chapter": 3,
+			"title": "Deep Cellars",
+			"text": "Make room for 20,000 of every resource.",
+			"goal": {
+				"kind": "storage",
+				"amount": 20000
+			},
+			"reward": {
+				"resources": {
+					"wood": 8000,
+					"stone": 8000,
+					"food": 8000
+				}
+			}
+		},
+		{
+			"chapter": 4,
+			"title": "The Iron Crown",
+			"text": "Raise the keep to level 5. The whole valley will see it from afar.",
+			"goal": {
+				"kind": "building",
+				"type": "keep",
+				"level": 5,
+				"count": 1
+			},
+			"reward": {
+				"resources": {
+					"wood": 15000,
+					"stone": 15000,
+					"gold": 6000
+				}
+			}
+		},
+		{
+			"chapter": 4,
+			"title": "A Thousand Spears",
+			"text": "Train 1,000 soldiers in all. The Baron's men are deserting to us already.",
+			"goal": {
+				"kind": "stat",
+				"stat": "trained",
+				"amount": 1000
+			},
+			"reward": {
+				"troops": {
+					"horseman": 60
+				}
+			}
+		},
+		{
+			"chapter": 4,
+			"title": "Cleansing the Valley",
+			"text": "Beat 50 robber camps. Leave the Baron nowhere to hide.",
+			"goal": {
+				"kind": "stat",
+				"stat": "barons",
+				"amount": 50
+			},
+			"reward": {
+				"resources": {
+					"food": 20000,
+					"gold": 10000
+				}
+			}
+		},
+		{
+			"chapter": 4,
+			"title": "The Baron's Hoard",
+			"text": "Take back what he stole. Bring home 50,000 loot in all.",
+			"goal": {
+				"kind": "stat",
+				"stat": "looted",
+				"amount": 50000
+			},
+			"reward": {
+				"resources": {
+					"wood": 20000,
+					"stone": 20000,
+					"gold": 10000
+				}
+			}
+		},
+		{
+			"chapter": 4,
+			"title": "The Last Wall",
+			"text": "A level 5 wall. Let him break his teeth on it.",
+			"goal": {
+				"kind": "building",
+				"type": "wall",
+				"level": 5,
+				"count": 1
+			},
+			"reward": {
+				"troops": {
+					"swordsman": 100,
+					"horseman": 100
+				}
+			}
+		},
+		{
+			"chapter": 4,
+			"title": "Master of the Valley",
+			"text": "Reach 300 building levels. The Black Baron is gone, and the valley is yours, my lord.",
+			"goal": {
+				"kind": "levels",
+				"amount": 300
+			},
+			"reward": {
+				"resources": {
+					"wood": 30000,
+					"stone": 30000,
+					"food": 30000,
+					"gold": 15000
+				}
+			}
+		}
+	],
+	"daily": {
+		"picks": 3,
+		"scale": [
+			1,
+			2,
+			5,
+			12,
+			25
+		],
+		"kinds": {
+			"levels": {
+				"text": "Finish %d building levels",
+				"targets": [
+					3,
+					4,
+					5,
+					5,
+					6
+				],
+				"reward": {
+					"wood": 120,
+					"stone": 120
+				}
+			},
+			"spent": {
+				"text": "Spend %d resources",
+				"targets": [
+					1500,
+					5000,
+					15000,
+					40000,
+					80000
+				],
+				"reward": {
+					"food": 120,
+					"gold": 60
+				}
+			},
+			"trained": {
+				"text": "Train %d soldiers",
+				"targets": [
+					20,
+					40,
+					80,
+					150,
+					250
+				],
+				"reward": {
+					"food": 150,
+					"gold": 60
+				},
+				"barracks": true
+			},
+			"barons": {
+				"text": "Beat %d robber barons",
+				"targets": [
+					1,
+					2,
+					3,
+					4,
+					5
+				],
+				"reward": {
+					"wood": 100,
+					"stone": 100,
+					"gold": 60
+				},
+				"barracks": true,
+				"one": "Beat a robber baron"
+			},
+			"looted": {
+				"text": "Bring home %d loot",
+				"targets": [
+					500,
+					1500,
+					4000,
+					10000,
+					20000
+				],
+				"reward": {
+					"stone": 120,
+					"gold": 80
+				},
+				"barracks": true
+			}
+		},
+		"coffer": {
+			"name": "Steward's Coffer",
+			"reward": {
+				"wood": 150,
+				"stone": 150,
+				"food": 150,
+				"gold": 80
+			},
+			"streak_bonus": 0.25,
+			"max_streak": 7,
+			"streak_troops": {
+				"swordsman": 4
+			}
+		}
+	}
+}

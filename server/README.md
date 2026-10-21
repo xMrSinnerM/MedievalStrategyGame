@@ -112,6 +112,12 @@ the tiers taken. Points count for the invasion on now, or the last one until
 the next starts. `event_board` lists the players with the most points in
 that invasion and the asking player's rank.
 
+Quests (`server/rules/quests.ts`, `data/quests.json`) live in the castle's
+own JSON (`quests`, with lifetime counts in `stats`), so they need no column
+of their own. Every request starts a new day's daily tasks once the UTC day
+turns, and `claim_quest` gives the story quest's, a daily task's or the
+coffer's reward when it is done.
+
 The game owner's tools (`supabase/functions/game/admin.ts`) work only for
 accounts in the `admins` table, which the game can never change. Add one in
 the SQL editor:

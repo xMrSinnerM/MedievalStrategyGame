@@ -27,6 +27,7 @@ import {
 import { chatView, MemoryChatStore, send as sendChat, type Speaker } from "../../supabase/functions/game/chat.ts";
 import { deliver, recall, type Aid, type AidRules } from "../../supabase/functions/game/aid.ts";
 import { invade } from "../../supabase/functions/game/invasion.ts";
+import type { QuestRules } from "../rules/quests.ts";
 import {
   adminEvents, checkGift, giftReport, giveCastle, NOT_ADMIN, startEvent, stopEvent, type AdminLogEntry,
 } from "../../supabase/functions/game/admin.ts";
@@ -39,6 +40,7 @@ const pvp: PvpRules = json("data/pvp.json");
 const allianceRules: AllianceRules = json("data/alliances.json");
 const aidRules: AidRules = json("data/aid.json");
 const eventRules0: EventRules = json("data/events.json");
+const questRules: QuestRules = json("data/quests.json");
 // The calendar with the owner's changes (kept on the shifted clock below).
 let eventRules: EventRules = eventRules0;
 // For testing: run the event calendar this many hours ahead, to see an event on.
@@ -363,7 +365,7 @@ createServer(async (req, res) => {
     const t = now();
     const outcome = act(rules, players.get(user)!, body, t,
       { pvp, target: target?.target, homecomings, alliances: allianceRules, aid: aidRules,
-        events: { rules: eventRules, world, offset: EVENTS_OFFSET } });
+        events: { rules: eventRules, world, offset: EVENTS_OFFSET }, quests: questRules });
     players.set(user, outcome.state);
     for (const r of outcome.reports) report(user, r);
     if (outcome.raid && target) raids.push({ ...outcome.raid, id: nextRaid++, attacker: user, defender: target.user });

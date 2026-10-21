@@ -139,6 +139,7 @@ function fightCamp(world: Army, rules: BaronRules, m: March): Report {
   const result = attackCamp(camp, rules, world.castle.rules, m.army, m.id * 7919 + godotHash(m.camp), m.arrive, m.waves);
   m.survivors = result.survivors;
   m.loot = result.loot;
+  if (result.winner === "a") world.castle.stats.barons += 1;
   const out: Report = { ...report, winner: result.winner, a: result.a, b: result.b, walls: result.walls, courtyard: result.courtyard, spoils: result.loot, level: result.level,
     leveled: result.leveled, new_level: camp.level, defeats: camp.defeats, needed: rules.defeatsNeeded(camp.level) };
   if (camp.event !== undefined) {
@@ -157,6 +158,7 @@ function comeHome(world: Army, m: March, at: number): void {
   for (const r of Object.keys(m.loot)) {
     const have = castle.resources[r] ?? 0;
     castle.resources[r] = Math.max(have, Math.min(cap, have + m.loot[r]));
+    castle.stats.looted += m.loot[r];
   }
   m.state = "done";
 }

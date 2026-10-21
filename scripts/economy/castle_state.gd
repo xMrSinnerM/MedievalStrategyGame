@@ -27,6 +27,12 @@ var field_ready := false       ## the warband has been given its starting army
 ## Where the garrison stands when the castle is stormed: percent on the left,
 ## front and right walls and in the courtyard (Battle.siege()).
 var layout := Battle.DEFAULT_LAYOUT.duplicate()
+## Lifetime counts the quests check (QuestBook): soldiers trained, resources
+## spent (less what cancelling gave back), robber barons beaten, loot brought home.
+var stats := new_stats()
+## Where the castle stands with its quests: the story quest being worked on,
+## today's daily tasks and the coffer (QuestBook).
+var quests := new_quest_log()
 
 var _next_id := 1
 
@@ -50,6 +56,15 @@ static func create_new(p_rules: BuildingRules, p_id: String, p_name: String, p_o
 			cell = Vector2i(int(b.cell[0]), int(b.cell[1]))
 		castle._add_building(b.type, int(b.level), cell)
 	return castle
+
+
+static func new_stats() -> Dictionary:
+	return {"trained": 0, "spent": 0.0, "barons": 0, "looted": 0.0}
+
+
+static func new_quest_log() -> Dictionary:
+	return {"story": 0, "day": -1, "keep": 1, "picks": [], "base": {}, "claimed": [], "chest": false,
+		"streak": 0, "chest_day": -1}
 
 
 func is_npc() -> bool:
@@ -297,10 +312,7 @@ func cancel(building_id: int, now: float) -> bool:
 	var b := get_building(building_id)
 	if b.is_empty() or b.target <= 0:
 		return false
-	var cost := rules.cost(b.type, b.target)
-	var cap := storage_capacity()
-	for r: String in cost:
-		resources[r] = maxf(resources.get(r, 0.0), minf(resources.get(r, 0.0) + cost[r] * CANCEL_REFUND, cap))
+	_refund(rules.cost(b.type, b.target))
 	b.target = 0
 	b.finish = 0.0
 	if b.level == 0:
@@ -326,10 +338,7 @@ func cancel_training(index: int, now: float) -> bool:
 	if index < 0 or index >= training.size():
 		return false
 	var batch: Dictionary = training[index]
-	var cost := rules.unit_cost(batch.unit, batch.remaining)
-	var cap := storage_capacity()
-	for r: String in cost:
-		resources[r] = maxf(resources.get(r, 0.0), minf(resources.get(r, 0.0) + cost[r] * CANCEL_REFUND, cap))
+	_refund(rules.unit_cost(batch.unit, batch.remaining))
 	training.remove_at(index)
 	if index == 0 and not training.is_empty():
 		training[0].next = now + training[0].unit_time
@@ -389,6 +398,7 @@ func advance_to(now: float) -> void:
 func _finish_soldier() -> void:
 	var batch: Dictionary = training[0]
 	troops[batch.unit] = troops.get(batch.unit, 0) + 1
+	stats.trained += 1
 	batch.remaining -= 1
 	var done_at: float = batch.next
 	if batch.remaining > 0:
@@ -462,6 +472,8 @@ func copy_from(other: CastleState) -> void:
 	field = other.field
 	field_ready = other.field_ready
 	layout = other.layout
+	stats = other.stats
+	quests = other.quests
 	_next_id = other._next_id
 
 
@@ -480,6 +492,7 @@ func to_dict() -> Dictionary:
 		"last_update": last_update, "next_id": _next_id,
 		"troops": troops.duplicate(), "training": training.duplicate(true), "hunger": hunger,
 		"field": field.duplicate(), "field_ready": field_ready, "layout": layout.duplicate(),
+		"stats": stats.duplicate(), "quests": quests.duplicate(true),
 	}
 
 
@@ -519,6 +532,23 @@ static func from_dict(p_rules: BuildingRules, data: Dictionary) -> CastleState:
 	if Battle.check_layout(saved) == "":
 		for key: String in Battle.DEFAULT_LAYOUT:
 			castle.layout[key] = int(saved[key])
+	# Castles saved before quests have no stats or quest log yet.
+	var st: Dictionary = data.get("stats", {})
+	castle.stats = {"trained": int(st.get("trained", 0)), "spent": float(st.get("spent", 0.0)),
+		"barons": int(st.get("barons", 0)), "looted": float(st.get("looted", 0.0))}
+	var q: Dictionary = data.get("quests", {})
+	var base := {}
+	for k: String in q.get("base", {}):
+		base[k] = float(q.base[k])
+	var picks: Array = []
+	for k in q.get("picks", []):
+		picks.append(String(k))
+	var claimed: Array = []
+	for i in q.get("claimed", []):
+		claimed.append(int(i))
+	castle.quests = {"story": int(q.get("story", 0)), "day": int(q.get("day", -1)), "keep": int(q.get("keep", 1)),
+		"picks": picks, "base": base, "claimed": claimed, "chest": bool(q.get("chest", false)),
+		"streak": int(q.get("streak", 0)), "chest_day": int(q.get("chest_day", -1))}
 	return castle
 
 
@@ -535,6 +565,15 @@ func _check_start_work(cost: Dictionary) -> String:
 func _pay(cost: Dictionary) -> void:
 	for r: String in cost:
 		resources[r] = resources.get(r, 0.0) - cost[r]
+		stats.spent += cost[r]
+
+
+func _refund(cost: Dictionary) -> void:
+	## Gives back part of a cost (CANCEL_REFUND), up to the storage cap.
+	var cap := storage_capacity()
+	for r: String in cost:
+		resources[r] = maxf(resources.get(r, 0.0), minf(resources.get(r, 0.0) + cost[r] * CANCEL_REFUND, cap))
+		stats.spent -= cost[r] * CANCEL_REFUND
 
 
 func _add_building(type: String, level: int, cell: Vector2i) -> Dictionary:
