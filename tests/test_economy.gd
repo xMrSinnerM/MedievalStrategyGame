@@ -37,6 +37,7 @@ func _initialize() -> void:
 	test_march_waves()
 	test_set_layout()
 	test_quests()
+	test_tools()
 	print("%d checks, %d failed" % [checks, failures])
 	quit(1 if failures > 0 else 0)
 
@@ -890,4 +891,66 @@ func test_quests() -> void:
 			b.level = 2
 	check(eco.claim_quest("story") == "", "the economy claims a finished quest")
 	check(int(eco.player_castle.quests.story) == 1, "and keeps it")
+	eco.free()
+
+
+func test_tools() -> void:
+	# The workshop builds tools one batch after another.
+	var c := fresh()
+	check(c.check_craft("ladder", 1) == "Build a siege workshop first", "no workshop, no tools")
+	c.buildings.append({"id": 98, "type": "workshop", "level": 1, "cell": Vector2i(0, 0), "target": 0, "finish": 0.0})
+	check(c.check_craft("ram", 1) == "Needs workshop level 5", "rams need a bigger workshop")
+	c.resources.wood = 1000.0
+	check(c.craft("ladder", 3, T0), "3 ladders queued")
+	near(c.resources.wood, 820.0, "for 60 wood each")
+	near(c.stats.spent, 180.0, "and it counts as spending")
+	c.advance_to(T0 + 41)
+	check(c.tools == {"ladder": 2}, "20 seconds a ladder: %s" % [c.tools])
+	var saved := CastleState.from_dict(rules, JSON.parse_string(JSON.stringify(c.to_dict())))
+	check(saved.tools == c.tools and saved.crafting.size() == 1, "tools and the queue are saved")
+	check(c.cancel_crafting(0, T0 + 42) and c.crafting.is_empty() and c.tools == {"ladder": 2}, "the last ladder is cancelled")
+	# What tools do at a wall.
+	near(Battle.wall_mods(rules, 2.0, {"ladder": 5}, {}).wall, 1.6, "5 ladders take 40% off the wall bonus")
+	near(Battle.wall_mods(rules, 2.0, {}, {"moat": 4}).wall, 2.4, "a moat makes it stronger")
+	near(Battle.wall_mods(rules, 1.5, {"mantlet": 20}, {"pitch": 3}).b, 0.5, "mantlets halve the defenders' blows at most")
+	near(Battle.wall_mods(rules, 1.5, {}, {"pitch": 3}).a, 0.85, "pitch hurts the attackers")
+	var waves := [{"front": {"swordsman": 50}}]
+	var bare := Battle.siege_odds(rules, waves, {"spearman": 120}, Battle.DEFAULT_LAYOUT, 1, 2.2)
+	var laddered := Battle.siege_odds(rules, waves, {"spearman": 120}, Battle.DEFAULT_LAYOUT, 1, 2.2, {"a": {"front": {"ladder": 8}}})
+	check(laddered > bare, "ladders win sieges: %s > %s" % [laddered, bare])
+	check(Battle.check_tools(rules, {"left": {"ram": 1}}, "attack", 4, {"ram": 1}) == "Battering ram can't be used at the left wall.",
+			"rams only go to the gate")
+	check(Battle.check_tools(rules, {"left": {"ladder": 3}, "right": {"ladder": 3}}, "attack", 4, {"ladder": 5})
+			== "You don't have that many siege tools.", "no more than in store")
+	# Defence tools stand on the walls and fall with them.
+	var d := fresh()
+	d.tools = {"arrow_slits": 4, "moat": 2}
+	var wall: Dictionary = d.buildings.filter(func(x: Dictionary) -> bool: return x.type == "wall")[0]
+	wall.level = 0
+	check(d.set_defence_tools({"left": {"arrow_slits": 1}}) == "No siege tools fit there yet.", "no wall, no defence tools")
+	wall.level = 2
+	check(d.set_defence_tools({"left": {"arrow_slits": 5}}) == "Only 4 siege tools fit on each wall.", "4 per wall at wall level 2")
+	check(d.set_defence_tools({"left": {"arrow_slits": 4}, "front": {"moat": 2}}) == "", "posted on two walls")
+	d.lose_defence_tools({"left": {"arrow_slits": 4}})
+	check(d.defence_tools == {"front": {"moat": 2}} and d.tools == {"moat": 2}, "the left wall fell and its arrow slits with it")
+	# Offline, attack tools go with the army and are used up.
+	var eco = load("res://scripts/core/economy.gd").new()
+	eco.save_dir = "user://test_saves"
+	eco.begin_new(1)
+	eco.castle_positions[eco.MAIN_CASTLE] = Vector2(0, 0)
+	eco.sync_barons([{"id": "near", "name": "Near", "position": [60, 0]}])
+	eco.player_castle.troops = {"swordsman": 30}
+	eco.player_castle.tools = {"ladder": 3}
+	var plan := [{"front": {"swordsman": 30}}]
+	check(eco.send_attack("near", {}, plan, {"front": {"ladder": 3}}) == "Only 2 siege tools fit on each wall.", "a level 1 keep brings 2 per wall")
+	var reports: Array = []
+	eco.attack_resolved.connect(func(r: Dictionary) -> void: reports.append(r))
+	check(eco.send_attack("near", {}, plan, {"front": {"ladder": 2}}) == "", "2 ladders go with the army")
+	check(eco.player_castle.tools == {"ladder": 1}, "and leave the store")
+	eco.advance_marches(float(eco.marches[0].arrive) + 1.0)
+	check(reports.size() == 1 and reports[0].tools.a == {"front": {"ladder": 2}}, "the report shows the ladders")
+	var panel: GDScript = load("res://scripts/ui/battle_report.gd")
+	check(panel.has_method("tools_line"), "the battle report can show tools")
+	eco.delete_slot(1)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://test_saves"))
 	eco.free()

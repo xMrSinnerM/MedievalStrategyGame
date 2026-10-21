@@ -15,10 +15,14 @@
 // POST { "action": "move", "id", "cell": [x, y] }
 // POST { "action": "recruit", "unit", "amount" }
 // POST { "action": "cancel_training", "index" }
+// POST { "action": "craft", "tool", "amount" }    siege tools from the workshop (data/units.json "tools")
+// POST { "action": "cancel_crafting", "index" }
+// POST { "action": "set_tools", "tools": { "left" | "front" | "right": { tool: count } } }   defence tools on your walls
 // POST { "action": "attack", "camp", "army": { unit: count } }
 // POST { "action": "attack_player", "target": "name", "army": { unit: count } }
 //   "attack" and "attack_player" also take "waves": [{ "left" | "front" | "right": { unit: count } }, ...]
-//   instead of "army": how the army storms the walls (up to wavesForKeep() waves, server/rules/battle.ts)
+//   instead of "army": how the army storms the walls (up to wavesForKeep() waves, server/rules/battle.ts),
+//   and "tools": { "left" | "front" | "right": { tool: count } }, attack tools from your store
 // POST { "action": "set_layout", "layout": { "left", "front", "right", "courtyard" } }   percent of the garrison at each post
 // POST { "action": "spy", "target": "name" }
 // POST { "action": "found_alliance", "name", "tag" }  costs gold (data/alliances.json)
@@ -116,7 +120,7 @@ function now(): number {
 function raidFromRow(r: Row): Raid {
   return {
     id: Number(r.id), attacker_name: r.attacker_name, defender_name: r.defender_name, army: r.army,
-    ...(r.waves ? { waves: r.waves } : {}), from: [r.from_x, r.from_y], to: [r.to_x, r.to_y], depart: r.depart, arrive: r.arrive, back: r.back,
+    ...(r.waves ? { waves: r.waves } : {}), ...(r.tools ? { tools: r.tools } : {}), from: [r.from_x, r.from_y], to: [r.to_x, r.to_y], depart: r.depart, arrive: r.arrive, back: r.back,
     state: r.state, survivors: r.survivors, loot: r.loot,
   };
 }
@@ -142,8 +146,8 @@ async function activeRaids(userId: string) {
   return (data ?? []).map((r: Row) => {
     const mine = r.attacker === userId;
     const raid = raidFromRow(r);
-    return { ...raid, mine, army: mine ? raid.army : {}, waves: mine ? raid.waves : undefined, survivors: mine ? raid.survivors : {},
-      loot: mine ? raid.loot : {} };
+    return { ...raid, mine, army: mine ? raid.army : {}, waves: mine ? raid.waves : undefined,
+      tools: mine ? raid.tools : undefined, survivors: mine ? raid.survivors : {}, loot: mine ? raid.loot : {} };
   });
 }
 
@@ -561,7 +565,7 @@ Deno.serve(async (req: Request) => {
       const r = outcome.raid;
       await admin.from("raids").insert({
         attacker: userId, defender: target.row.user_id, attacker_name: r.attacker_name, defender_name: r.defender_name,
-        army: r.army, waves: r.waves ?? null, from_x: r.from[0], from_y: r.from[1], to_x: r.to[0], to_y: r.to[1],
+        army: r.army, waves: r.waves ?? null, tools: r.tools ?? null, from_x: r.from[0], from_y: r.from[1], to_x: r.to[0], to_y: r.to[1],
         depart: r.depart, arrive: r.arrive, back: r.back,
       });
     }

@@ -118,6 +118,14 @@ of their own. Every request starts a new day's daily tasks once the UTC day
 turns, and `claim_quest` gives the story quest's, a daily task's or the
 coffer's reward when it is done.
 
+Siege tools are in the castle's JSON too (`tools` in store, `crafting`, and
+`defence_tools` posted on the walls). Orders: `craft` and `cancel_crafting`
+for the workshop, `set_tools` for defence tools; `attack` and
+`attack_player` take `tools` ({wall: {tool: count}}) and use them up. A raid
+keeps its tools in the `tools` column of `raids`
+(`supabase/migrations/20261020120000_raid_tools.sql`), and a spy report
+shows the defender's `tools`.
+
 The game owner's tools (`supabase/functions/game/admin.ts`) work only for
 accounts in the `admins` table, which the game can never change. Add one in
 the SQL editor:

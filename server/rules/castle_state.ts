@@ -5,7 +5,7 @@
 //
 // Time is passed in explicitly (Unix seconds).
 
-import { checkLayout, DEFAULT_LAYOUT, type Layout } from "./battle.ts";
+import { checkLayout, checkTools, DEFAULT_LAYOUT, WALLS, type Layout, type Tools } from "./battle.ts";
 import { BuildingRules } from "./building_rules.ts";
 import { get, type Dict } from "./util.ts";
 
@@ -23,6 +23,14 @@ export interface Building {
 
 export interface Batch {
   unit: string;
+  remaining: number;
+  unit_time: number;
+  next: number;
+}
+
+/** Siege tools being built in the workshop, one after another. */
+export interface Craft {
+  tool: string;
   remaining: number;
   unit_time: number;
   next: number;
@@ -85,6 +93,9 @@ export interface CastleData {
   layout: Layout;
   stats: Stats;
   quests: QuestLog;
+  tools: Dict;
+  crafting: Craft[];
+  defence_tools: Tools;
 }
 
 export class CastleState {
@@ -104,6 +115,10 @@ export class CastleState {
   layout: Layout = { ...DEFAULT_LAYOUT };
   stats: Stats = newStats();
   quests: QuestLog = newQuestLog();
+  /** Siege tools in store, the workshop's queue, and the defence tools posted on each wall. */
+  tools: Dict = {};
+  crafting: Craft[] = [];
+  defenceTools: Tools = {};
   private nextId = 1;
 
   constructor(rules: BuildingRules) {
@@ -188,6 +203,33 @@ export class CastleState {
     if (this.training.length >= r.queueSize) return "The training queue is full";
     if (!this.canAfford(r.unitCost(unit, amount))) return "Not enough resources";
     return "";
+  }
+
+  workshopLevel(): number {
+    for (const b of this.buildings) if (b.type === "workshop") return b.level;
+    return 0;
+  }
+
+  wallLevel(): number {
+    for (const b of this.buildings) if (b.type === "wall") return b.level;
+    return 0;
+  }
+
+  checkCraft(tool: string, amount: number): string {
+    const r = this.rules;
+    if (!r.hasTool(tool)) return "Unknown siege tool";
+    if (this.workshopLevel() <= 0) return "Build a siege workshop first";
+    if (this.workshopLevel() < r.toolWorkshopLevel(tool)) return `Needs workshop level ${r.toolWorkshopLevel(tool)}`;
+    if (!Number.isInteger(amount) || amount < 1 || amount > r.maxBatch) return `Build between 1 and ${r.maxBatch} at a time`;
+    if (this.crafting.length >= r.queueSize) return "The workshop queue is full";
+    if (!this.canAfford(r.toolCost(tool, amount))) return "Not enough resources";
+    return "";
+  }
+
+  /** Why these defence tools can't stand on the walls ("" if they can). */
+  checkDefenceTools(tools: unknown): string {
+    const checked = checkTools(this.rules, tools, "defence", this.rules.toolSlots(this.wallLevel()), this.tools);
+    return typeof checked === "string" ? checked : "";
   }
 
   storageCapacity(): number {
@@ -301,6 +343,56 @@ export class CastleState {
     return true;
   }
 
+  craft(tool: string, amount: number, now: number): boolean {
+    this.advanceTo(now);
+    if (this.checkCraft(tool, amount) !== "") return false;
+    this.pay(this.rules.toolCost(tool, amount));
+    const unitTime = this.rules.toolTime(tool, this.workshopLevel());
+    this.crafting.push({ tool, remaining: amount, unit_time: unitTime, next: this.crafting.length === 0 ? now + unitTime : 0 });
+    return true;
+  }
+
+  cancelCrafting(index: number, now: number): boolean {
+    this.advanceTo(now);
+    if (!Number.isInteger(index) || index < 0 || index >= this.crafting.length) return false;
+    const batch = this.crafting[index];
+    this.refund(this.rules.toolCost(batch.tool, batch.remaining));
+    this.crafting.splice(index, 1);
+    if (index === 0 && this.crafting.length > 0) this.crafting[0].next = now + this.crafting[0].unit_time;
+    return true;
+  }
+
+  setDefenceTools(tools: unknown): string {
+    const checked = checkTools(this.rules, tools, "defence", this.rules.toolSlots(this.wallLevel()), this.tools);
+    if (typeof checked === "string") return checked;
+    this.defenceTools = checked;
+    return "";
+  }
+
+  /** Takes tools out of the store (attack tools sent with an army, or tools lost). */
+  useTools(tools: Tools): void {
+    for (const w of WALLS) {
+      for (const [tool, n] of Object.entries(tools[w] ?? {})) {
+        this.tools[tool] = Math.max(0, (this.tools[tool] ?? 0) - n);
+        if (this.tools[tool] === 0) delete this.tools[tool];
+      }
+    }
+  }
+
+  /** Defence tools lost when their walls fell: off the walls and out of the store. */
+  loseDefenceTools(lost: Tools): void {
+    for (const w of WALLS) {
+      const posted = this.defenceTools[w];
+      if (posted === undefined) continue;
+      for (const [tool, n] of Object.entries(lost[w] ?? {})) {
+        posted[tool] = Math.max(0, (posted[tool] ?? 0) - n);
+        if (posted[tool] === 0) delete posted[tool];
+      }
+      if (Object.keys(posted).length === 0) delete this.defenceTools[w];
+    }
+    this.useTools(lost);
+  }
+
   move(id: number, cell: [number, number]): boolean {
     const b = this.getBuilding(id);
     if (b === undefined || b.cell[0] < 0 || !this.fits(b.type, cell, id)) return false;
@@ -332,6 +424,23 @@ export class CastleState {
       } else {
         break;
       }
+    }
+    this.finishCrafts(now);
+  }
+
+  /** Tools don't eat or produce, so the workshop just catches up. */
+  private finishCrafts(now: number): void {
+    while (this.crafting.length > 0 && this.crafting[0].next <= now) {
+      const batch = this.crafting[0];
+      this.tools[batch.tool] = get(this.tools, batch.tool) + 1;
+      batch.remaining -= 1;
+      const doneAt = batch.next;
+      if (batch.remaining > 0) {
+        batch.next = doneAt + batch.unit_time;
+        continue;
+      }
+      this.crafting.shift();
+      if (this.crafting.length > 0) this.crafting[0].next = doneAt + this.crafting[0].unit_time;
     }
   }
 
@@ -415,6 +524,9 @@ export class CastleState {
       layout: { ...this.layout },
       stats: { ...this.stats },
       quests: structuredClone(this.quests),
+      tools: { ...this.tools },
+      crafting: this.crafting.map((c) => ({ ...c })),
+      defence_tools: structuredClone(this.defenceTools),
     };
   }
 
@@ -466,6 +578,26 @@ export class CastleState {
       picks: (q.picks ?? []).map(String), base, claimed: (q.claimed ?? []).map((i: unknown) => Math.trunc(Number(i))),
       chest: Boolean(q.chest ?? false), streak: Math.trunc(Number(q.streak ?? 0)), chest_day: Math.trunc(Number(q.chest_day ?? -1)),
     };
+    for (const tool of Object.keys(data.tools ?? {})) {
+      const n = Math.trunc(Number(data.tools[tool]));
+      if (rules.hasTool(tool) && n > 0) castle.tools[tool] = n;
+    }
+    for (const c of data.crafting ?? []) {
+      if (rules.hasTool(c.tool ?? "")) {
+        castle.crafting.push({ tool: String(c.tool), remaining: Number(c.remaining), unit_time: Number(c.unit_time), next: Number(c.next ?? 0) });
+      }
+    }
+    if (castle.crafting.length > 0 && castle.crafting[0].next <= 0) {
+      castle.crafting[0].next = castle.lastUpdate + castle.crafting[0].unit_time;
+    }
+    for (const w of WALLS) {
+      const set: Dict = {};
+      for (const tool of Object.keys(data.defence_tools?.[w] ?? {})) {
+        const n = Math.trunc(Number(data.defence_tools[w][tool]));
+        if (rules.hasTool(tool) && n > 0) set[tool] = n;
+      }
+      if (Object.keys(set).length > 0) castle.defenceTools[w] = set;
+    }
     return castle;
   }
 

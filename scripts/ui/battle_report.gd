@@ -190,6 +190,9 @@ func show_raid_report(report: Dictionary) -> void:
 func _add_siege_line(report: Dictionary, attacking: bool) -> void:
 	## Puts how the walls and the courtyard went (Battle.siege()) above the footer.
 	var line := siege_line(report, attacking)
+	var tools := tools_line(report, attacking)
+	if tools != "":
+		line = tools if line == "" else line + "\n" + tools
 	if line != "":
 		_footer.text = line + "\n" + _footer.text
 	_fill_walls(report, attacking)
@@ -274,6 +277,44 @@ static func siege_line(report: Dictionary, attacking: bool) -> String:
 		var won_yard: bool = yard.winner == "a"
 		return line + (" and won in the courtyard." if won_yard else " but lost in the courtyard.")
 	return line + "."
+
+
+static func tools_line(report: Dictionary, attacking: bool) -> String:
+	## Which siege tools each side used, and the defence tools lost with their walls.
+	var tools: Variant = report.get("tools")
+	if not tools is Dictionary or tools.is_empty():
+		return ""
+	var parts: PackedStringArray = []
+	var a := _tools_at(tools.get("a", {}))
+	var b := _tools_at(tools.get("b", {}))
+	var lost := _tools_at(tools.get("lost", {}))
+	if a != "":
+		parts.append(("Your siege tools: " if attacking else "Their siege tools: ") + a + ".")
+	if b != "":
+		parts.append(("Their defence tools: " if attacking else "Your defence tools: ") + b + ".")
+	if lost != "":
+		parts.append(("Destroyed with their walls: " if attacking else "Lost with your walls: ") + lost + ".")
+	return " ".join(parts)
+
+
+static func _tools_at(group: Variant) -> String:
+	## "front 4 ladders; left 2 arrow slits".
+	if not group is Dictionary:
+		return ""
+	var rules := Economy.rules
+	var out: PackedStringArray = []
+	for w: String in Battle.WALLS:
+		var at: Variant = group.get(w, {})
+		if not at is Dictionary:
+			continue
+		var items: PackedStringArray = []
+		for tool: String in at:
+			var n := int(at[tool])
+			if n > 0 and rules.has_tool(tool):
+				items.append("%d %s" % [n, (rules.tool_name(tool) if n == 1 else rules.tool_plural(tool)).to_lower()])
+		if not items.is_empty():
+			out.append("%s %s" % [w, ", ".join(items)])
+	return "; ".join(out)
 
 
 func _clear_grid() -> void:

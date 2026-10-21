@@ -17,6 +17,8 @@ var units: Dictionary = {}       ## unit id -> definition
 var queue_size := 5              ## training batches a castle can queue
 var max_batch := 50              ## soldiers per batch
 var time_per_barracks_level := 0.92
+var tools: Dictionary = {}       ## siege tool id -> definition (data/units.json "tools")
+var tool_slot_table: Array = []  ## tools per wall by level
 
 
 static func load_default() -> BuildingRules:
@@ -48,6 +50,8 @@ func load_units(data: Dictionary) -> void:
 	queue_size = int(data.get("queue_size", 5))
 	max_batch = int(data.get("max_batch", 50))
 	time_per_barracks_level = float(data.get("time_per_barracks_level", 0.92))
+	tools = data.get("tools", {})
+	tool_slot_table = data.get("tool_slots", [0])
 
 
 func has_type(type: String) -> bool:
@@ -179,3 +183,55 @@ func unit_barracks_level(unit: String) -> int:
 func unit_bonus(unit: String, against: String) -> float:
 	## How much harder this unit hits soldiers of the other type (1 = normal).
 	return float(units[unit].get("bonus", {}).get(against, 1.0))
+
+
+# --- Siege tools --------------------------------------------------------------
+
+func has_tool(tool: String) -> bool:
+	return tools.has(tool)
+
+
+func tool_name(tool: String) -> String:
+	return tools[tool].get("name", tool)
+
+
+func tool_plural(tool: String) -> String:
+	return tools[tool].get("plural", tool_name(tool) + "s")
+
+
+func tool_side(tool: String) -> String:
+	## "attack" or "defence".
+	return String(tools[tool].get("side", "attack"))
+
+
+func tool_cost(tool: String, count := 1) -> Dictionary:
+	var out := {}
+	for r: String in tools[tool].get("cost", {}):
+		out[r] = float(tools[tool].cost[r]) * count
+	return out
+
+
+func tool_time(tool: String, workshop_level: int) -> float:
+	## Seconds to build one tool; each workshop level above 1 builds faster.
+	return roundf(float(tools[tool].get("time", 30)) * pow(time_per_barracks_level, maxi(workshop_level - 1, 0)))
+
+
+func tool_workshop_level(tool: String) -> int:
+	return int(tools[tool].get("workshop_level", 1))
+
+
+func tool_fits(tool: String, wall: String) -> bool:
+	## Whether the tool can be used at this wall.
+	var walls: Variant = tools[tool].get("walls")
+	return walls == null or (walls as Array).has(wall)
+
+
+func tool_effect(tool: String, effect: String) -> float:
+	return float(tools[tool].get("effect", {}).get(effect, 0.0))
+
+
+func tool_slots(level: int) -> int:
+	## How many tools fit on one wall: attack tools by keep level, defence tools by wall level.
+	if level < 1:
+		return 0
+	return int(tool_slot_table[clampi(level - 1, 0, tool_slot_table.size() - 1)])

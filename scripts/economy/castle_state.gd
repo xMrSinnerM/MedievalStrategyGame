@@ -33,6 +33,12 @@ var stats := new_stats()
 ## Where the castle stands with its quests: the story quest being worked on,
 ## today's daily tasks and the coffer (QuestBook).
 var quests := new_quest_log()
+## Siege tools in store (tool -> count), the workshop's queue (batches
+## {tool, remaining, unit_time, next}, like training) and the defence tools
+## posted on each wall (wall -> {tool: count}, Battle.siege()).
+var tools := {}
+var crafting: Array[Dictionary] = []
+var defence_tools := {}
 
 var _next_id := 1
 
@@ -204,6 +210,52 @@ func affordable(unit: String) -> int:
 	return maxi(n, 0)
 
 
+func workshop_level() -> int:
+	for b in buildings:
+		if b.type == "workshop":
+			return b.level
+	return 0
+
+
+func wall_level() -> int:
+	for b in buildings:
+		if b.type == "wall":
+			return b.level
+	return 0
+
+
+func check_craft(tool: String, amount: int) -> String:
+	## Why `amount` of this siege tool can't be queued, or "" if they can.
+	if not rules.has_tool(tool):
+		return "Unknown siege tool"
+	if workshop_level() <= 0:
+		return "Build a siege workshop first"
+	if workshop_level() < rules.tool_workshop_level(tool):
+		return "Needs workshop level %d" % rules.tool_workshop_level(tool)
+	if amount < 1 or amount > rules.max_batch:
+		return "Build between 1 and %d at a time" % rules.max_batch
+	if crafting.size() >= rules.queue_size:
+		return "The workshop queue is full"
+	if not can_afford(rules.tool_cost(tool, amount)):
+		return "Not enough resources"
+	return ""
+
+
+func affordable_tools(tool: String) -> int:
+	## How many of this tool the castle could pay for right now (capped at a batch).
+	var cost := rules.tool_cost(tool)
+	var n := rules.max_batch
+	for r: String in cost:
+		if cost[r] > 0.0:
+			n = mini(n, int(floor((resources.get(r, 0.0) + 0.0001) / cost[r])))
+	return maxi(n, 0)
+
+
+func check_defence_tools(group: Variant) -> String:
+	## Why these defence tools can't stand on the walls ("" if they can).
+	return Battle.check_tools(rules, group, "defence", rules.tool_slots(wall_level()), tools)
+
+
 func storage_capacity() -> float:
 	## The same cap applies to every resource.
 	var total := 0.0
@@ -345,6 +397,76 @@ func cancel_training(index: int, now: float) -> bool:
 	return true
 
 
+func craft(tool: String, amount: int, now: float) -> bool:
+	## Pays for `amount` siege tools and queues them in the workshop.
+	advance_to(now)
+	if check_craft(tool, amount) != "":
+		return false
+	_pay(rules.tool_cost(tool, amount))
+	var unit_time := rules.tool_time(tool, workshop_level())
+	crafting.append({"tool": tool, "remaining": amount, "unit_time": unit_time,
+		"next": now + unit_time if crafting.is_empty() else 0.0})
+	return true
+
+
+func cancel_crafting(index: int, now: float) -> bool:
+	## Drops a queued batch of tools and refunds part of what the unbuilt ones cost.
+	advance_to(now)
+	if index < 0 or index >= crafting.size():
+		return false
+	var batch: Dictionary = crafting[index]
+	_refund(rules.tool_cost(batch.tool, batch.remaining))
+	crafting.remove_at(index)
+	if index == 0 and not crafting.is_empty():
+		crafting[0].next = now + crafting[0].unit_time
+	return true
+
+
+func set_defence_tools(group: Variant) -> String:
+	## Posts defence tools on the walls; "" or why not.
+	var why := check_defence_tools(group)
+	if why != "":
+		return why
+	defence_tools = Battle.clean_tools(group if group is Dictionary else {})
+	return ""
+
+
+func use_tools(group: Dictionary) -> void:
+	## Takes tools out of the store (attack tools sent with an army, or tools lost).
+	for w: String in Battle.WALLS:
+		var at: Dictionary = group.get(w, {})
+		for tool: String in at:
+			tools[tool] = maxi(0, int(tools.get(tool, 0)) - int(at[tool]))
+			if tools[tool] == 0:
+				tools.erase(tool)
+
+
+func lose_defence_tools(lost: Dictionary) -> void:
+	## Defence tools lost when their walls fell: off the walls and out of the store.
+	for w: String in Battle.WALLS:
+		if not defence_tools.has(w):
+			continue
+		var posted: Dictionary = defence_tools[w]
+		var gone: Dictionary = lost.get(w, {})
+		for tool: String in gone:
+			posted[tool] = maxi(0, int(posted.get(tool, 0)) - int(gone[tool]))
+			if posted[tool] == 0:
+				posted.erase(tool)
+		if posted.is_empty():
+			defence_tools.erase(w)
+	use_tools(lost)
+
+
+func crafting_left(now: float) -> float:
+	## Seconds until the workshop's whole queue is built.
+	if crafting.is_empty():
+		return 0.0
+	var total: float = maxf(crafting[0].next - now, 0.0) + crafting[0].unit_time * (crafting[0].remaining - 1)
+	for i in range(1, crafting.size()):
+		total += crafting[i].unit_time * crafting[i].remaining
+	return total
+
+
 func training_left(now: float) -> float:
 	## Seconds until the whole queue is trained.
 	if training.is_empty():
@@ -393,6 +515,22 @@ func advance_to(now: float) -> void:
 			next.finish = 0.0
 		else:
 			break
+	_finish_crafts(now)
+
+
+func _finish_crafts(now: float) -> void:
+	## Tools don't eat or produce, so the workshop just catches up.
+	while not crafting.is_empty() and crafting[0].next <= now:
+		var batch: Dictionary = crafting[0]
+		tools[batch.tool] = int(tools.get(batch.tool, 0)) + 1
+		batch.remaining -= 1
+		var done_at: float = batch.next
+		if batch.remaining > 0:
+			batch.next = done_at + batch.unit_time
+			continue
+		crafting.pop_front()
+		if not crafting.is_empty():
+			crafting[0].next = done_at + crafting[0].unit_time
 
 
 func _finish_soldier() -> void:
@@ -474,6 +612,9 @@ func copy_from(other: CastleState) -> void:
 	layout = other.layout
 	stats = other.stats
 	quests = other.quests
+	tools = other.tools
+	crafting = other.crafting
+	defence_tools = other.defence_tools
 	_next_id = other._next_id
 
 
@@ -493,6 +634,7 @@ func to_dict() -> Dictionary:
 		"troops": troops.duplicate(), "training": training.duplicate(true), "hunger": hunger,
 		"field": field.duplicate(), "field_ready": field_ready, "layout": layout.duplicate(),
 		"stats": stats.duplicate(), "quests": quests.duplicate(true),
+		"tools": tools.duplicate(), "crafting": crafting.duplicate(true), "defence_tools": defence_tools.duplicate(true),
 	}
 
 
@@ -549,6 +691,25 @@ static func from_dict(p_rules: BuildingRules, data: Dictionary) -> CastleState:
 	castle.quests = {"story": int(q.get("story", 0)), "day": int(q.get("day", -1)), "keep": int(q.get("keep", 1)),
 		"picks": picks, "base": base, "claimed": claimed, "chest": bool(q.get("chest", false)),
 		"streak": int(q.get("streak", 0)), "chest_day": int(q.get("chest_day", -1))}
+	var stock: Dictionary = data.get("tools", {})
+	for tool: String in stock:
+		if p_rules.has_tool(tool) and int(stock[tool]) > 0:
+			castle.tools[tool] = int(stock[tool])
+	for c in data.get("crafting", []):
+		if p_rules.has_tool(c.get("tool", "")):
+			castle.crafting.append({"tool": String(c.tool), "remaining": int(c.remaining),
+				"unit_time": float(c.unit_time), "next": float(c.get("next", 0.0))})
+	if not castle.crafting.is_empty() and castle.crafting[0].next <= 0.0:
+		castle.crafting[0].next = castle.last_update + castle.crafting[0].unit_time
+	var posted: Dictionary = data.get("defence_tools", {})
+	for w: String in Battle.WALLS:
+		var group := {}
+		var at: Dictionary = posted.get(w, {})
+		for tool: String in at:
+			if p_rules.has_tool(tool) and int(at[tool]) > 0:
+				group[tool] = int(at[tool])
+		if not group.is_empty():
+			castle.defence_tools[w] = group
 	return castle
 
 

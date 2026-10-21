@@ -445,6 +445,41 @@ spent less refunds, barons beaten, loot brought home), so `QuestBook`
 (`scripts/economy/quest_book.gd`) and the server's `server/rules/quests.ts`
 give the same answers (checked by the server fixtures).
 
+## Siege workshop
+
+Build a **Siege Workshop** (3x3, wood 160, stone 120, gold 40) and click it
+to build siege tools from a queue, like soldiers in the barracks. Each
+workshop level builds faster (8% a level) and unlocks more tools:
+
+| Tool | Side | Workshop | Cost | What it does, per tool at that wall |
+|---|---|---|---|---|
+| Ladder | attack | 1 | 60 wood | Takes 8% off the wall's bonus |
+| Mantlet | attack | 3 | 60 wood, 20 gold | The defenders there deal 5% less (half at most) |
+| Battering ram | attack | 5 | 200 wood, 60 stone, 60 gold | Takes 20% off the wall's bonus; front wall (the gate) only |
+| Arrow slits | defence | 1 | 100 stone, 30 wood | The defenders there deal 5% more |
+| Moat section | defence | 3 | 150 stone, 30 gold | The wall is 5% stronger |
+| Boiling pitch | defence | 5 | 80 wood, 50 gold | The attackers there deal 5% less (half at most) |
+
+Ladders and rams together can take a wall's whole bonus away, but never make
+it weaker than no wall at all.
+
+**Attacking.** The attack screen shows a row per attack tool in store, with
+a number for each wall. Your keep decides how many tools fit on one wall
+(2, 4, 6, 8, 10 from keep 1 to 5). Auto hands out your tools too: rams at
+the gate, then ladders and mantlets to the walls with the most soldiers.
+Tools are used up in the attack, won or lost. The odds count your tools and,
+against a player, the defence tools your spy saw.
+
+**Defending.** The Defence screen (in the castle) now has a row per defence
+tool: post them on the left, front and right walls, up to 2, 4, 6, 8, 10 per
+wall by wall level. They stay until their wall is broken in an attack, then
+they are lost. Spies see them.
+
+The numbers live in `data/units.json` (`tools`, `tool_slots`) and the
+workshop in `data/buildings.json`. The rules are `Battle.wall_mods()` and
+`Battle.check_tools()` (`scripts/economy/battle.gd`), the same as
+`server/rules/battle.ts` (checked by the server fixtures).
+
 ## Multiplayer (in progress)
 
 The multiplayer server runs on Supabase. It uses the same rules as the game,
@@ -632,6 +667,7 @@ How the parts work:
 - [x] Siege waves: choose your waves on the attack screen
 - [x] Siege waves: set your defenders on the walls
 - [x] Quests and daily tasks
+- [x] Siege workshop: attack and defence tools
 
 ## Known limitations
 

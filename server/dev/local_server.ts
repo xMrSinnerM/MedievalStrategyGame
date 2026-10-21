@@ -126,7 +126,7 @@ function view(user: string, state: PlayerState, extra: Record<string, unknown> =
   const moving = raids.filter((r) => (r.attacker === user || r.defender === user) && r.state !== "done")
     .map(({ attacker, defender: _d, ...r }) => {
       const own = attacker === user;
-      return { ...r, mine: own, army: own ? r.army : {}, waves: own ? r.waves : undefined, survivors: own ? r.survivors : {},
+      return { ...r, mine: own, army: own ? r.army : {}, waves: own ? r.waves : undefined, tools: own ? r.tools : undefined, survivors: own ? r.survivors : {},
         loot: own ? r.loot : {} };
     });
   const helping = aid.filter((a) => (a.sender === user || a.receiver === user) && a.state === "out")

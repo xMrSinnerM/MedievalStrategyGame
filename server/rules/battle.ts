@@ -31,7 +31,11 @@ export interface FightResult {
   b: Side;
 }
 
-export function fight(rules: BuildingRules, a: Dict, b: Dict, seed: number, wall = 1.0): FightResult {
+/**
+ * `wall` multiplies side b's defence; `powerA` and `powerB` multiply the
+ * damage each side deals (siege tools, wallMods()).
+ */
+export function fight(rules: BuildingRules, a: Dict, b: Dict, seed: number, wall = 1.0, powerA = 1.0, powerB = 1.0): FightResult {
   const rng = new Rng(seed);
   const leftA = floats(a);
   const leftB = floats(b);
@@ -40,8 +44,8 @@ export function fight(rules: BuildingRules, a: Dict, b: Dict, seed: number, wall
   let rounds = 0;
   while (rounds < MAX_ROUNDS && startA > 0 && startB > 0) {
     rounds += 1;
-    const hitsB = casualties(rules, leftA, leftB, rng.randfRange(0.8, 1.2), wall);
-    const hitsA = casualties(rules, leftB, leftA, rng.randfRange(0.8, 1.2), 1.0);
+    const hitsB = casualties(rules, leftA, leftB, rng.randfRange(0.8, 1.2) * powerA, wall);
+    const hitsA = casualties(rules, leftB, leftA, rng.randfRange(0.8, 1.2) * powerB, 1.0);
     apply(leftA, hitsA);
     apply(leftB, hitsB);
     if (total(leftA) <= startA * ROUT || total(leftB) <= startB * ROUT) break;
@@ -54,12 +58,84 @@ export function fight(rules: BuildingRules, a: Dict, b: Dict, seed: number, wall
 /** One wave of an attack: soldiers for each wall. */
 export type Wave = Partial<Record<Wall, Dict>>;
 
+/** Siege tools at each wall (data/units.json "tools"). */
+export type Tools = Partial<Record<Wall, Dict>>;
+
+/** The attackers' tools (a) and the defenders' (b) in a siege. */
+export interface SiegeTools {
+  a?: Tools;
+  b?: Tools;
+}
+
+/** What the tools at one wall do to its fights: the wall's bonus and each side's damage. */
+export function wallMods(rules: BuildingRules, wall: number, a: Dict, b: Dict): { wall: number; a: number; b: number } {
+  let cut = 0;
+  let shield = 0;
+  let moat = 0;
+  let volley = 0;
+  let scald = 0;
+  for (const t of Object.keys(rules.tools)) {
+    const na = Math.trunc(a[t] ?? 0);
+    const nb = Math.trunc(b[t] ?? 0);
+    if (na > 0) {
+      cut += na * rules.toolEffect(t, "wall_cut");
+      shield += na * rules.toolEffect(t, "shield");
+    }
+    if (nb > 0) {
+      moat += nb * rules.toolEffect(t, "moat");
+      volley += nb * rules.toolEffect(t, "volley");
+      scald += nb * rules.toolEffect(t, "scald");
+    }
+  }
+  const w = cut === 0 && moat === 0 ? wall : (1 + (wall - 1) * (1 - Math.min(cut, 1))) * (1 + moat);
+  return { wall: w, a: 1 - Math.min(scald, 0.5), b: (1 - Math.min(shield, 0.5)) * (1 + volley) };
+}
+
+/** Every tool in a set of walls' tools, by tool. */
+export function toolsTotal(tools: Tools): Dict {
+  const out: Dict = {};
+  for (const w of WALLS) add(out, tools[w] ?? {});
+  return out;
+}
+
+/**
+ * Checks siege tools for each wall: tools of `side` ("attack" or
+ * "defence") that fit their wall, at most `slots` a wall and no more than
+ * `stock` has. Returns them without empty walls, or why not.
+ */
+export function checkTools(rules: BuildingRules, tools: unknown, side: string, slots: number, stock: Dict): Tools | string {
+  if (tools === undefined || tools === null) return {};
+  if (typeof tools !== "object" || Array.isArray(tools)) return "Bad tools.";
+  const out: Tools = {};
+  for (const [w, set] of Object.entries(tools as Record<string, unknown>)) {
+    if (!(WALLS as readonly string[]).includes(w)) return "Bad tools.";
+    if (set === null || typeof set !== "object" || Array.isArray(set)) return "Bad tools.";
+    const clean: Dict = {};
+    let n = 0;
+    for (const [tool, count] of Object.entries(set as Record<string, unknown>)) {
+      if (!rules.hasTool(tool) || rules.toolSide(tool) !== side) return "Unknown siege tool.";
+      if (typeof count !== "number" || !Number.isInteger(count) || count < 0) return "Bad tools.";
+      if (count === 0) continue;
+      if (!rules.toolFits(tool, w)) return `${rules.tools[tool].name ?? tool} can't be used at the ${w} wall.`;
+      clean[tool] = count;
+      n += count;
+    }
+    if (n > slots) return slots === 0 ? "No siege tools fit there yet." : `Only ${slots} siege tools fit on each wall.`;
+    if (n > 0) out[w as Wall] = clean;
+  }
+  const total = toolsTotal(out);
+  for (const tool of Object.keys(total)) if (total[tool] > (stock[tool] ?? 0)) return "You don't have that many siege tools.";
+  return out;
+}
+
 export type WallFight = { wave: number; open: true } | { wave: number; winner: "a" | "b"; a: Side; b: Side };
 
 export interface SiegeResult extends FightResult {
   walls: Record<Wall, { broken: boolean; fights: WallFight[] }>;
   courtyard: Record<string, never> | { open: true } | { winner: "a" | "b"; a: Side; b: Side };
   waves: number;
+  /** With siege tools: each side's at each wall, and the defence tools lost with their walls. */
+  tools?: { a: Tools; b: Tools; lost: Tools };
 }
 
 /**
@@ -70,7 +146,8 @@ export interface SiegeResult extends FightResult {
  * reserve plus that wall's last defenders), who make their last stand around
  * the keep with the wall's bonus times COURTYARD_BONUS.
  */
-export function siege(rules: BuildingRules, waves: Wave[], defenders: Dict, layout: Layout, seed: number, wall = 1.0): SiegeResult {
+export function siege(rules: BuildingRules, waves: Wave[], defenders: Dict, layout: Layout, seed: number, wall = 1.0,
+  tools: SiegeTools = {}): SiegeResult {
   const posts = split(defenders, layout, ["left", "right", "courtyard", "front"]);
   const sent: Dict = {};
   const home: Dict = {};
@@ -84,6 +161,7 @@ export function siege(rules: BuildingRules, waves: Wave[], defenders: Dict, layo
     let held = posts[w];
     const fights: WallFight[] = [];
     let broken = false;
+    const mods = wallMods(rules, wall, tools.a?.[w] ?? {}, tools.b?.[w] ?? {});
     waves.forEach((wave, k) => {
       const troops = ints(wave[w] ?? {});
       if (Object.keys(troops).length === 0) return;
@@ -94,7 +172,7 @@ export function siege(rules: BuildingRules, waves: Wave[], defenders: Dict, layo
         fights.push({ wave: k, open: true });
         return;
       }
-      const r = fight(rules, troops, held, seed + WALL_SEED * (i + 1) + k, wall);
+      const r = fight(rules, troops, held, seed + WALL_SEED * (i + 1) + k, mods.wall, mods.a, mods.b);
       rounds += r.rounds;
       held = survivors(r.b);
       fights.push({ wave: k, winner: r.winner, a: r.a, b: r.b });
@@ -130,14 +208,33 @@ export function siege(rules: BuildingRules, waves: Wave[], defenders: Dict, layo
     }
   }
   add(holding, yard);
-  return { winner, rounds, a: kept(sent, home), b: kept(ints(defenders), holding), walls, courtyard, waves: waves.length };
+  const result: SiegeResult = { winner, rounds, a: kept(sent, home), b: kept(ints(defenders), holding), walls, courtyard, waves: waves.length };
+  const a = cleanTools(tools.a ?? {});
+  const b = cleanTools(tools.b ?? {});
+  if (Object.keys(a).length > 0 || Object.keys(b).length > 0) {
+    // Attack tools are used up; defence tools are lost with their wall.
+    const lost: Tools = {};
+    for (const w of WALLS) if (walls[w].broken && b[w] !== undefined) lost[w] = { ...b[w] };
+    result.tools = { a, b, lost };
+  }
+  return result;
 }
 
-export function siegeOdds(rules: BuildingRules, waves: Wave[], defenders: Dict, layout: Layout, seed = 1, wall = 1.0): number {
+export function siegeOdds(rules: BuildingRules, waves: Wave[], defenders: Dict, layout: Layout, seed = 1, wall = 1.0,
+  tools: SiegeTools = {}): number {
   if (!waves.some((wave) => Object.values(wave).some((army) => Object.keys(ints(army ?? {})).length > 0))) return 0;
   let wins = 0;
-  for (let k = 0; k < ODDS_SAMPLES; k++) if (siege(rules, waves, defenders, layout, seed + k, wall).winner === "a") wins += 1;
+  for (let k = 0; k < ODDS_SAMPLES; k++) if (siege(rules, waves, defenders, layout, seed + k, wall, tools).winner === "a") wins += 1;
   return wins / ODDS_SAMPLES;
+}
+
+function cleanTools(tools: Tools): Tools {
+  const out: Tools = {};
+  for (const w of WALLS) {
+    const set = ints(tools[w] ?? {});
+    if (Object.keys(set).length > 0) out[w] = set;
+  }
+  return out;
 }
 
 /** One wave with the army spread over the walls by ATTACK_SPLIT. */

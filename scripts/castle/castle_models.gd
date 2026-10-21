@@ -45,6 +45,8 @@ static func build(type: String, level: int, size: Vector2i, constructing: bool) 
 				_storehouse(kit, level)
 			"barracks":
 				_barracks(kit, level)
+			"workshop":
+				_workshop(kit, level)
 			_:
 				kit.box(STONE, Transform3D(), Vector3(w * 0.8, 2.0, d * 0.8))
 		if constructing:
@@ -217,6 +219,45 @@ static func _barracks(kit: MeshKit, level: int) -> void:
 		kit.box(WOOD_LIGHT, Transform3D(Basis(Vector3.RIGHT, 0.15), rack + Vector3(0.1, 0, -0.5 + 0.33 * i)), Vector3(0.05, 1.8, 0.05))
 	kit.cylinder(WOOD, Transform3D(Basis(), Vector3(-2.5, 0.05, 2.5)), 0.06, 3.0, 5)
 	kit.box(BANNER, Transform3D(Basis(), Vector3(-2.1, 2.3, 2.5)), Vector3(0.8, 0.6, 0.05))
+
+
+static func _workshop(kit: MeshKit, level: int) -> void:
+	# An open timber shed at the back, a battering ram in the yard and
+	# siege ladders leaning on the shed; a throwing arm from level 5.
+	var shed := Transform3D(Basis(), Vector3(0, 0, -1.7))
+	var h := 1.9 + 0.12 * level
+	kit.box(STONE_DARK, shed, Vector3(5.0, 0.3, 1.8))
+	for x: float in [-2.3, -0.8, 0.8, 2.3]:
+		kit.box(WOOD, shed.translated(Vector3(x, 0.3, 0.75)), Vector3(0.18, h, 0.18))
+	kit.box(WOOD, shed.translated(Vector3(0, 0.3, -0.8)), Vector3(4.8, h, 0.15))
+	kit.gable_roof(ROOF, shed.translated(Vector3(0, h + 0.3, 0)), 5.0, 1.9, 0.9)
+	kit.box(SOIL.lightened(0.2), Transform3D(Basis(), Vector3(0, 0, 1.0)), Vector3(5.4, 0.05, 3.2))
+	# The ram: a log on a wheeled frame, with an iron head.
+	var ram := Vector3(-0.6, 0.05, 1.0)
+	kit.box(WOOD, Transform3D(Basis(), ram + Vector3(0, 0.3, 0)), Vector3(2.4, 0.15, 0.9))
+	kit.cylinder(WOOD_LIGHT, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), ram + Vector3(-1.4, 0.7, 0)), 0.22, 2.8, 8)
+	kit.box(STONE_DARK, Transform3D(Basis(), ram + Vector3(1.5, 0.45, 0)), Vector3(0.35, 0.5, 0.5))
+	for dx: float in [-0.9, 0.9]:
+		for dz: float in [-0.55, 0.45]:
+			kit.cylinder(WOOD, Transform3D(Basis(Vector3.RIGHT, PI * 0.5), ram + Vector3(dx, 0.25, dz)), 0.25, 0.12, 8)
+	# Ladders against the shed: two rails and rungs.
+	var lean := Basis(Vector3.RIGHT, -0.35)
+	for i in mini(1 + level / 3, 3):
+		var foot := Vector3(1.2 + 0.55 * i, 0.05, -0.1)
+		for side: float in [-0.18, 0.18]:
+			kit.box(WOOD_LIGHT, Transform3D(lean, foot + Vector3(side, 0, 0)), Vector3(0.06, 2.3, 0.06))
+		for r in 5:
+			kit.box(WOOD_LIGHT, Transform3D(lean, foot + lean * Vector3(0, 0.25 + 0.42 * r, 0)), Vector3(0.4, 0.05, 0.05))
+	if level >= 5:
+		# A small trebuchet frame in the yard.
+		var at := Vector3(2.0, 0.05, 1.6)
+		for dz: float in [-0.4, 0.4]:
+			kit.box(WOOD, Transform3D(Basis(Vector3.FORWARD, 0.25), at + Vector3(-0.5, 0, dz)), Vector3(0.12, 1.7, 0.12))
+			kit.box(WOOD, Transform3D(Basis(Vector3.FORWARD, -0.25), at + Vector3(0.5, 0, dz)), Vector3(0.12, 1.7, 0.12))
+		kit.box(WOOD_LIGHT, Transform3D(Basis(Vector3.FORWARD, 0.6), at + Vector3(0, 1.55, 0)), Vector3(2.6, 0.1, 0.1))
+		kit.box(STONE_DARK, Transform3D(Basis(), at + Vector3(-0.9, 0.7, 0)), Vector3(0.45, 0.45, 0.45))
+	kit.cylinder(WOOD, Transform3D(Basis(), Vector3(-2.75, 0.05, 2.4)), 0.06, 2.9, 5)
+	kit.box(BANNER, Transform3D(Basis(), Vector3(-2.35, 2.3, 2.4)), Vector3(0.7, 0.5, 0.05))
 
 
 # --- Construction ---------------------------------------------------------------
