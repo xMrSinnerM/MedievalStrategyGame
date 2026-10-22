@@ -15,7 +15,9 @@ import { lastInvasion, type EventRules } from "../../../server/rules/events.ts";
 import { claimReward, eventPoints, invade, rewardTiers } from "./invasion.ts";
 import { claimQuest, rollDay, type QuestRules } from "../../../server/rules/quests.ts";
 import type { GearRules, Lead } from "../../../server/rules/gear.ts";
-import { deliverCarts, OUTPOST_ID, type Cart, type OutpostData } from "../../../server/rules/outposts.ts";
+import { deliverCarts, OUTPOST_ID, unload, type Cart, type OutpostData } from "../../../server/rules/outposts.ts";
+import type { VillageInfo } from "../../../server/rules/villages.ts";
+import { checkVillageAttack, type VillageTarget } from "./villages.ts";
 
 /** A player as stored in the players table (the game columns). */
 export interface PlayerState {
@@ -52,11 +54,18 @@ export interface PvpRules {
   attack_keep_gap?: number;
 }
 
-/** An army one player sent against another (a row of the raids table). */
+/**
+ * An army one player sent against another (a row of the raids table), or
+ * against a resource village (`village` set): to take it ("attack"), to guard
+ * it ("station"), or guards walking home from it ("return").
+ */
 export interface Raid {
   id: number;
   attacker_name: string;
+  /** The player attacked, or the village's name. */
   defender_name: string;
+  village?: string;
+  mission?: "attack" | "station" | "return";
   army: Dict;
   /** How the army storms the walls; without it, one wave (autoWaves()). */
   waves?: Wave[];
@@ -132,6 +141,10 @@ export interface Context {
   quests?: QuestRules;
   /** For "found_outpost": the free spot nearest your home, or null when there is none. */
   outpostSpot?: [number, number] | null;
+  /** For "attack_village" and "station": the village named. */
+  village?: VillageTarget;
+  /** What your villages sent your castle since the last request (data/villages.json). */
+  villageIncome?: Dict;
 }
 
 export interface World {
@@ -143,6 +156,8 @@ export interface World {
   spots: [number, number][];
   /** For each spot, where invader camps can stand around it (Baron Invasions). */
   invasion_spots?: [number, number][][];
+  /** The resource villages (data/villages.json). */
+  villages?: VillageInfo[];
 }
 
 /** What other players see of you on the map. */
@@ -277,6 +292,7 @@ export function act(rules: Rules, given: PlayerState, req: Request, now: number,
     outpost.advanceTo(now);
   }
   castle.advanceTo(now);
+  if (ctx.villageIncome) unload(castle, ctx.villageIncome);
   rules.gear.sync(castle);
   if (ctx.quests) rollDay(castle, ctx.quests, now);
   let error = "";
@@ -393,6 +409,47 @@ export function act(rules: Rules, given: PlayerState, req: Request, now: number,
         ...(Object.keys(kit).length > 0 ? { tools: kit } : {}), ...(lead ? { lead } : {}) };
       // Attacking someone ends your own beginner protection.
       protectedUntil = 0;
+      break;
+    }
+    case "attack_village":
+    case "station": {
+      const v = ctx.village;
+      const attack = req.action === "attack_village";
+      const waves = attack && req.waves !== undefined
+        ? checkWaves(req.waves, wavesForKeep(castle.keepLevel()), (u) => rules.buildings.hasUnit(u))
+        : undefined;
+      if (typeof waves === "string") {
+        error = waves;
+        break;
+      }
+      const sent = waves ? wavesArmy(waves) : isArmy(req.army) ? req.army : null;
+      if (v === undefined) error = "There's no such village.";
+      else if (attack) error = checkVillageAttack(rules.villages, castle, stored.name, v, now);
+      else if (v.state.owner !== stored.name) error = "That village isn't yours.";
+      if (error === "") error = sent === null ? "Bad army." : checkArmy(castle, sent);
+      const kit = attack ? checkTools(rules.buildings, req.tools, "attack", rules.buildings.toolSlots(castle.keepLevel()), castle.tools) : {};
+      if (error === "" && typeof kit === "string") error = kit;
+      const lead = attack ? rules.gear.checkLead(castle, req.commander, now) : null;
+      if (error === "" && typeof lead === "string") error = lead;
+      if (error !== "" || v === undefined || sent === null || typeof kit === "string" || typeof lead === "string") break;
+      castle.useTools(kit);
+      const army: Dict = {};
+      for (const unit of Object.keys(sent)) {
+        if (sent[unit] > 0) {
+          army[unit] = sent[unit];
+          castle.troops[unit] -= sent[unit];
+        }
+      }
+      const from: [number, number] = [stored.home_x, stored.home_y];
+      const to = v.info.position;
+      const travel = rules.barons.marchTime(Math.hypot(to[0] - from[0], to[1] - from[1]));
+      if (lead) rules.gear.commander(castle, lead.id)!.away_until = now + 2 * travel;
+      raid = { attacker_name: stored.name, defender_name: v.info.name, village: v.info.id,
+        mission: attack ? "attack" : "station", army, from, to: [to[0], to[1]], depart: now, arrive: now + travel,
+        back: now + 2 * travel, state: "out", survivors: {}, loot: {}, ...(waves ? { waves } : {}),
+        ...(Object.keys(kit).length > 0 ? { tools: kit } : {}), ...(lead ? { lead } : {}) };
+      // Attacking another player's village ends your own beginner protection.
+      if (attack && v.state.owner !== "") protectedUntil = 0;
       break;
     }
     case "craft":

@@ -551,6 +551,35 @@ numbers live in `data/outposts.json`; `OutpostRules`
 `server/rules/outposts.ts` follow the same rules (checked by the server
 fixtures).
 
+## Resource villages
+
+36 villages lie across the map, each working one resource: wood, stone, food
+or gold (a market village). Press **B** (or the **Villages** button) for the
+ones you hold and the nearest others, or click one on the map. Villages near
+the edge of the map are level 1 and get stronger towards the middle, up to
+level 5; a higher level sends more and is guarded by more soldiers.
+
+The local militia hold a village behind a palisade until someone beats them.
+Attack it like a robber baron's camp (**Prepare attack**, with waves, a
+commander and siege tools). Win and the village is yours, if your keep has
+room: a level 2 keep holds 1 village, level 3 holds 2, level 4 holds 3 and
+level 5 holds 4. Your army also carries home what the village had stored.
+
+A village you hold sends its resource to your castle every hour (level 1 sends
+70 wood, 70 food, 60 stone or 30 gold, and each level sends about half as much
+again). What your castle hasn't taken yet waits in the village, up to 12
+hours' worth, and whoever takes the village carries it off. You can give a
+village up on its panel; the militia take it back.
+
+Online, other players can take your villages. Send soldiers from your castle
+to guard one (they fight behind its palisade, and you can bring them home),
+and a village that has just changed hands is at peace for 2 hours. Villages of
+your alliance can't be attacked. The numbers live in `data/villages.json`;
+`VillageRules` (`scripts/economy/village_rules.gd`) and the server's
+`server/rules/villages.ts` follow the same rules (checked by the server
+fixtures). Where the villages stand is in `server/world/world.json`, written by
+`scripts/tools/export_server_world.gd`.
+
 ## Multiplayer (in progress)
 
 The multiplayer server runs on Supabase. It uses the same rules as the game,

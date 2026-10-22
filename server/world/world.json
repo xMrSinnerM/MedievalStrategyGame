@@ -2461,5 +2461,367 @@
 				601.9
 			]
 		]
+	],
+	"villages": [
+		{
+			"id": "village_0",
+			"name": "Bramcombe",
+			"position": [
+				727.4,
+				1568.7
+			],
+			"level": 1,
+			"resource": "wood"
+		},
+		{
+			"id": "village_1",
+			"name": "Stoneford",
+			"position": [
+				675.5,
+				346.8
+			],
+			"level": 1,
+			"resource": "stone"
+		},
+		{
+			"id": "village_2",
+			"name": "Wheatleigh",
+			"position": [
+				874.0,
+				709.1
+			],
+			"level": 3,
+			"resource": "food"
+		},
+		{
+			"id": "village_3",
+			"name": "Bramstead",
+			"position": [
+				1046.6,
+				1203.2
+			],
+			"level": 5,
+			"resource": "gold"
+		},
+		{
+			"id": "village_4",
+			"name": "Bramdale",
+			"position": [
+				1179.4,
+				668.3
+			],
+			"level": 3,
+			"resource": "wood"
+		},
+		{
+			"id": "village_5",
+			"name": "Redfield",
+			"position": [
+				840.4,
+				1209.6
+			],
+			"level": 4,
+			"resource": "stone"
+		},
+		{
+			"id": "village_6",
+			"name": "Haythorpe",
+			"position": [
+				559.1,
+				1032.7
+			],
+			"level": 3,
+			"resource": "food"
+		},
+		{
+			"id": "village_7",
+			"name": "Foxstead",
+			"position": [
+				1255.3,
+				1456.4
+			],
+			"level": 2,
+			"resource": "gold"
+		},
+		{
+			"id": "village_8",
+			"name": "Brightham",
+			"position": [
+				967.8,
+				1526.7
+			],
+			"level": 2,
+			"resource": "wood"
+		},
+		{
+			"id": "village_9",
+			"name": "Foxdale",
+			"position": [
+				892.8,
+				1056.1
+			],
+			"level": 5,
+			"resource": "stone"
+		},
+		{
+			"id": "village_10",
+			"name": "Greenbrook",
+			"position": [
+				1293.8,
+				812.7
+			],
+			"level": 3,
+			"resource": "food"
+		},
+		{
+			"id": "village_11",
+			"name": "Foxwick",
+			"position": [
+				564.9,
+				818.6
+			],
+			"level": 2,
+			"resource": "gold"
+		},
+		{
+			"id": "village_12",
+			"name": "Colddale",
+			"position": [
+				663.6,
+				1564.0
+			],
+			"level": 1,
+			"resource": "wood"
+		},
+		{
+			"id": "village_13",
+			"name": "Wolfbury",
+			"position": [
+				1552.3,
+				870.5
+			],
+			"level": 2,
+			"resource": "stone"
+		},
+		{
+			"id": "village_14",
+			"name": "Wolfwick",
+			"position": [
+				1251.9,
+				904.2
+			],
+			"level": 4,
+			"resource": "food"
+		},
+		{
+			"id": "village_15",
+			"name": "Highton",
+			"position": [
+				1650.3,
+				480.0
+			],
+			"level": 1,
+			"resource": "gold"
+		},
+		{
+			"id": "village_16",
+			"name": "Longbrook",
+			"position": [
+				714.7,
+				1271.7
+			],
+			"level": 3,
+			"resource": "wood"
+		},
+		{
+			"id": "village_17",
+			"name": "Hayleigh",
+			"position": [
+				919.8,
+				301.6
+			],
+			"level": 1,
+			"resource": "stone"
+		},
+		{
+			"id": "village_18",
+			"name": "Coldby",
+			"position": [
+				1024.0,
+				1285.1
+			],
+			"level": 4,
+			"resource": "food"
+		},
+		{
+			"id": "village_19",
+			"name": "Highwell",
+			"position": [
+				802.2,
+				166.7
+			],
+			"level": 1,
+			"resource": "gold"
+		},
+		{
+			"id": "village_20",
+			"name": "Elmwell",
+			"position": [
+				915.4,
+				1549.8
+			],
+			"level": 2,
+			"resource": "wood"
+		},
+		{
+			"id": "village_21",
+			"name": "Wheatwick",
+			"position": [
+				1055.0,
+				1586.9
+			],
+			"level": 2,
+			"resource": "stone"
+		},
+		{
+			"id": "village_22",
+			"name": "Millthorpe",
+			"position": [
+				566.4,
+				929.7
+			],
+			"level": 3,
+			"resource": "food"
+		},
+		{
+			"id": "village_23",
+			"name": "Millby",
+			"position": [
+				812.8,
+				619.3
+			],
+			"level": 3,
+			"resource": "gold"
+		},
+		{
+			"id": "village_24",
+			"name": "Fairwell",
+			"position": [
+				827.4,
+				1709.5
+			],
+			"level": 1,
+			"resource": "wood"
+		},
+		{
+			"id": "village_25",
+			"name": "Stonestead",
+			"position": [
+				1047.0,
+				991.5
+			],
+			"level": 5,
+			"resource": "stone"
+		},
+		{
+			"id": "village_26",
+			"name": "Elmby",
+			"position": [
+				1091.8,
+				1120.8
+			],
+			"level": 5,
+			"resource": "food"
+		},
+		{
+			"id": "village_27",
+			"name": "Brambury",
+			"position": [
+				1253.4,
+				515.8
+			],
+			"level": 2,
+			"resource": "gold"
+		},
+		{
+			"id": "village_28",
+			"name": "Bramham",
+			"position": [
+				413.5,
+				1001.8
+			],
+			"level": 1,
+			"resource": "wood"
+		},
+		{
+			"id": "village_29",
+			"name": "Coldwick",
+			"position": [
+				1118.3,
+				843.4
+			],
+			"level": 4,
+			"resource": "stone"
+		},
+		{
+			"id": "village_30",
+			"name": "Greenwick",
+			"position": [
+				1222.4,
+				1266.7
+			],
+			"level": 4,
+			"resource": "food"
+		},
+		{
+			"id": "village_31",
+			"name": "Millfield",
+			"position": [
+				562.7,
+				733.8
+			],
+			"level": 2,
+			"resource": "gold"
+		},
+		{
+			"id": "village_32",
+			"name": "Brightby",
+			"position": [
+				853.2,
+				654.3
+			],
+			"level": 3,
+			"resource": "wood"
+		},
+		{
+			"id": "village_33",
+			"name": "Bramleigh",
+			"position": [
+				1015.0,
+				321.2
+			],
+			"level": 1,
+			"resource": "stone"
+		},
+		{
+			"id": "village_34",
+			"name": "Fairford",
+			"position": [
+				849.8,
+				239.1
+			],
+			"level": 1,
+			"resource": "food"
+		},
+		{
+			"id": "village_35",
+			"name": "Hayby",
+			"position": [
+				1637.5,
+				789.9
+			],
+			"level": 1,
+			"resource": "gold"
+		}
 	]
 }

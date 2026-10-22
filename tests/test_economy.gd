@@ -40,6 +40,7 @@ func _initialize() -> void:
 	test_tools()
 	test_gear()
 	test_outpost()
+	test_villages()
 	print("%d checks, %d failed" % [checks, failures])
 	quit(1 if failures > 0 else 0)
 
@@ -1078,6 +1079,57 @@ func test_outpost() -> void:
 	var food := float(eco.outpost_castle().resources.food)
 	eco._deliver_carts(float(eco.outpost.carts[0].arrive) + 1.0)
 	check(eco.outpost.carts.is_empty() and eco.outpost_castle().resources.food >= food + 299.0, "economy: carts unload at the outpost")
+	eco.delete_slot(1)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://test_saves"))
+	eco.free()
+
+
+func test_villages() -> void:
+	var vr := VillageRules.load_default()
+	var world := VillageRules.load_villages()
+	check(world.size() == int(vr.placement.count), "every village is on the map")
+	check(vr.slots_for(1) == 0 and vr.slots_for(2) == 1 and vr.slots_for(5) == 4, "keep levels hold villages")
+	var total := 0
+	for unit: String in vr.militia(1):
+		total += int(vr.militia(1)[unit])
+	check(total == roundi(vr.guard_base), "the militia at level 1")
+	var info: Dictionary = world.filter(func(v: Dictionary) -> bool: return int(v.level) == 1)[0]
+	var held := VillageRules.capture(VillageRules.untouched(info.id), "Me", T0)
+	var per_hour := vr.yield_per_hour(info.resource, 1)
+	check(vr.collect(info, held, T0 + 3600.0).amount == per_hour, "an hour's yield")
+	check(vr.collect(info, held, T0 + 10.0 * 86_400.0).amount == vr.store_cap(info.resource, 1), "up to its store")
+	check(vr.stock(info, VillageRules.untouched(info.id), T0) == vr.store_cap(info.resource, 1), "the militia sit on a full store")
+	# Offline through the economy: take a village, collect from it, save and load, give it up.
+	var eco = load("res://scripts/core/economy.gd").new()
+	eco.save_dir = "user://test_saves"
+	eco.begin_new(1)
+	eco.player_castle.troops = {"swordsman": 300}
+	check(eco.check_village_attack(info.id, {"swordsman": 100}) == "Your keep must reach level %d to hold a village." % vr.first_slot_keep(),
+			"economy: keep too low for a village")
+	for b in eco.player_castle.buildings:
+		if b.type == "keep":
+			b.level = 2
+	check(eco.send_village_attack(info.id, {"swordsman": 150}) == "", "economy: army sent to the village")
+	check(eco.marches.size() == 1 and eco.marches[0].village == info.id and eco.player_castle.troops.swordsman == 150,
+			"economy: the march leaves the garrison")
+	var m: Dictionary = eco.marches[0]
+	eco.advance_marches(float(m.arrive) + 1.0)
+	check(eco.is_my_village(info.id) and eco.my_villages().size() == 1, "economy: the village is taken")
+	check(int(m.loot.get(info.resource, 0)) == vr.store_cap(info.resource, 1), "economy: its full store is carried off")
+	var other: Dictionary = world.filter(func(v: Dictionary) -> bool: return v.id != info.id)[0]
+	check(eco.check_village_attack(other.id, {"swordsman": 10}) == "Your keep can't hold another village yet.", "economy: no room for two")
+	check(eco.check_village_attack(info.id, {"swordsman": 10}) == "This village is already yours.", "economy: already yours")
+	check(eco.village_income() == {info.resource: per_hour}, "economy: the income per hour")
+	eco.advance_marches(float(m.back) + 1.0)
+	var paid := float(eco.village_state(info.id).paid_at)
+	var have := float(eco.player_castle.resources[info.resource])
+	eco._collect_villages(paid + 3600.0)
+	near(float(eco.player_castle.resources[info.resource]), minf(have + per_hour, eco.player_castle.storage_capacity()),
+			"economy: an hour's yield arrives", 0.5)
+	eco.save_game()
+	eco.begin_load(1)
+	check(eco.is_my_village(info.id), "economy: villages are saved")
+	check(eco.abandon_village(info.id) == "" and not eco.is_my_village(info.id), "economy: given up")
 	eco.delete_slot(1)
 	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://test_saves"))
 	eco.free()

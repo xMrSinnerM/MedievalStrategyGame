@@ -1,0 +1,40 @@
+{
+	"_comment": "Resource villages: hamlets spread over the map (placed by scripts/economy/village_placer.gd into server/world/world.json), each working one resource. A village starts held by local militia: `guard` soldiers (base * growth^(level - 1), mixed as `guard_armies`) behind a palisade of palisade_base + palisade_per_level * (level - 1). Beat them and the village is yours, if your keep leaves room for it (`slots`: how many villages each keep level may hold). An owned village sends `yields` (per hour, base * yield_growth^(level - 1)) to your castle; what it holds waits there up to store_hours of yield, and whoever takes the village carries that off. Online, other players can take your village: soldiers you station there defend it, behind the same palisade. A village just taken can't be attacked for peace_hours. Village levels rise towards the middle of the map: `level_rings` are the distances from the centre inside which villages are level 5, 4, 3 and 2.",
+	"yields": { "wood": 70, "stone": 60, "food": 70, "gold": 30 },
+	"yield_growth": 1.45,
+	"store_hours": 12,
+	"guard_base": 25,
+	"guard_growth": 1.55,
+	"guard_armies": [
+		{ "from_level": 1, "mix": { "spearman": 0.6, "archer": 0.4 } },
+		{ "from_level": 3, "mix": { "spearman": 0.4, "archer": 0.3, "swordsman": 0.3 } },
+		{ "from_level": 5, "mix": { "spearman": 0.3, "archer": 0.3, "swordsman": 0.25, "horseman": 0.15 } }
+	],
+	"palisade_base": 40,
+	"palisade_per_level": 30,
+	"slots": [
+		{ "keep": 2, "count": 1 },
+		{ "keep": 3, "count": 2 },
+		{ "keep": 4, "count": 3 },
+		{ "keep": 5, "count": 4 }
+	],
+	"peace_hours": 2,
+	"max_level": 5,
+	"placement": {
+		"count": 36,
+		"seed": 5150,
+		"min_gap": 50,
+		"edge_margin": 90,
+		"level_rings": [190, 330, 470, 610]
+	},
+	"names": {
+		"first": ["Mill", "Oak", "Ash", "Elm", "Thorn", "Wolf", "Red", "Green", "Stone", "Bright", "Cold", "Fair", "High", "Long", "Wheat", "Fox", "Hay", "Bram"],
+		"second": ["brook", "field", "ford", "wick", "stead", "ham", "by", "ton", "dale", "leigh", "well", "bury", "thorpe", "combe"]
+	},
+	"resource_names": {
+		"wood": "Woodcutters' hamlet",
+		"stone": "Quarry village",
+		"food": "Farming village",
+		"gold": "Market village"
+	}
+}

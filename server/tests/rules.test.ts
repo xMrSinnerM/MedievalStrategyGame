@@ -16,7 +16,7 @@ import { claimQuest, cofferReward, cofferStreak, currentStory, dailyProgress, pi
 const root = new URL("../../", import.meta.url);
 const json = (path: string) => JSON.parse(readFileSync(new URL(path, root), "utf8"));
 const rules = makeRules(json("data/buildings.json"), json("data/units.json"), json("data/barons.json"), json("data/gear.json"),
-  json("data/outposts.json"));
+  json("data/outposts.json"), json("data/villages.json"));
 const fixtures = json("server/tests/fixtures.json");
 const T0 = 1_000_000;
 const quests: QuestRules = json("data/quests.json");
@@ -274,4 +274,27 @@ test("outposts", () => {
   });
   same(CastleState.fromDict(rules.buildings, run.steps.at(-1).outpost).toDict(), run.steps.at(-1).outpost, "outpost save round trip");
   for (const c of run.nearest) same(nearestSpot(run.spots, c.home, c.taken), c.spot, `nearest to ${c.home}`);
+});
+
+test("villages", () => {
+  const run = fixtures.villages;
+  const v = rules.villages;
+  for (const l of run.levels) {
+    same(v.militia(l.level), l.militia, `militia ${l.level}`);
+    same(v.palisade(l.level), l.palisade, `palisade ${l.level}`);
+    for (const r of Object.keys(l.yields)) same([v.yieldPerHour(r, l.level), v.storeCap(r, l.level)], l.yields[r], `yields ${r} ${l.level}`);
+  }
+  run.slots.forEach((row: unknown[], keep: number) =>
+    same([v.slotsFor(keep), v.checkRoom(keep, 0), v.checkRoom(keep, 1), v.checkRoom(keep, 3)], row, `slots ${keep}`));
+  run.payouts.forEach((p: Record<string, any>, i: number) => {
+    same(v.stock(p.info, p.state, p.t), p.stock, `payout ${i} stock`);
+    same(v.collect(p.info, p.state, p.t), p.collect, `payout ${i} collect`);
+    same(v.peaceUntil(p.state), p.peace, `payout ${i} peace`);
+  });
+  run.attacks.forEach((a: Record<string, any>, i: number) => {
+    const got = v.attack(rules.buildings, rules.barons, a.info, a.state, a.army, a.seed, a.t, a.waves.length > 0 ? a.waves : undefined,
+      {}, a.lead);
+    const { survivors, guardLeft, ...rest } = got;
+    same({ ...rest, survivors, guard_left: guardLeft }, a.result, `village attack ${i}`);
+  });
 });

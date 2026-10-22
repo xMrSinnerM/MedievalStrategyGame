@@ -61,7 +61,8 @@ export function attackCamp(camp: CampData, rules: BaronRules, units: BuildingRul
   return out;
 }
 
-function carried(stock: Dict, capacity: number): Dict {
+/** As much of `stock` as `capacity` can carry, each resource cut by the same share. */
+export function carried(stock: Dict, capacity: number): Dict {
   let all = 0;
   for (const r of Object.keys(stock)) all += stock[r];
   const share = all <= capacity ? 1 : capacity / all;

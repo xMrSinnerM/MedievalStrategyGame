@@ -1,6 +1,6 @@
 extends PanelContainer
-## The attack screen, opened from a robber baron camp's panel or (online) from
-## another player's: plan the siege wave by wave, with how many of each
+## The attack screen, opened from a robber baron camp's panel, a resource
+## village's or (online) another player's: plan the siege wave by wave, with how many of each
 ## soldier storm the left, front and right walls (Battle.siege()), and see
 ## your chances, the losses to expect, how much loot they can carry and how
 ## long the march takes. Your keep decides how many waves you can send
@@ -26,8 +26,9 @@ const AUTO_SPLITS := [
 	{"left": 0, "front": 0, "right": 100},
 ]
 
-var camp_id := ""              ## a camp's id, or "player:<name>" for another player's castle
+var camp_id := ""              ## a camp's id, "player:<name>" for another player's castle, or "village:<id>"
 var _player := ""              ## the other player's name when attacking a player
+var _village := ""             ## the village's id when attacking a resource village
 
 var _title: Label
 var _tabs: HBoxContainer
@@ -147,7 +148,16 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func open_for(id: String) -> void:
-	if id.begins_with("player:"):
+	_village = ""
+	if id.begins_with("village:"):
+		var info := Economy.village_info(id.trim_prefix("village:"))
+		if info.is_empty():
+			return
+		_player = ""
+		_village = String(info.id)
+		_title.text = "Attack %s (level %d)" % [info.name, int(info.level)]
+		_enemy_title.text = "The village"
+	elif id.begins_with("player:"):
 		var other := Economy.get_other(id.trim_prefix("player:"))
 		if other.is_empty():
 			return
@@ -168,7 +178,9 @@ func open_for(id: String) -> void:
 	_tools = {}
 	_build_tool_rows()
 	_build_commanders()
-	if _player != "":
+	if _village != "":
+		_describe_village()
+	elif _player != "":
 		_describe_player()
 	else:
 		_describe_camp(Economy.get_baron(id))
@@ -398,6 +410,11 @@ func _simulate(waves: Array, foe: Dictionary) -> Dictionary:
 
 func _defence() -> Dictionary:
 	## What defends the target: {"troops", "layout", "wall"}, or {} if unknown.
+	if _village != "":
+		var vr := Economy.village_rules
+		var info := Economy.village_info(_village)
+		return {"troops": vr.defenders(info, Economy.village_state(_village)), "layout": Battle.DEFAULT_LAYOUT,
+				"wall": Battle.wall_from_defense(vr.palisade(int(info.level)))}
 	if _player != "":
 		var seen: Dictionary = Economy.spy_reports.get(_player, {})
 		if seen.is_empty():
@@ -591,6 +608,25 @@ func _describe_camp(camp: BaronCamp) -> void:
 	_enemy.text = "\n".join(lines)
 
 
+func _describe_village() -> void:
+	var vr := Economy.village_rules
+	var info := Economy.village_info(_village)
+	var foe := _defence()
+	var lines: PackedStringArray = []
+	var owner := String(Economy.village_state(_village).get("owner", ""))
+	lines.append("Held by %s" % (owner if owner != "" else "the militia"))
+	for unit: String in foe.troops:
+		lines.append("%d %s" % [int(foe.troops[unit]), Economy.rules.unit_plural(unit)])
+	if foe.troops.is_empty():
+		lines.append("Nobody guards it")
+	lines.append("Palisade: +%d%% defence" % roundi((float(foe.wall) - 1.0) * 100.0))
+	if not foe.troops.is_empty():
+		lines.append_array(_posts(foe.troops, Battle.DEFAULT_LAYOUT))
+	lines.append("Holds %d %s; win it and it sends you %d an hour" % [Economy.village_stock(_village), info.resource,
+			vr.yield_per_hour(info.resource, int(info.level))])
+	_enemy.text = "\n".join(lines)
+
+
 func _describe_player() -> void:
 	var seen: Dictionary = Economy.spy_reports.get(_player, {})
 	if seen.is_empty():
@@ -669,7 +705,16 @@ func _update() -> void:
 				parts.append("%s %s" % [w, tools_text(tools[w])])
 		lines.append("Siege tools: " + "; ".join(parts))
 	var why := ""
-	if _player != "":
+	if _village != "":
+		var info := Economy.village_info(_village)
+		if total > 0:
+			var stock := Economy.village_stock(_village)
+			var carry := br.carry(army) * (1.0 + float(fx.get("loot", 0.0)))
+			lines.append("They can carry %d of the %d %s it holds" % [mini(int(carry), stock), stock, info.resource])
+		var march := Economy.village_march_time(_village)
+		lines.append("March: %s there, %s back" % [_clock(march), _clock(march)])
+		why = Economy.check_village_attack(_village, army, waves, plan_tools(), commander_id())
+	elif _player != "":
 		if total > 0:
 			lines.append("A win carries off up to %d%% of each resource, as much as they can carry (%d)"
 					% [roundi(float(Economy.pvp.get("loot_share", 0.25)) * 100.0), int(br.carry(army) * (1.0 + float(fx.get("loot", 0.0))))])
@@ -708,14 +753,20 @@ func _send_army() -> void:
 	var why := "Put some soldiers on the walls to attack."
 	if not waves.is_empty():
 		var tools := plan_tools()
-		why = Economy.send_raid(_player, {}, waves, tools, commander_id()) if _player != "" \
-				else Economy.send_attack(camp_id, {}, waves, tools, commander_id())
+		if _village != "":
+			why = Economy.send_village_attack(_village, {}, waves, tools, commander_id())
+		elif _player != "":
+			why = Economy.send_raid(_player, {}, waves, tools, commander_id())
+		else:
+			why = Economy.send_attack(camp_id, {}, waves, tools, commander_id())
 	if why != "":
 		_note.text = why
 		_note.visible = true
 		return
 	close_panel()
-	if _player != "":
+	if _village != "":
+		EventBus.village_selected.emit("")
+	elif _player != "":
 		EventBus.player_selected.emit("")
 	else:
 		EventBus.baron_selected.emit("")

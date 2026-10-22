@@ -150,6 +150,7 @@ func _build_markers() -> void:
 var barons: Node3D
 var players: Node3D   ## online: the other players' castles (players_layer.gd)
 var outposts: Node3D  ## outposts and carts (outposts_layer.gd)
+var villages: Node3D  ## resource villages (villages_layer.gd)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -184,6 +185,13 @@ func _on_click(screen_pos: Vector2) -> void:
 		EventBus.baron_selected.emit(camp)
 		return
 	EventBus.baron_selected.emit("")
+	var village: String = villages.village_at(target) if villages != null else ""
+	if village != "":
+		EventBus.settlement_selected.emit("")
+		EventBus.player_selected.emit("")
+		EventBus.village_selected.emit(village)
+		return
+	EventBus.village_selected.emit("")
 	if outposts != null and outposts.outpost_at(target):
 		EventBus.player_selected.emit("")
 		EventBus.settlement_selected.emit(OutpostRules.OUTPOST_ID)

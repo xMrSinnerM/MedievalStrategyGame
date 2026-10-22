@@ -3,10 +3,13 @@ extends SceneTree
 ## the game places them (BaronPlacer), how their starting level grows with
 ## distance, the spots where players' castles can stand (PlayerSpots), and
 ## for each spot the places around it where invader camps can stand during a
-## Baron Invasion. The server can't read the terrain, so it uses these lists.
+## Baron Invasion, and the resource villages (VillagePlacer). The server
+## can't read the terrain, so it uses these lists; the game reads the
+## villages from here too.
 ##
 ## Run from the project folder after changing the terrain, settlements,
-## player.json or the "camps" section of barons.json:
+## player.json, the "camps" section of barons.json or the "placement" section
+## of villages.json:
 ##   godot --headless --path . --script res://scripts/tools/export_server_world.gd
 
 const OUT := "res://server/world/world.json"
@@ -25,18 +28,32 @@ func _initialize() -> void:
 	var camps := BaronPlacer.place(baron_rules, game_data.nav.is_passable, game_data.settlements,
 			home, game_data.terrain.world_size)
 	var spots := PlayerSpots.place(game_data.terrain, game_data.nav.is_passable, game_data.settlements, camps, home)
+	var invaders := invasion_spots(game_data, spots, camps)
+	var avoid: Array[Vector2] = []
+	for c: Dictionary in camps:
+		avoid.append(Vector2(c.position[0], c.position[1]))
+	for s: Array in spots:
+		avoid.append(Vector2(s[0], s[1]))
+	var passing: Array[Vector2] = []
+	for row: Array in invaders:
+		for s: Array in row:
+			passing.append(Vector2(s[0], s[1]))
+	var villages := VillagePlacer.place(VillageRules.load_default(),
+			func(p: Vector2) -> bool: return _open(game_data, p, VILLAGE_RADIUS, VILLAGE_MAX_SLOPE),
+			game_data.settlements, avoid, passing, game_data.terrain.world_size)
 	var out := {
 		"home": [home.x, home.y],
 		"camp_levels": {"per_distance": float(baron_rules.camps.get("level_per_distance", 170.0)),
 				"max": int(baron_rules.camps.get("start_level_max", 12))},
 		"camps": camps,
 		"spots": spots,
-		"invasion_spots": invasion_spots(game_data, spots, camps),
+		"invasion_spots": invaders,
+		"villages": villages,
 	}
 	var file := FileAccess.open(OUT, FileAccess.WRITE)
 	file.store_string(JSON.stringify(out, "\t", false))
 	file.close()
-	print("wrote %s with %d camps and %d spots" % [OUT, camps.size(), spots.size()])
+	print("wrote %s with %d camps, %d spots and %d villages" % [OUT, camps.size(), spots.size(), villages.size()])
 	game_data.free()
 	quit()
 
@@ -47,6 +64,9 @@ const INVADER_RINGS := [65.0, 85.0, 105.0, 125.0, 145.0]
 const INVADER_PER_SPOT := 4
 const INVADER_GAP := 35.0
 const INVADER_MAX_SLOPE := 0.15
+## A village needs a little more room than an invader camp.
+const VILLAGE_RADIUS := 11.0
+const VILLAGE_MAX_SLOPE := 0.15
 
 
 static func invasion_spots(game_data, spots: Array, camps: Array) -> Array:
@@ -84,13 +104,19 @@ static func invasion_spots(game_data, spots: Array, camps: Array) -> Array:
 
 
 static func _open_ground(game_data, p: Vector2) -> bool:
+	return _open(game_data, p, 9.0, INVADER_MAX_SLOPE)
+
+
+static func _open(game_data, p: Vector2, radius: float, max_slope: float) -> bool:
+	## Whether p and a ring of points `radius` around it are passable, dry and
+	## no steeper than max_slope.
 	var terrain: TerrainData = game_data.terrain
 	var size := terrain.world_size
 	if p.x < 40.0 or p.y < 40.0 or p.x > size - 40.0 or p.y > size - 40.0:
 		return false
 	for k in 9:
-		var q := p if k == 8 else p + Vector2.from_angle(k * TAU / 8.0) * 9.0
+		var q := p if k == 8 else p + Vector2.from_angle(k * TAU / 8.0) * radius
 		if not game_data.nav.is_passable(q.x, q.y) or terrain.is_water(q.x, q.y) \
-				or terrain.get_slope(q.x, q.y) > INVADER_MAX_SLOPE:
+				or terrain.get_slope(q.x, q.y) > max_slope:
 			return false
 	return true

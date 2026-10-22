@@ -143,6 +143,19 @@ its name, region, spot, castle state and the carts on the road. Orders:
 home, counting other players' homes and outposts), and `world` lists each
 player's `outpost`.
 
+Resource villages (`server/rules/villages.ts`, `data/villages.json`, placed in
+`server/world/world.json`) are rows of `villages`
+(`supabase/migrations/20261024120000_villages.sql`): the owner, the guards
+stationed there, when it changed hands (its peace runs from then) and up to
+when its yield has been paid. The server adds the rows the first time it needs
+them; a village without an owner is held by the militia. Armies sent to a
+village are `raids` rows with `village` and `mission` ("attack", "station" or
+"return") set and are resolved on any request once they arrive. Orders:
+`attack_village` (`village`, `army`, `waves`, `tools`, `commander`), `station`
+(`village`, `army`), `recall_guard` and `abandon_village` (`village`). Every
+request first pays each of your villages' yield into your castle, and `view`
+lists `villages` with their holder and alliance tag.
+
 The game owner's tools (`supabase/functions/game/admin.ts`) work only for
 accounts in the `admins` table, which the game can never change. Add one in
 the SQL editor:
