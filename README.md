@@ -717,12 +717,12 @@ from the game: owners are added by hand in the database (see
 ```
 data/        JSON: terrain config, factions, settlements, roads, parties, buildings, units, player
 world/       heightmap, biome mask, rivers
-assets/      fonts (SIL OFL)
+assets/      fonts (SIL OFL), kaykit (KayKit Medieval Hexagon Pack, CC0)
 scenes/      main.tscn -> world_map/world_map.tscn and castle/castle_view.tscn
 scripts/
   core/      main (switches map and castle), GameData, EventBus and Economy autoloads, map style
   economy/   castle economy: building rules, castle state, NPC brain, battles
-  castle/    castle screen: view, camera, placeholder building models
+  castle/    castle screen: view, camera, building models from the KayKit pack
   terrain/   generator, terrain data and queries, terrain/water/river/tree layers
   world/     world map root, settlements, banners, roads, parchment overlay
   camera/    campaign camera
@@ -819,7 +819,12 @@ How the parts work:
 
 ## Free asset packs that fit the style
 
-Placeholder primitives stand in for art. These CC0 packs would fit:
+The castle screen uses the KayKit Medieval Hexagon Pack by Kay Lousberg
+(CC0, www.kaylousberg.com), in `assets/kaykit/` with its licence. Its models
+share one gradient atlas; `shaders/kit.gdshader` repaints the atlas's team
+swatch (the bottom-left cell) in the owner's colour, and `KitModels` merges
+the pieces of a building into one mesh. The world map still uses placeholder
+primitives. Other CC0 packs that would fit:
 
 - Trees and nature: Quaternius Ultimate/Stylized Nature, Kenney Nature Kit
 - Castles and walls: Kenney Castle Kit

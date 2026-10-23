@@ -22,16 +22,31 @@ void fragment() {
 	float n = texture(noise, p * 0.012).r;
 	float n2 = texture(noise, p * 0.07 + 0.37).r;
 
-	vec3 grass = mix(vec3(0.27, 0.4, 0.17), vec3(0.38, 0.48, 0.21), n);
-	vec3 yard = mix(vec3(0.4, 0.44, 0.24), vec3(0.47, 0.47, 0.29), n2);
-	vec3 dirt = mix(vec3(0.45, 0.37, 0.26), vec3(0.53, 0.44, 0.31), n2);
+	float n3 = texture(noise, p * 0.45 + 0.71).r;
+	vec3 grass = mix(vec3(0.24, 0.38, 0.14), vec3(0.38, 0.5, 0.19), n);
+	grass = mix(grass, vec3(0.5, 0.58, 0.26), smoothstep(0.62, 0.8, n2) * 0.5);
+	vec3 yard = mix(vec3(0.34, 0.47, 0.19), vec3(0.41, 0.52, 0.22), n2);
+	// Mown stripes on the yard lawn.
+	yard *= 0.96 + 0.05 * step(0.5, fract(p.x / 4.0));
+
+	// Cobbles: staggered rows of stones with darker joints.
+	vec2 cp = p / vec2(0.9, 0.7);
+	cp.x += 0.5 * floor(cp.y);
+	vec2 cf = abs(fract(cp) - 0.5);
+	float joint = smoothstep(0.36, 0.48, max(cf.x * 0.9, cf.y));
+	float stone_id = fract(sin(dot(floor(cp), vec2(12.9898, 78.233))) * 43758.5453);
+	vec3 dirt = mix(vec3(0.5, 0.47, 0.42), vec3(0.6, 0.56, 0.49), stone_id);
+	dirt = mix(dirt, vec3(0.36, 0.33, 0.28), joint);
 
 	// Inside the wall.
 	float inner = min(min(p.x, p.y), min(size - p.x, size - p.y)) + wall_margin;
 	vec3 col = mix(grass, yard, smoothstep(-1.5, 1.0, inner));
+	// Wild flowers in the meadow outside.
+	float flower = step(0.83, n3) * step(0.55, n) * (1.0 - smoothstep(-1.5, 1.0, inner));
+	col = mix(col, mix(vec3(0.95, 0.9, 0.55), vec3(0.95, 0.95, 0.92), step(0.5, n2)), flower * 0.8);
 
 	// Path from the south gate to the middle.
-	float path = 1.0 - smoothstep(1.6, 2.6 + n2, abs(p.x - size * 0.5));
+	float path = 1.0 - smoothstep(1.9, 2.1, abs(p.x - size * 0.5));
 	path *= step(size * 0.5, p.y) * (1.0 - smoothstep(size + wall_margin + 6.0, size + wall_margin + 14.0, p.y));
 	col = mix(col, dirt, path);
 

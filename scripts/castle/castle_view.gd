@@ -14,6 +14,9 @@ enum Mode { SELECT, PLACE, MOVE }
 
 const CELL := CastleModels.CELL
 const CLICK_SLOP := 6.0
+## Roof colour of the player's own castles; NPC castles use their faction's colour.
+const PLAYER_COLOR := Color(0.66, 0.2, 0.16)
+const OTHER_COLOR := Color(0.38, 0.4, 0.46)
 
 var castle: CastleState
 var editable := false
@@ -34,6 +37,7 @@ var _ghost_ok_material: StandardMaterial3D
 var _ghost_bad_material: StandardMaterial3D
 var _ghost_cell := Vector2i(-999, -999)
 var _selection_mesh: MeshInstance3D
+var _team := PLAYER_COLOR      ## roof and flag colour of the castle on show
 var _press_pos := Vector2.ZERO
 var _pressed := false
 
@@ -63,6 +67,8 @@ func open(p_castle: CastleState) -> void:
 	## Shows `p_castle`. The player's own castle can be changed, others only looked at.
 	castle = p_castle
 	editable = not castle.is_npc()
+	var faction := GameData.get_faction(castle.owner)
+	_team = PLAYER_COLOR if editable else (faction.color if not faction.is_empty() else OTHER_COLOR)
 	var size := castle.rules.grid_size * CELL
 	camera_rig.bounds = Rect2(-12, -12, size + 24, size + 24)
 	camera_rig.reset(Vector3(size * 0.5, 0, size * 0.5 + 4.0))
@@ -322,22 +328,71 @@ func _refresh_buildings() -> void:
 		label.modulate = Color(1.0, 0.95, 0.8)
 		label.name = "Timer"
 		if castle.rules.is_perimeter(b.type):
-			mesh.mesh = CastleModels.wall(maxi(b.level, 1), castle.rules.grid_size)
+			mesh.mesh = CastleModels.wall(maxi(b.level, 1), castle.rules.grid_size, _team)
 			var gate := Vector3(grid_centre().x, 0, castle.rules.grid_size * CELL + CastleModels.WALL_MARGIN)
 			label.position = gate + Vector3(0, 7.0, 0)
 		else:
 			var s := castle.rules.size(b.type)
-			mesh.mesh = CastleModels.build(b.type, b.level, s, b.target > 0)
+			mesh.mesh = CastleModels.build(b.type, b.level, s, b.target > 0, _team)
 			node.position = Vector3((b.cell.x + s.x * 0.5) * CELL, 0, (b.cell.y + s.y * 0.5) * CELL)
 			label.position = Vector3(0, 4.0 + (6.0 if b.type == "keep" else 0.0), 0)
 		node.add_child(mesh)
 		node.add_child(label)
+		if b.level > 0 and b.type in SMOKE:
+			var smoke := _smoke()
+			smoke.position = SMOKE[b.type]
+			node.add_child(smoke)
 		_buildings_root.add_child(node)
 		_nodes[b.id] = node
 	_update_timer_labels()
 	_update_selection_mesh()
 	if selected >= 0 and castle.get_building(selected).is_empty():
 		select(-1)
+
+
+## Where chimney smoke rises from, per building type (local to the footprint centre).
+const SMOKE := {"house": Vector3(0.5, 3.6, -0.3), "workshop": Vector3(-0.9, 3.4, -1.4), "barracks": Vector3(1.2, 4.4, -1.4)}
+
+
+func _smoke() -> CPUParticles3D:
+	var p := CPUParticles3D.new()
+	p.amount = 14
+	p.lifetime = 4.0
+	p.preprocess = 4.0
+	p.direction = Vector3(0.25, 1, 0.1)
+	p.spread = 12.0
+	p.gravity = Vector3(0.25, 0.35, 0)
+	p.initial_velocity_min = 0.5
+	p.initial_velocity_max = 0.8
+	p.scale_amount_min = 0.6
+	p.scale_amount_max = 1.0
+	var curve := Curve.new()
+	curve.add_point(Vector2(0, 0.4))
+	curve.add_point(Vector2(1, 2.4))
+	p.scale_amount_curve = curve
+	var ramp := Gradient.new()
+	ramp.set_color(0, Color(0.85, 0.83, 0.8, 0.55))
+	ramp.set_color(1, Color(0.8, 0.8, 0.8, 0.0))
+	p.color_ramp = ramp
+	var quad := QuadMesh.new()
+	quad.size = Vector2(0.9, 0.9)
+	var m := StandardMaterial3D.new()
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+	m.vertex_color_use_as_albedo = true
+	var tex := GradientTexture2D.new()
+	tex.fill = GradientTexture2D.FILL_RADIAL
+	tex.fill_from = Vector2(0.5, 0.5)
+	tex.fill_to = Vector2(0.5, 0.0)
+	var g := Gradient.new()
+	g.set_color(0, Color(1, 1, 1, 1))
+	g.set_color(1, Color(1, 1, 1, 0))
+	tex.gradient = g
+	m.albedo_texture = tex
+	quad.material = m
+	p.mesh = quad
+	return p
 
 
 func _update_timer_labels() -> void:
@@ -385,7 +440,7 @@ func _set_mode(new_mode: Mode) -> void:
 	_ground_material.set_shader_parameter("highlight_rect", Vector4.ZERO)
 	if placing:
 		_ghost.mesh = CastleModels.build(placing_type, maxi(castle.get_building(selected).get("level", 1), 1) if mode == Mode.MOVE else 1,
-			castle.rules.size(placing_type), false)
+			castle.rules.size(placing_type), false, _team)
 	mode_changed.emit(mode)
 
 
@@ -435,20 +490,18 @@ func _build_ground() -> void:
 	# A ring of trees outside the walls so the castle doesn't float in a void.
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 11
-	var kit := MeshKit.new()
-	var trunk := Color(0.36, 0.26, 0.17)
-	for i in 160:
+	var kit := KitModels.new()
+	var pieces := ["trees_A_large", "trees_B_large", "trees_A_medium", "trees_B_medium", "tree_single_A", "tree_single_B", "rock_single_A", "rock_single_C"]
+	for i in 170:
 		var angle := rng.randf() * TAU
 		var r := rng.randf_range(44.0, 110.0)
 		var at := Vector3(24, 0, 24) + Vector3(cos(angle), 0, sin(angle)) * r
 		if at.z > 54.0 and absf(at.x - 24.0) < 7.0:
 			continue   # keep the road out of the gate clear
-		var h := rng.randf_range(3.0, 6.0)
-		var leaf := Color(0.2, 0.36, 0.17).lerp(Color(0.32, 0.45, 0.2), rng.randf())
-		kit.cylinder(trunk, Transform3D(Basis(), at), 0.25, h * 0.4, 5)
-		kit.cone(leaf, Transform3D(Basis(), at + Vector3(0, h * 0.3, 0)), h * 0.32, h * 0.8, 7)
+		var piece: String = pieces[rng.randi() % pieces.size()]
+		kit.add(piece, Transform3D(Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3.ONE * rng.randf_range(2.6, 3.6)), at))
 	var trees := MeshInstance3D.new()
-	trees.mesh = kit.commit(true)
+	trees.mesh = kit.commit(Color.WHITE)
 	add_child(trees)
 
 
@@ -466,6 +519,8 @@ func _build_environment() -> void:
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
 	env.ambient_light_energy = 0.8
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	env.adjustment_enabled = true
+	env.adjustment_saturation = 1.04
 	env.tonemap_exposure = 0.9
 	env.ssao_enabled = true
 	env.fog_enabled = true
