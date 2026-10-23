@@ -13,6 +13,7 @@ extends Node3D
 var barons: Node3D
 var players: Node3D
 var outposts: Node3D
+var villages: Node3D
 
 
 func _ready() -> void:
@@ -41,7 +42,12 @@ func _ready() -> void:
 	outposts.name = "Outposts"
 	add_child(outposts)
 	outposts.build()
+	villages = preload("res://scripts/world/villages_layer.gd").new()
+	villages.name = "Villages"
+	add_child(villages)
+	villages.build()
 	parties.barons = barons
+	parties.villages = villages
 	parties.players = players
 	parties.outposts = outposts
 	parties.camera_rig = camera_rig
@@ -52,6 +58,8 @@ func _ready() -> void:
 		var home := Economy.home_position()
 		camera_rig.focus_on(Vector3(home.x, GameData.terrain.get_surface_height(home.x, home.y), home.y))
 	Economy.castle_captured.connect(_on_castle_captured)
+	EventBus.map_focus_requested.connect(func(p: Vector2) -> void:
+		camera_rig.focus_on(Vector3(p.x, GameData.terrain.get_surface_height(p.x, p.y), p.y)))
 	Economy.diplomacy_changed.connect(func(_news: Array) -> void: parties.on_diplomacy_changed())
 	print("World map built in %d ms (%d settlements, %d bridges, %d trees, %d parties)" % [Time.get_ticks_msec() - started,
 		settlements.settlements.size(), settlements.bridge_count, vegetation.tree_count, parties.parties.size()])

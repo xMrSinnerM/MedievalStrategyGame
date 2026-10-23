@@ -60,6 +60,12 @@ func build(road_list: Array, settlements: Array, terrain: TerrainData) -> void:
 	_find_bridges(terrain)
 
 
+func clear_trees(centre: Vector2, radius: float) -> void:
+	## Keeps trees off a disc, for map features placed apart from the settlements
+	## (resource villages).
+	_stamp(clearance_image, centre, radius, 1.0, float(CLEARANCE_SCALE))
+
+
 func is_on_road(x: float, z: float) -> bool:
 	## True on a road or inside a settlement's grounds.
 	return road_amount(x, z) > 0.4

@@ -41,3 +41,7 @@ signal attack_screen_requested(camp_id: String)
 signal player_selected(player_name: String)
 ## Online: open the screen for sending an ally resources ("resources") or defenders ("troops").
 signal help_screen_requested(player_name: String, kind: String)
+## A resource village was clicked on the map (its id; "" clears the selection).
+signal village_selected(village_id: String)
+## Asks the world map's camera to look at this map position.
+signal map_focus_requested(map_pos: Vector2)

@@ -129,7 +129,10 @@ func show_report(report: Dictionary) -> void:
 
 func show_baron_report(report: Dictionary) -> void:
 	## The report for an army you sent against a robber baron camp (or, online,
-	## a battle between your castle and another player's).
+	## a battle between your castle and another player's, or for a village).
+	if report.get("village", false):
+		show_village_report(report)
+		return
 	if report.get("raid", false):
 		show_raid_report(report)
 		return
@@ -183,6 +186,46 @@ func show_raid_report(report: Dictionary) -> void:
 		var helped: Array = report.get("helped_by", [])
 		if not helped.is_empty():
 			_footer.text = "Defenders from %s fought beside your garrison.\n" % ", ".join(PackedStringArray(helped)) + _footer.text
+	_add_siege_line(report, attacking)
+	_title.add_theme_color_override("font_color", WIN if won else LOSS)
+
+
+func show_village_report(report: Dictionary) -> void:
+	## A battle for a resource village: your army against its militia or its
+	## holder's guards, or (online) someone's army against your guards.
+	report = report.duplicate()
+	var attacking: bool = report.player == "a"
+	var other := String(report.get("other", ""))
+	var village := String(report.name)
+	report.attacker = "Your army" if attacking else other
+	report.defender = ("%s's guards" % other if other != "" else "Militia") if attacking else "Your guards"
+	show_report(report)
+	var won: bool = report.winner == report.player
+	var lines: PackedStringArray = []
+	if attacking:
+		_title.text = ("%s is yours!" % village) if report.get("captured", false) else ("Victory!" if won else "Defeat")
+		_place.text = "Your army attacked %s (level %d, %s), held by %s" % [village, int(report.level), report.resource,
+				other if other != "" else "the militia"]
+		if won:
+			if report.get("captured", false):
+				lines.append("It sends you %d %s an hour from now on." % [
+						Economy.village_rules.yield_per_hour(report.resource, int(report.level)), report.resource]
+						+ (" Station soldiers there to keep it." if Economy.online else ""))
+			elif report.get("no_room", false):
+				lines.append("Your keep has no room for another village, so your army left it to %s." % (other if other != "" else "the militia"))
+			lines.append("Your army is bringing home %s." % _spoils(report.spoils))
+		else:
+			lines.append("%s held. Your surviving soldiers are marching home." % village)
+	else:
+		_title.text = "Your guards held %s!" % village if won else "%s was taken!" % village
+		_place.text = "%s attacked your village %s" % [other, village]
+		if won:
+			lines.append("%s's army fell back with nothing." % other)
+		elif report.get("captured", false):
+			lines.append("%s holds it now and carried off %s. Take it back, or another one." % [other, _spoils(report.spoils)])
+		else:
+			lines.append("%s carried off %s, but had no room to hold the village: it is still yours." % [other, _spoils(report.spoils)])
+	_footer.text = "\n".join(lines)
 	_add_siege_line(report, attacking)
 	_title.add_theme_color_override("font_color", WIN if won else LOSS)
 

@@ -1,7 +1,8 @@
 extends Node3D
 ## Robber baron camps on the world map (a palisade, tents and a black banner,
 ## with a label showing the camp's level), and your armies marching to and
-## from them. Camps are placed by BaronPlacer the first time a game sees them.
+## from them (and, offline, to and from resource villages). Camps are placed
+## by BaronPlacer the first time a game sees them.
 ## Online, the invader camps of a Baron Invasion come and go with the event;
 ## they fly a red banner.
 
@@ -176,15 +177,15 @@ func _process(delta: float) -> void:
 	var home := Economy.home_position()
 	for m: Dictionary in Economy.marches:
 		var army: Dictionary = _armies.get(int(m.id), {})
-		var camp := Economy.get_baron(m.camp)
-		if army.is_empty() or camp == null:
+		var target := Economy.march_target(m)
+		if army.is_empty() or target.is_empty():
 			continue
 		var out: bool = m.state == "out"
 		var t0: float = m.depart if out else m.arrive
 		var t1: float = m.arrive if out else m.back
 		var f := clampf((now - t0) / maxf(t1 - t0, 0.01), 0.0, 1.0)
-		var from := home if out else camp.position
-		var to := camp.position if out else home
+		var from: Vector2 = home if out else target.position
+		var to: Vector2 = target.position if out else home
 		var p := from.lerp(to, f)
 		var node: Node3D = army.node
 		node.position = Vector3(p.x, Party.ground_height(p.x, p.y), p.y)
@@ -192,7 +193,7 @@ func _process(delta: float) -> void:
 		var model: Node3D = node.get_child(0)
 		model.scale = Vector3.ONE * lerpf(1.0, 4.0, _zoom_t)
 		var label: Label3D = army.label
-		label.text = "%s %s" % ["To " + camp.camp_name if out else "Home", _clock(t1 - now)]
+		label.text = "%s %s" % ["To " + String(target.name) if out else "Home", _clock(t1 - now)]
 		label.visible = _zoom_t <= LABEL_MAX_ZOOM
 	_label_timer -= delta
 	if _label_timer <= 0.0:

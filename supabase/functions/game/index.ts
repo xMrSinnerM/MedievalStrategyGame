@@ -32,6 +32,9 @@
 // POST { "action": "found_outpost", "region": "wood" | "stone" | "food" | "gold" }   a second castle (data/outposts.json)
 //   on the free spot nearest your home; "place", "upgrade", "cancel" and "move" then take "castle": "outpost"
 // POST { "action": "send_carts", "from": "home" | "outpost", "resources": { wood: n } }   between your castles
+// POST { "action": "attack_village", "village": id, "army" | "waves", "tools", "commander" }   take a resource village (data/villages.json)
+// POST { "action": "station", "village": id, "army": { unit: count } }   soldiers to guard your village
+// POST { "action": "recall_guard" | "abandon_village", "village": id }   bring your guards home (and give the village up)
 // POST { "action": "found_alliance", "name", "tag" }  costs gold (data/alliances.json)
 // POST { "action": "alliance" }                  your alliance, its members and requests, invitations, all alliances
 // POST { "action": "join_alliance" | "accept_invite" | "decline_invite" | "cancel_request", "id" }
@@ -59,6 +62,11 @@
 // standing in a castle fight beside its garrison when an attack is resolved.
 // Every answer with your castle also lists the timed events on now and next
 // (data/events.json); they change battles as they are resolved.
+// Resource villages are rows of the villages table, shared by everyone
+// (villages.ts). Armies sent to them are raids rows with `village` set,
+// resolved by the first request after they arrive, whoever sends it; every
+// request first collects what your villages made, and every answer with your
+// castle lists who holds each village.
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
@@ -72,11 +80,14 @@ import eventsData from "../../../data/events.json" with { type: "json" };
 import questsData from "../../../data/quests.json" with { type: "json" };
 import gearData from "../../../data/gear.json" with { type: "json" };
 import outpostsData from "../../../data/outposts.json" with { type: "json" };
+import villagesData from "../../../data/villages.json" with { type: "json" };
 import world from "../../../server/world/world.json" with { type: "json" };
 import { makeRules } from "../../../server/rules/load.ts";
 import { effectAt, eventsView, lastInvasion, withOverrides, type EventOverride, type EventRules } from "../../../server/rules/events.ts";
 import { CastleState } from "../../../server/rules/castle_state.ts";
 import { nearestSpot } from "../../../server/rules/outposts.ts";
+import type { VillageInfo, VillageState } from "../../../server/rules/villages.ts";
+import { resolveVillageRaid, type VillageTarget } from "./villages.ts";
 import {
   act, castleLevel, checkName, fightRaid, isProtected, might, newPlayer, pickSpot, spyReport,
   type Homecoming, type PlayerState, type PvpRules, type Raid, type Target, type World,
@@ -92,7 +103,9 @@ import {
   adminEvents, checkGift, giftReport, giveCastle, NOT_ADMIN, OVERRIDES_KEPT, startEvent, stopEvent, type Gift,
 } from "./admin.ts";
 
-const rules = makeRules(buildings, units, barons, gearData, outpostsData);
+const rules = makeRules(buildings, units, barons, gearData, outpostsData, villagesData);
+const VILLAGES: VillageInfo[] = (world as World).villages ?? [];
+const VILLAGE_COLUMNS = "id, owner, owner_name, guard, taken_at, paid_at, version";
 const pvp = pvpData as PvpRules;
 const allianceRules = alliancesData as AllianceRules;
 const aidRules = aidData as AidRules;
@@ -131,7 +144,7 @@ function raidFromRow(r: Row): Raid {
   return {
     id: Number(r.id), attacker_name: r.attacker_name, defender_name: r.defender_name, army: r.army,
     ...(r.waves ? { waves: r.waves } : {}), ...(r.tools ? { tools: r.tools } : {}), ...(r.lead ? { lead: r.lead } : {}), from: [r.from_x, r.from_y], to: [r.to_x, r.to_y], depart: r.depart, arrive: r.arrive, back: r.back,
-    state: r.state, survivors: r.survivors, loot: r.loot,
+    state: r.state, survivors: r.survivors, loot: r.loot, ...(r.village ? { village: r.village, mission: r.mission } : {}),
   };
 }
 
@@ -169,8 +182,160 @@ async function activeAid(userId: string) {
 }
 
 async function view(userId: string, state: PlayerState, extra: Record<string, unknown> = {}) {
-  const [reports, raids, aid] = await Promise.all([recentReports(userId), activeRaids(userId), activeAid(userId)]);
-  return { ok: true, now: now(), ...extra, player: state, raids, aid, reports, events: eventsView(calendar, now()) };
+  const [reports, raids, aid, villages] = await Promise.all([recentReports(userId), activeRaids(userId), activeAid(userId),
+    villagesView(userId)]);
+  return { ok: true, now: now(), ...extra, player: state, raids, aid, reports, villages, events: eventsView(calendar, now()) };
+}
+
+// --- Resource villages (villages.ts) ------------------------------------------
+
+let villagesReady = false;
+
+/** Makes sure every village on the map has its row (the militia hold new ones). */
+async function ensureVillages() {
+  if (villagesReady) return;
+  const { error } = await admin.from("villages").upsert(VILLAGES.map((v) => ({ id: v.id })), { onConflict: "id", ignoreDuplicates: true });
+  if (!error) villagesReady = true;
+}
+
+function villageInfo(id: unknown): VillageInfo | undefined {
+  return VILLAGES.find((v) => v.id === id);
+}
+
+/** A villages row as the rules see it: a deleted owner leaves it to the militia. */
+function villageState(r: Row): VillageState {
+  return { id: r.id, owner: r.owner ? String(r.owner_name ?? "") : "", guard: r.guard ?? {}, taken_at: Number(r.taken_at),
+    paid_at: Number(r.paid_at) };
+}
+
+/** Who holds each village, for the map: owner, alliance tag, guard, peace and what it holds now. */
+async function villagesView(userId: string) {
+  await ensureVillages();
+  const { data } = await admin.from("villages")
+    .select(`${VILLAGE_COLUMNS}, holder:players!villages_owner_fkey(alliance_id, alliance:alliances!players_alliance_id_fkey(tag))`);
+  const me = await store.player(userId);
+  const t = now();
+  return (data ?? []).flatMap((r: Row) => {
+    const info = villageInfo(r.id);
+    if (!info) return [];
+    const state = villageState(r);
+    return [{
+      id: r.id, owner: state.owner, mine: r.owner === userId, tag: r.holder?.alliance?.tag ?? "",
+      ally: r.owner !== null && r.owner !== userId && me !== null && me.alliance_id !== null && Number(r.holder?.alliance_id) === me.alliance_id,
+      guard: state.guard, taken_at: state.taken_at, peace_until: rules.villages.peaceUntil(state),
+      stock: rules.villages.stock(info, state, t),
+    }];
+  });
+}
+
+/** The village an order names, as act() needs it, with its row. */
+async function findVillage(id: unknown, userId: string): Promise<{ target: VillageTarget; row: Row } | null> {
+  const info = villageInfo(id);
+  if (!info) return null;
+  await ensureVillages();
+  const { data: row } = await admin.from("villages").select(`${VILLAGE_COLUMNS}, holder:players!villages_owner_fkey(alliance_id)`)
+    .eq("id", info.id).maybeSingle();
+  if (!row) return null;
+  const { count } = await admin.from("villages").select("id", { count: "exact", head: true }).eq("owner", userId);
+  const me = await store.player(userId);
+  const ally = row.owner !== null && row.owner !== userId && me !== null && me.alliance_id !== null &&
+    Number((row as Row).holder?.alliance_id) === me.alliance_id;
+  return { target: { info, state: villageState(row), ally, held: count ?? 0 }, row };
+}
+
+/** Takes what this player's villages made since they were last paid; the castle gets it with this request. */
+async function collectVillages(userId: string): Promise<Record<string, number>> {
+  const { data } = await admin.from("villages").select(VILLAGE_COLUMNS).eq("owner", userId);
+  const income: Record<string, number> = {};
+  const t = now();
+  for (const r of data ?? []) {
+    const info = villageInfo(r.id);
+    if (!info) continue;
+    const state = villageState(r);
+    const paid = rules.villages.collect(info, state, t);
+    if (paid.amount <= 0) continue;
+    // Only if nobody else collected or took it meanwhile.
+    const { data: took } = await admin.from("villages").update({ paid_at: paid.paid_at, version: r.version + 1 })
+      .eq("id", r.id).eq("version", r.version).eq("owner", userId).select("id");
+    if (took && took.length > 0) income[info.resource] = (income[info.resource] ?? 0) + paid.amount;
+  }
+  return income;
+}
+
+/** Soldiers walking home from a village to a player's castle (a raids row on its way back). */
+async function sendHome(owner: string, info: VillageInfo, survivors: Record<string, number>, t: number) {
+  if (Object.keys(survivors).length === 0) return;
+  const { data: p } = await admin.from("players").select("name, home_x, home_y").eq("user_id", owner).maybeSingle();
+  if (!p) return;
+  const travel = rules.barons.marchTime(Math.hypot(info.position[0] - p.home_x, info.position[1] - p.home_y));
+  await admin.from("raids").insert({
+    attacker: owner, defender: null, attacker_name: p.name, defender_name: info.name, village: info.id, mission: "return",
+    army: {}, from_x: p.home_x, from_y: p.home_y, to_x: info.position[0], to_y: info.position[1],
+    depart: t, arrive: t, back: t + travel, state: "home", survivors,
+  });
+}
+
+/** Fights every battle at a village that is due, and lets guards that have arrived move in. */
+async function resolveVillageRaids() {
+  const { data: due } = await admin.from("raids").select("*").not("village", "is", null).eq("state", "out").lte("arrive", now())
+    .order("arrive").limit(50);
+  for (const row of due ?? []) {
+    // Take it, so that no other request resolves it as well.
+    const { data: claimed } = await admin.from("raids").update({ state: "fighting" })
+      .eq("id", row.id).eq("state", "out").select("id");
+    if (!claimed || claimed.length === 0) continue;
+    const raid = raidFromRow(row);
+    const info = villageInfo(raid.village);
+    if (!info) {
+      await admin.from("raids").update({ state: "home", survivors: raid.army }).eq("id", row.id);
+      continue;
+    }
+    await ensureVillages();
+    // Whether the attacker's keep has room for one more village.
+    const { data: attacker } = await admin.from("players").select("level").eq("user_id", row.attacker).maybeSingle();
+    const { count: held } = await admin.from("villages").select("id", { count: "exact", head: true }).eq("owner", row.attacker);
+    const room = attacker !== null && rules.villages.checkRoom(Number(attacker.level), held ?? 0) === "";
+    for (let attempt = 0; attempt < RETRIES; attempt++) {
+      const { data: v } = await admin.from("villages").select(VILLAGE_COLUMNS).eq("id", info.id).maybeSingle();
+      if (!v) break;
+      const before = villageState(v);
+      const out = resolveVillageRaid(rules, info, before, raid, room);
+      const captured = out.state.owner !== before.owner;
+      const { data: saved } = await admin.from("villages").update({
+        owner: captured ? row.attacker : v.owner, owner_name: captured ? out.state.owner : v.owner_name, guard: out.state.guard,
+        taken_at: out.state.taken_at, paid_at: out.state.paid_at, version: v.version + 1,
+      }).eq("id", info.id).eq("version", v.version).select("id");
+      if (!saved || saved.length === 0) continue;
+      if (out.attackerReport) await saveReports(row.attacker, [out.attackerReport]);
+      if (out.ownerReport && v.owner) await saveReports(v.owner, [out.ownerReport]);
+      if (captured && v.owner) await sendHome(v.owner, info, out.guardHome, raid.arrive);
+      const stays = Object.keys(out.survivors).length === 0 && out.attackerReport?.result !== "fought";
+      await admin.from("raids").update(stays ? { state: "done" }
+        : { state: "home", survivors: out.survivors, loot: out.loot, ...(out.lead ? { lead: out.lead } : {}) }).eq("id", row.id);
+      break;
+    }
+  }
+}
+
+/** Your guards leave a village for home ("recall_guard"), and with "abandon_village" the village goes back to the militia. */
+async function villageOrder(userId: string, body: Record<string, unknown>): Promise<string> {
+  const info = villageInfo(body.village);
+  if (!info) return "There's no such village.";
+  for (let attempt = 0; attempt < RETRIES; attempt++) {
+    const { data: v } = await admin.from("villages").select(VILLAGE_COLUMNS).eq("id", info.id).eq("owner", userId).maybeSingle();
+    if (!v) return "That village isn't yours.";
+    const guard = v.guard ?? {};
+    const abandon = body.action === "abandon_village";
+    if (!abandon && Object.keys(guard).length === 0) return "No soldiers guard that village.";
+    const { data: saved } = await admin.from("villages")
+      .update(abandon ? { owner: null, owner_name: null, guard: {}, taken_at: 0, paid_at: 0, version: v.version + 1 }
+        : { guard: {}, version: v.version + 1 })
+      .eq("id", info.id).eq("version", v.version).select("id");
+    if (!saved || saved.length === 0) continue;
+    await sendHome(userId, info, guard, now());
+    return "";
+  }
+  return "The server is busy, try again.";
 }
 
 /** The columns other players can see, worked out from a player's state. */
@@ -231,7 +396,7 @@ async function helpersAt(userId: string, t: number): Promise<Row[]> {
 
 /** Fights every battle between players that is due and involves this player. */
 async function resolveRaids(userId: string) {
-  const { data: due } = await admin.from("raids").select("*").eq("state", "out").lte("arrive", now())
+  const { data: due } = await admin.from("raids").select("*").eq("state", "out").lte("arrive", now()).is("village", null)
     .or(`attacker.eq.${userId},defender.eq.${userId}`).order("arrive");
   for (const row of due ?? []) {
     // Take the battle, so that no other request fights it as well.
@@ -544,6 +709,16 @@ Deno.serve(async (req: Request) => {
 
   await resolveAid(userId);
   await resolveRaids(userId);
+  await resolveVillageRaids();
+  // What your villages made: taken before anything can change who holds them.
+  const villageIncome = await collectVillages(userId);
+  let villageError = "";
+  if (body.action === "recall_guard" || body.action === "abandon_village") {
+    villageError = await villageOrder(userId, body);
+    body = { action: "state" };
+  }
+  let village: { target: VillageTarget; row: Row } | null = null;
+  if (body.action === "attack_village" || body.action === "station") village = await findVillage(body.village, userId);
 
   let target: { target: Target; row: Row } | null = null;
   if (["attack_player", "spy", "send_resources", "send_defenders"].includes(String(body.action))) {
@@ -582,7 +757,7 @@ Deno.serve(async (req: Request) => {
       outpostSpot = nearestSpot((world as World).spots, [stored.home_x, stored.home_y], taken);
     }
     const outcome = act(rules, stored, body, t, { pvp, outpostSpot, target: target?.target, homecomings, alliances: allianceRules, aid: aidRules,
-      events: { rules: calendar, world: world as World }, quests: questRules });
+      events: { rules: calendar, world: world as World }, quests: questRules, village: village?.target, villageIncome });
     // Save only if nobody else changed the row meanwhile; otherwise start over.
     const { data: saved, error: saveError } = await admin.from("players")
       .update({ ...outcome.state, ...publicColumns(outcome.state), version: version + 1, updated_at: new Date().toISOString() })
@@ -594,7 +769,15 @@ Deno.serve(async (req: Request) => {
     if (!saved || saved.length === 0) continue;
     await saveReports(userId, outcome.reports);
     let result = outcome.result ?? null;
-    if (outcome.raid && target) {
+    if (outcome.raid && village) {
+      const r = outcome.raid;
+      await admin.from("raids").insert({
+        attacker: userId, defender: r.mission === "attack" ? village.row.owner : null, attacker_name: r.attacker_name,
+        defender_name: r.defender_name, village: r.village, mission: r.mission,
+        army: r.army, waves: r.waves ?? null, tools: r.tools ?? null, lead: r.lead ?? null, from_x: r.from[0], from_y: r.from[1], to_x: r.to[0], to_y: r.to[1],
+        depart: r.depart, arrive: r.arrive, back: r.back,
+      });
+    } else if (outcome.raid && target) {
       const r = outcome.raid;
       await admin.from("raids").insert({
         attacker: userId, defender: target.row.user_id, attacker_name: r.attacker_name, defender_name: r.defender_name,
@@ -618,7 +801,7 @@ Deno.serve(async (req: Request) => {
       if (outcome.error !== "") await store.remove(founded);
       result = await allianceView(store, allianceRules, userId);
     }
-    return reply(await view(userId, outcome.state, { error: recalled || outcome.error, result }));
+    return reply(await view(userId, outcome.state, { error: recalled || villageError || outcome.error, result }));
   }
   if (founded !== null) await store.remove(founded);
   return reply({ ok: false, error: "The server is busy, try again." }, 503);

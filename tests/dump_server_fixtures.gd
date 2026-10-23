@@ -13,6 +13,7 @@ var baron_rules: BaronRules
 var quest_book: QuestBook
 var gear: GearRules
 var outposts: OutpostRules
+var villages: VillageRules
 var rng := RandomNumberGenerator.new()
 
 
@@ -22,6 +23,7 @@ func _initialize() -> void:
 	quest_book = QuestBook.load_default()
 	gear = GearRules.load_default()
 	outposts = OutpostRules.load_default()
+	villages = VillageRules.load_default()
 	rng.seed = 20261011
 	var data := {
 		"castles": [],
@@ -33,6 +35,7 @@ func _initialize() -> void:
 		"drops": [],
 		"armoury": {},
 		"outpost": {},
+		"villages": {},
 		"hashes": {},
 	}
 	for run in 4:
@@ -58,7 +61,8 @@ func _initialize() -> void:
 		data.drops.append({"level": level, "seed": seed_value, "item": gear.roll_drop(level, seed_value)})
 	data.armoury = armoury_run()
 	data.outpost = outpost_run()
-	for s in ["baron_0", "baron_7", "baron_29", "", "Ölberg", "a long camp id"]:
+	data.villages = village_run()
+	for s in ["baron_0", "baron_7", "baron_29", "", "Ölberg", "a long camp id", "village_0", "village_35"]:
 		data.hashes[s] = hash(s)
 	var file := FileAccess.open(OUT, FileAccess.WRITE)
 	file.store_string(JSON.stringify(data, "", false, true))
@@ -415,3 +419,56 @@ func outpost_run() -> Dictionary:
 		var taken_v := taken.map(func(s: Array) -> Vector2: return Vector2(s[0], s[1]))
 		nearest.append({"home": home, "taken": taken, "spot": OutpostRules.nearest_spot(spots, Vector2(home[0], home[1]), taken_v)})
 	return {"t0": T0, "checks": checks, "region": "stone", "steps": steps, "spots": spots, "nearest": nearest}
+
+
+func village_run() -> Dictionary:
+	## The numbers for every village level, what owned villages hold and send
+	## at random times, and attacks on random villages from the world, held by
+	## the militia or by a player's guard.
+	var levels: Array = []
+	for level in range(1, villages.max_level + 1):
+		var yields := {}
+		for r: String in villages.yields:
+			yields[r] = [villages.yield_per_hour(r, level), villages.store_cap(r, level)]
+		levels.append({"level": level, "militia": villages.militia(level), "palisade": villages.palisade(level), "yields": yields})
+	var slots: Array = []
+	for keep in range(0, 7):
+		slots.append([villages.slots_for(keep), villages.check_room(keep, 0), villages.check_room(keep, 1), villages.check_room(keep, 3)])
+	var world: Array = VillageRules.load_villages()
+	var payouts: Array = []
+	for k in 40:
+		var info: Dictionary = world[rng.randi() % world.size()]
+		var state := {"id": info.id, "owner": "" if k % 7 == 0 else "Someone", "guard": {},
+				"taken_at": T0, "paid_at": T0 + rng.randf_range(0.0, 3600.0)}
+		var t := T0 + rng.randf_range(0.0, 3600.0 * 30.0)
+		payouts.append({"info": info, "state": state, "t": t, "stock": villages.stock(info, state, t),
+				"collect": villages.collect(info, state, t), "peace": villages.peace_until(state)})
+	var attacks: Array = []
+	var units: Array = ["spearman", "archer", "swordsman", "horseman"]
+	for k in 30:
+		var info: Dictionary = world[rng.randi() % world.size()]
+		var state := VillageRules.untouched(info.id)
+		if k % 3 == 1:
+			state = {"id": info.id, "owner": "Holder", "taken_at": T0 - 9000.0, "paid_at": T0 - rng.randf_range(0.0, 50000.0),
+					"guard": {units[rng.randi() % 4]: rng.randi_range(0, 60), units[rng.randi() % 4]: rng.randi_range(0, 40)}}
+		var army := {}
+		for unit: String in units:
+			if rng.randf() < 0.7:
+				army[unit] = rng.randi_range(1, 25 * int(info.level))
+		var waves: Array = []
+		if k % 2 == 0:
+			# Two waves: the flanks first, then the front.
+			var first := {}
+			for unit: String in army:
+				first[unit] = int(army[unit]) / 2
+			var second := {}
+			for unit: String in army:
+				second[unit] = int(army[unit]) - int(first[unit])
+			waves = [Battle.split(first, {"left": 50, "right": 50}, ["left", "right", "front"]),
+					Battle.split(second, {"front": 100}, ["left", "right", "front"])]
+		var seed_value := rng.randi_range(0, 2_000_000_000)
+		var lead := {"wall_attack": 0.1, "loot": 0.2} if k % 4 == 3 else {}
+		var t := T0 + rng.randf_range(0.0, 7200.0)
+		attacks.append({"info": info, "state": state, "army": army, "waves": waves, "seed": seed_value, "t": t, "lead": lead,
+				"result": villages.attack(rules, baron_rules, info, state, army, seed_value, t, waves, {}, lead)})
+	return {"levels": levels, "slots": slots, "payouts": payouts, "attacks": attacks}

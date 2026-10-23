@@ -45,6 +45,8 @@ func _ready() -> void:
 	row.add_child(_bar_button("Commanders (H)", commanders.toggle))
 	var outpost := preload("res://scripts/ui/outpost_panel.gd").new()
 	row.add_child(_bar_button("Outpost (P)", outpost.toggle))
+	var villages := preload("res://scripts/ui/villages_panel.gd").new()
+	row.add_child(_bar_button("Villages (B)", villages.toggle))
 	if Economy.online:
 		_alliance_button = _bar_button("Alliance (G)", alliance.toggle)
 		row.add_child(_alliance_button)
@@ -86,6 +88,12 @@ func _ready() -> void:
 	baron_panel.offset_top = TOP
 	baron_panel.offset_right = -12
 	add_child(baron_panel)
+	var village_panel := preload("res://scripts/ui/village_panel.gd").new()
+	village_panel.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
+	village_panel.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	village_panel.offset_top = TOP
+	village_panel.offset_right = -12
+	add_child(village_panel)
 	if Economy.online:
 		var player_panel := preload("res://scripts/ui/player_panel.gd").new()
 		player_panel.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
@@ -132,6 +140,10 @@ func _ready() -> void:
 	outpost.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	outpost.grow_vertical = Control.GROW_DIRECTION_BOTH
 	add_child(outpost)
+	villages.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	villages.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	villages.grow_vertical = Control.GROW_DIRECTION_BOTH
+	add_child(villages)
 	if _owner_panel != null:
 		_owner_panel.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 		_owner_panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
@@ -263,9 +275,9 @@ func _process(delta: float) -> void:
 		var shield := ""
 		if Economy.is_protected():
 			shield = "    Beginner protection: %s left (ends if you attack a player)" % _hours(Economy.protected_until - Economy.now())
-		_info.text = "Online as %s" % Online.email + shield + "\nClick: pick your castle, another player's or a robber baron camp    C: your castle    L: leaderboard    G: alliance    V: events    J: quests    H: commanders    P: outpost    Enter: chat" + ("    O: owner tools" if Economy.is_admin else "") + "\nWASD / drag: pan    Q E / right-drag: rotate    wheel: zoom\nM: parchment map    Home: recentre    F1: hide    Esc: menu\nzoom %d%%    %d fps" % [int(_zoom_t * 100.0), Engine.get_frames_per_second()]
+		_info.text = "Online as %s" % Online.email + shield + "\nClick: pick your castle, another player's, a robber baron camp or a village    C: your castle    L: leaderboard    G: alliance    V: events    J: quests    H: commanders    P: outpost    B: villages    Enter: chat" + ("    O: owner tools" if Economy.is_admin else "") + "\nWASD / drag: pan    Q E / right-drag: rotate    wheel: zoom\nM: parchment map    Home: recentre    F1: hide    Esc: menu\nzoom %d%%    %d fps" % [int(_zoom_t * 100.0), Engine.get_frames_per_second()]
 		return
-	_info.text = "Click: travel there, or pick a castle or party    F: find your party    C: your castle    K: diplomacy    J: quests    H: commanders    P: outpost\nWASD / drag: pan    Q E / right-drag: rotate    wheel: zoom\nM: parchment map    Home: recentre    F1: hide    Esc: menu\nYour party: %s\nzoom %d%%    %d fps" % [_party_status, int(_zoom_t * 100.0), Engine.get_frames_per_second()]
+	_info.text = "Click: travel there, or pick a castle, party or village    F: find your party    C: your castle    K: diplomacy    J: quests    H: commanders    P: outpost    B: villages\nWASD / drag: pan    Q E / right-drag: rotate    wheel: zoom\nM: parchment map    Home: recentre    F1: hide    Esc: menu\nYour party: %s\nzoom %d%%    %d fps" % [_party_status, int(_zoom_t * 100.0), Engine.get_frames_per_second()]
 
 
 func _show_event() -> void:

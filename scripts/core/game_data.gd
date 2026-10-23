@@ -64,6 +64,8 @@ func ensure_loaded() -> bool:
 
 	roads = RoadNetwork.new()
 	roads.build(load_json(ROADS_PATH).get("roads", []), settlements, terrain)
+	for v: Dictionary in VillageRules.load_villages():
+		roads.clear_trees(Vector2(float(v.position[0]), float(v.position[1])), SettlementModels.RADIUS.get("village", 20.0) + 8.0)
 
 	nav = NavGrid.new()
 	nav.build(terrain, roads)

@@ -16,6 +16,7 @@ import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { makeRules } from "../rules/load.ts";
 import { nearestSpot } from "../rules/outposts.ts";
+import { untouched, type VillageState } from "../rules/villages.ts";
 import { effectAt, eventsView, lastInvasion, withOverrides, type EventOverride, type EventRules } from "../rules/events.ts";
 import { CastleState } from "../rules/castle_state.ts";
 import {
@@ -28,6 +29,7 @@ import {
 import { chatView, MemoryChatStore, send as sendChat, type Speaker } from "../../supabase/functions/game/chat.ts";
 import { deliver, recall, type Aid, type AidRules } from "../../supabase/functions/game/aid.ts";
 import { invade } from "../../supabase/functions/game/invasion.ts";
+import { resolveVillageRaid, type VillageTarget } from "../../supabase/functions/game/villages.ts";
 import type { QuestRules } from "../rules/quests.ts";
 import {
   adminEvents, checkGift, giftReport, giveCastle, NOT_ADMIN, startEvent, stopEvent, type AdminLogEntry,
@@ -36,7 +38,7 @@ import {
 const root = new URL("../../", import.meta.url);
 const json = (path: string) => JSON.parse(readFileSync(new URL(path, root), "utf8"));
 const rules = makeRules(json("data/buildings.json"), json("data/units.json"), json("data/barons.json"), json("data/gear.json"),
-  json("data/outposts.json"));
+  json("data/outposts.json"), json("data/villages.json"));
 const world: World = json("server/world/world.json");
 const pvp: PvpRules = json("data/pvp.json");
 const allianceRules: AllianceRules = json("data/alliances.json");
@@ -68,13 +70,16 @@ const refreshTokens = new Map<string, string>();
 const players = new Map<string, PlayerState>();
 const reports: { id: number; user: string; at: number; report: unknown }[] = [];
 let nextReport = 1;
-const raids: (Raid & { attacker: string; defender: string })[] = [];
+const raids: (Raid & { attacker: string; defender: string | null })[] = [];
 let nextRaid = 1;
 const aid: (Aid & { sender: string; receiver: string; state: "out" | "done" })[] = [];
 let nextAid = 1;
 const store = new MemoryAllianceStore(() => new Map([...players].map(([id, p]) => [id,
   { name: p.name, level: castleLevel(p.castle), might: might(p.castle, pvp) }])));
 const chat = new MemoryChatStore();
+// Who holds each village; `holder` is the owner's account (null for the militia).
+const villages = new Map<string, VillageState & { holder: string | null }>(
+  (world.villages ?? []).map((v) => [v.id, { ...untouched(v.id), holder: null }]));
 const ALLIANCE_ORDERS = new Set([
   "alliance", "join_alliance", "accept_invite", "decline_invite", "cancel_request", "leave_alliance", "disband_alliance",
   "invite", "cancel_invite", "kick", "answer_request", "set_role", "alliance_settings",
@@ -134,7 +139,85 @@ function view(user: string, state: PlayerState, extra: Record<string, unknown> =
   const helping = aid.filter((a) => (a.sender === user || a.receiver === user) && a.state === "out")
     .sort((a, b) => a.arrive - b.arrive).map(({ sender, receiver: _r, state: _s, ...a }) => ({ ...a, mine: sender === user }));
   return { ok: true, now: now(), ...extra, player: state, raids: moving, aid: helping, reports: mine,
-    events: shifted(eventsView(eventRules, now() + EVENTS_OFFSET)) };
+    villages: villagesView(user), events: shifted(eventsView(eventRules, now() + EVENTS_OFFSET)) };
+}
+
+// --- Resource villages: the same as in index.ts, without the database ------------
+
+function villagesView(user: string) {
+  return (world.villages ?? []).map((info) => {
+    const v = villages.get(info.id)!;
+    const { holder, ...state } = v;
+    return { id: info.id, owner: state.owner, mine: holder === user, tag: holder ? tagOf(holder) : "",
+      ally: holder !== null && holder !== user && allies(user, holder), guard: state.guard, taken_at: state.taken_at,
+      peace_until: rules.villages.peaceUntil(state), stock: rules.villages.stock(info, state, now()) };
+  });
+}
+
+function held(user: string): number {
+  return [...villages.values()].filter((v) => v.holder === user).length;
+}
+
+function findVillage(id: unknown, user: string): { target: VillageTarget; holder: string | null } | undefined {
+  const info = (world.villages ?? []).find((v) => v.id === id);
+  if (!info) return undefined;
+  const { holder, ...state } = villages.get(info.id)!;
+  return { target: { info, state, ally: holder !== null && holder !== user && allies(user, holder), held: held(user) }, holder };
+}
+
+function collectVillages(user: string): Record<string, number> {
+  const income: Record<string, number> = {};
+  for (const info of world.villages ?? []) {
+    const v = villages.get(info.id)!;
+    if (v.holder !== user) continue;
+    const paid = rules.villages.collect(info, v, now());
+    if (paid.amount <= 0) continue;
+    v.paid_at = paid.paid_at;
+    income[info.resource] = (income[info.resource] ?? 0) + paid.amount;
+  }
+  return income;
+}
+
+function sendHome(user: string, villageId: string, survivors: Record<string, number>, t: number) {
+  const p = players.get(user);
+  const info = (world.villages ?? []).find((v) => v.id === villageId);
+  if (!p || !info || Object.keys(survivors).length === 0) return;
+  const travel = rules.barons.marchTime(Math.hypot(info.position[0] - p.home_x, info.position[1] - p.home_y));
+  raids.push({ id: nextRaid++, attacker: user, defender: null, attacker_name: p.name, defender_name: info.name, village: info.id,
+    mission: "return", army: {}, from: [p.home_x, p.home_y], to: info.position, depart: t, arrive: t, back: t + travel,
+    state: "home", survivors, loot: {} });
+}
+
+function resolveVillageRaids() {
+  for (const raid of raids.filter((r) => r.village && r.state === "out" && r.arrive <= now()).sort((a, b) => a.arrive - b.arrive)) {
+    const info = (world.villages ?? []).find((v) => v.id === raid.village)!;
+    const v = villages.get(info.id)!;
+    const { holder, ...before } = v;
+    const attacker = players.get(raid.attacker);
+    const room = attacker !== undefined && rules.villages.checkRoom(castleLevel(attacker.castle), held(raid.attacker)) === "";
+    const out = resolveVillageRaid(rules, info, before, raid, room);
+    const captured = out.state.owner !== before.owner;
+    villages.set(info.id, { ...out.state, holder: captured ? raid.attacker : holder });
+    if (out.attackerReport) report(raid.attacker, out.attackerReport);
+    if (out.ownerReport && holder) report(holder, out.ownerReport);
+    if (captured && holder) sendHome(holder, info.id, out.guardHome, raid.arrive);
+    const stays = Object.keys(out.survivors).length === 0 && out.attackerReport?.result !== "fought";
+    Object.assign(raid, stays ? { state: "done" }
+      : { state: "home", survivors: out.survivors, loot: out.loot, ...(out.lead ? { lead: out.lead } : {}) });
+  }
+}
+
+function villageOrder(user: string, body: Record<string, unknown>): string {
+  const v = villages.get(String(body.village));
+  if (!v) return "There's no such village.";
+  if (v.holder !== user) return "That village isn't yours.";
+  const abandon = body.action === "abandon_village";
+  if (!abandon && Object.keys(v.guard).length === 0) return "No soldiers guard that village.";
+  const guard = v.guard;
+  if (abandon) villages.set(v.id, { ...untouched(v.id), holder: null });
+  else v.guard = {};
+  sendHome(user, v.id, guard, now());
+  return "";
 }
 
 /** The event view with times moved back from the shifted calendar to the real clock. */
@@ -209,16 +292,16 @@ function helpersAt(user: string, t: number) {
 
 // The same as resolveRaids() in index.ts, without the database.
 function resolveRaids(user: string) {
-  for (const raid of raids.filter((r) => r.state === "out" && r.arrive <= now() && (r.attacker === user || r.defender === user))
+  for (const raid of raids.filter((r) => !r.village && r.state === "out" && r.arrive <= now() && (r.attacker === user || r.defender === user))
     .sort((a, b) => a.arrive - b.arrive)) {
-    const defender = players.get(raid.defender);
+    const defender = players.get(raid.defender!);
     if (defender === undefined) continue;
-    const helpers = helpersAt(raid.defender, raid.arrive);
+    const helpers = helpersAt(raid.defender!, raid.arrive);
     const outcome = fightRaid(rules, pvp, defender, raid, helpers.map((h) => h.army));
-    players.set(raid.defender, outcome.defender);
-    for (const r of outcome.campReports) report(raid.defender, r);
+    players.set(raid.defender!, outcome.defender);
+    for (const r of outcome.campReports) report(raid.defender!, r);
     if (helpers.length > 0) outcome.defenderReport.helped_by = [...new Set(helpers.map((h) => h.sender_name))];
-    report(raid.defender, outcome.defenderReport);
+    report(raid.defender!, outcome.defenderReport);
     report(raid.attacker, outcome.attackerReport);
     Object.assign(raid, { state: "home", survivors: outcome.survivors, loot: outcome.loot, ...(outcome.lead ? { lead: outcome.lead } : {}) });
     for (const [i, h] of helpers.entries()) {
@@ -358,6 +441,14 @@ createServer(async (req, res) => {
     }
     resolveAid(user);
     resolveRaids(user);
+    resolveVillageRaids();
+    const villageIncome = collectVillages(user);
+    let villageError = "";
+    if (body.action === "recall_guard" || body.action === "abandon_village") {
+      villageError = villageOrder(user, body);
+      body.action = "state";
+    }
+    const village = body.action === "attack_village" || body.action === "station" ? findVillage(body.village, user) : undefined;
     const target = ["attack_player", "spy", "send_resources", "send_defenders"].includes(String(body.action))
       ? findTarget(body.target, user) : undefined;
     const homecomings = [
@@ -372,10 +463,12 @@ createServer(async (req, res) => {
     const outpostSpot = body.action === "found_outpost" && !me.outpost ? nearestSpot(world.spots, [me.home_x, me.home_y], takenSpots()) : null;
     const outcome = act(rules, me, body, t,
       { pvp, outpostSpot, target: target?.target, homecomings, alliances: allianceRules, aid: aidRules,
-        events: { rules: eventRules, world, offset: EVENTS_OFFSET }, quests: questRules });
+        events: { rules: eventRules, world, offset: EVENTS_OFFSET }, quests: questRules, village: village?.target, villageIncome });
     players.set(user, outcome.state);
     for (const r of outcome.reports) report(user, r);
-    if (outcome.raid && target) raids.push({ ...outcome.raid, id: nextRaid++, attacker: user, defender: target.user });
+    if (outcome.raid && village) {
+      raids.push({ ...outcome.raid, id: nextRaid++, attacker: user, defender: outcome.raid.mission === "attack" ? village.holder : null });
+    } else if (outcome.raid && target) raids.push({ ...outcome.raid, id: nextRaid++, attacker: user, defender: target.user });
     if (outcome.aid && target) aid.push({ ...outcome.aid, id: nextAid++, sender: user, receiver: target.user, state: "out" });
     let result = outcome.result ?? null;
     if (body.action === "spy" && outcome.error === "" && target) {
@@ -385,7 +478,7 @@ createServer(async (req, res) => {
       if (outcome.error !== "") await store.remove(founded);
       result = await allianceView(store, allianceRules, user);
     }
-    return send(res, 200, view(user, outcome.state, { error: recalled || outcome.error, result }));
+    return send(res, 200, view(user, outcome.state, { error: recalled || villageError || outcome.error, result }));
   }
   send(res, 404, { msg: "Not found" });
 }).listen(PORT, "127.0.0.1", () => console.log(`Local game server on http://127.0.0.1:${PORT}`));

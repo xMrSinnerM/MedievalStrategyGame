@@ -40,6 +40,8 @@ signal event_board_changed
 signal admin_changed(error: String)
 ## your outpost was founded, or carts left or arrived
 signal outpost_changed
+## Who holds the resource villages changed (or, online, the server sent them again).
+signal villages_changed
 
 ## Games are kept in SLOTS save slots under save_dir (slot_1.json ...).
 const SLOTS := 3
@@ -69,6 +71,12 @@ var quest_book: QuestBook
 ## Commanders and gear (data/gear.json).
 var gear_rules: GearRules
 var outpost_rules: OutpostRules
+var village_rules: VillageRules
+## The resource villages on the map (server/world/world.json), and who holds
+## each: id -> {"owner" ("" for the militia), "guard", "taken_at", "paid_at"}.
+## Online the server's view adds "mine", "ally", "tag", "peace_until" and "stock".
+var villages: Array = []
+var village_states := {}
 ## Your outpost (OutpostRules): {name, region, x, y, carts, next_cart}, {} until
 ## you found one. Its castle is in `castles` with the id OutpostRules.OUTPOST_ID.
 var outpost := {}
@@ -193,6 +201,7 @@ func ensure_loaded() -> void:
 	quest_book = QuestBook.load_default()
 	gear_rules = GearRules.load_default()
 	outpost_rules = OutpostRules.load_default()
+	_load_villages()
 	if not load_game():
 		new_game()
 	gear_rules.sync(player_castle)
@@ -260,6 +269,7 @@ func begin_new(n := 1) -> void:
 	quest_book = QuestBook.load_default()
 	gear_rules = GearRules.load_default()
 	outpost_rules = OutpostRules.load_default()
+	_load_villages()
 	slot = n
 	_loaded = true
 	new_game()
@@ -273,6 +283,7 @@ func begin_load(n := 1) -> void:
 	quest_book = QuestBook.load_default()
 	gear_rules = GearRules.load_default()
 	outpost_rules = OutpostRules.load_default()
+	_load_villages()
 	slot = n
 	_loaded = true
 	if not load_game():
@@ -564,6 +575,9 @@ func advance_marches(t: float) -> void:
 
 
 func _fight_camp(m: Dictionary) -> void:
+	if m.has("village"):
+		_fight_village(m)
+		return
 	var camp := get_baron(m.camp)
 	m.state = "home"
 	if camp == null or not camp.is_ready(float(m.arrive)):
@@ -607,6 +621,15 @@ func _come_home(m: Dictionary) -> void:
 		player_castle.resources[r] = maxf(have, minf(cap, have + float(m.loot[r])))
 		player_castle.stats.looted = float(player_castle.stats.looted) + float(m.loot[r])
 	m.state = "done"
+
+
+func march_target(m: Dictionary) -> Dictionary:
+	## Where a march is headed: {"name", "position"} of its camp or village ({} if gone).
+	if m.has("village"):
+		var info := village_info(String(m.village))
+		return {} if info.is_empty() else {"name": info.name, "position": village_position(info.id)}
+	var camp := get_baron(String(m.get("camp", "")))
+	return {} if camp == null else {"name": camp.camp_name, "position": camp.position}
 
 
 func get_baron(camp_id: String) -> BaronCamp:
@@ -705,6 +728,7 @@ func new_game() -> void:
 	player_castle = CastleState.create_new(rules, MAIN_CASTLE, "Your Castle", "player", now())
 	castles.append(player_castle)
 	outpost = {}
+	village_states = {}
 	diplomacy = Diplomacy.from_data_files(now())
 	barons.clear()
 	marches.clear()
@@ -736,6 +760,7 @@ func load_game() -> bool:
 	marches = data.get("marches", [])
 	_next_march = int(data.get("next_march", 1))
 	outpost = data.get("outpost", {})
+	village_states = data.get("villages", {})
 	player_castle = find_main_castle()
 	if player_castle == null:
 		return false
@@ -748,6 +773,7 @@ func load_game() -> bool:
 		else:
 			c.advance_to(t)
 	advance_marches(t)
+	_collect_villages(t)
 	changed.emit()
 	return true
 
@@ -767,7 +793,7 @@ func save_game() -> void:
 			"homes": homes, "exiled": exiled.keys(),
 			"diplomacy": diplomacy.to_dict() if diplomacy != null else {},
 			"barons": barons.map(func(b: BaronCamp) -> Dictionary: return b.to_dict()),
-			"marches": marches, "next_march": _next_march, "outpost": outpost}, "\t", true, true))
+			"marches": marches, "next_march": _next_march, "outpost": outpost, "villages": village_states}, "\t", true, true))
 	f.close()
 
 
@@ -787,6 +813,7 @@ func _process(delta: float) -> void:
 			if c.is_npc():
 				NpcBrain.think(c, t)
 		advance_marches(t)
+		_collect_villages(t)
 		quest_book.roll_day(player_castle, t)
 		gear_rules.sync(player_castle)
 		changed.emit()
@@ -816,6 +843,7 @@ func begin_online(answer: Dictionary) -> void:
 	quest_book = QuestBook.load_default()
 	gear_rules = GearRules.load_default()
 	outpost_rules = OutpostRules.load_default()
+	_load_villages()
 	online = true
 	_loaded = true
 	slot = 0
@@ -827,6 +855,7 @@ func begin_online(answer: Dictionary) -> void:
 	player_castle = CastleState.create_new(rules, MAIN_CASTLE, "Your Castle", "player", now())
 	castles.append(player_castle)
 	outpost = {}
+	village_states = {}
 	barons.clear()
 	marches = []
 	warband_home = false
@@ -919,6 +948,8 @@ func apply_server(answer: Dictionary) -> void:
 	if answer.get("events") is Dictionary:
 		events = answer.events
 		events_changed.emit()
+	if answer.get("villages") is Array:
+		_take_villages(answer.villages)
 	var fresh_reports: Array = []
 	for r in answer.get("reports", []):
 		if int(r.get("id", 0)) > _seen_report:
@@ -928,6 +959,8 @@ func apply_server(answer: Dictionary) -> void:
 		var report: Dictionary = r.get("report", {})
 		if report.get("kind", "") == "aid":
 			aid_news.emit(aid_text(report))
+		elif report.get("kind", "") == "village" and report.get("result", "") != "fought":
+			aid_news.emit(village_text(report))
 		elif report.get("kind", "") == "gift":
 			aid_news.emit(gift_text(report))
 		else:
@@ -940,6 +973,14 @@ func apply_server(answer: Dictionary) -> void:
 
 func _server_report(r: Dictionary) -> Dictionary:
 	## A server battle report in the shape the battle report window expects.
+	if r.get("kind", "") == "village":
+		var attacking: bool = r.get("role", "") == "attacker"
+		return {"player": "a" if attacking else "b", "village": true, "raid": true, "name": r.get("name", ""),
+				"other": r.get("other", ""), "attacker": "", "defender": "", "place": r.get("name", ""),
+				"winner": r.get("winner", "b"), "a": r.get("a", {}), "b": r.get("b", {}), "loot": 0,
+				"spoils": r.get("spoils", {}), "walls": r.get("walls", {}), "courtyard": r.get("courtyard", {}),
+				"tools": r.get("tools", {}), "lead": r.get("lead", {}), "captured": r.get("captured", false),
+				"no_room": r.get("no_room", false), "level": int(r.get("level", 1)), "resource": r.get("resource", "")}
 	if r.get("kind", "") == "raid":
 		var attacking: bool = r.get("role", "") == "attacker"
 		var other := String(r.get("name", ""))
@@ -1482,6 +1523,276 @@ func _take_outpost(given: Variant) -> void:
 			"y": float(given.get("y", 0.0)), "carts": given.get("carts", []), "next_cart": int(given.get("next_cart", 1))}
 	if founded or outpost.carts.size() != carts_before:
 		outpost_changed.emit()
+
+
+# --- Resource villages ------------------------------------------------------------
+
+## Who holds your villages offline (online the server uses your name).
+const OFFLINE_OWNER := "You"
+
+
+func _load_villages() -> void:
+	village_rules = VillageRules.load_default()
+	if villages.is_empty():
+		villages = VillageRules.load_villages()
+
+
+func village_info(id: String) -> Dictionary:
+	for v: Dictionary in villages:
+		if String(v.id) == id:
+			return v
+	return {}
+
+
+func village_state(id: String) -> Dictionary:
+	## Who holds the village (the militia if nobody has touched it).
+	return village_states.get(id, VillageRules.untouched(id))
+
+
+func village_position(id: String) -> Vector2:
+	var info := village_info(id)
+	return Vector2(float(info.position[0]), float(info.position[1])) if not info.is_empty() else Vector2.ZERO
+
+
+func is_my_village(id: String) -> bool:
+	var state := village_state(id)
+	return bool(state.get("mine", false)) if online else String(state.get("owner", "")) == OFFLINE_OWNER
+
+
+func my_villages() -> Array:
+	## The villages you hold, as village_info() has them.
+	return villages.filter(func(v: Dictionary) -> bool: return is_my_village(String(v.id)))
+
+
+func village_slots() -> int:
+	## How many villages your keep can hold.
+	return village_rules.slots_for(player_castle.keep_level())
+
+
+func village_income() -> Dictionary:
+	## What your villages send you each hour, by resource.
+	var out := {}
+	for v: Dictionary in my_villages():
+		out[v.resource] = int(out.get(v.resource, 0)) + village_rules.yield_per_hour(v.resource, int(v.level))
+	return out
+
+
+func village_stock(id: String) -> int:
+	## What the village holds now, for whoever takes it.
+	var state := village_state(id)
+	if online and state.has("stock"):
+		return int(state.stock)
+	return village_rules.stock(village_info(id), state, now())
+
+
+func village_peace_until(id: String) -> float:
+	var state := village_state(id)
+	return float(state.get("peace_until", 0.0)) if online else village_rules.peace_until(state)
+
+
+func village_march_time(id: String) -> float:
+	return baron_rules.march_time(home_position().distance_to(village_position(id)))
+
+
+func check_village_attack(id: String, army: Dictionary, waves: Array = [], tools := {}, commander := 0) -> String:
+	## Why this army can't be sent to take the village ("" if it can); the
+	## same checks as the server's (supabase/functions/game/villages.ts).
+	var info := village_info(id)
+	if info.is_empty():
+		return "There's no such village."
+	var state := village_state(id)
+	if is_my_village(id):
+		return "This village is already yours."
+	if state.get("ally", false):
+		return "This village belongs to your alliance."
+	if now() < village_peace_until(id):
+		return "This village just changed hands and is at peace for now."
+	var why := village_rules.check_room(player_castle.keep_level(), my_villages().size())
+	if why != "":
+		return why
+	why = _check_waves(waves)
+	if why != "":
+		return why
+	why = check_tools(tools)
+	if why != "":
+		return why
+	var lead: Variant = gear_rules.check_lead(player_castle, commander, now())
+	if lead is String:
+		return lead
+	return _check_army(army)
+
+
+func _check_army(army: Dictionary) -> String:
+	var total := 0
+	for unit: String in army:
+		var n := int(army[unit])
+		if n < 0 or n > int(player_castle.troops.get(unit, 0)):
+			return "Your garrison doesn't have that many soldiers."
+		total += n
+	return "" if total > 0 else "Choose some soldiers to send."
+
+
+func send_village_attack(id: String, army: Dictionary, waves: Array = [], tools := {}, commander := 0) -> String:
+	## Sends soldiers from your garrison to take a village, like an attack on
+	## a camp: in `waves` if given, with siege `tools`, led by `commander`.
+	## Online the server decides; the soldiers leave your castle here straight away.
+	if not waves.is_empty():
+		army = Battle.waves_army(waves)
+	var why := check_village_attack(id, army, waves, tools, commander)
+	if why != "":
+		return why
+	var sent := {}
+	for unit: String in army:
+		if int(army[unit]) > 0:
+			sent[unit] = int(army[unit])
+			player_castle.troops[unit] = int(player_castle.troops[unit]) - int(army[unit])
+	var t := now()
+	var travel := village_march_time(id)
+	var kit := Battle.clean_tools(tools)
+	if not kit.is_empty():
+		player_castle.use_tools(kit)
+	var lead: Variant = gear_rules.check_lead(player_castle, commander, t)
+	if lead is Dictionary:
+		gear_rules.commander(player_castle, lead.id).away_until = t + 2.0 * travel
+	if online:
+		var order := {"action": "attack_village", "village": id, "army": sent}
+		if not waves.is_empty():
+			order["waves"] = waves
+		if not kit.is_empty():
+			order["tools"] = kit
+		if lead is Dictionary:
+			order["commander"] = int(lead.id)
+		if String(village_state(id).get("owner", "")) != "":
+			protected_until = 0.0
+		get_node("/root/Online").order(order)
+		changed.emit()
+		return ""
+	var march := {"id": _next_march, "village": id, "army": sent, "depart": t, "arrive": t + travel,
+			"back": t + 2.0 * travel, "state": "out", "survivors": {}, "loot": {}}
+	if not waves.is_empty():
+		march["waves"] = waves
+	if not kit.is_empty():
+		march["tools"] = kit
+	if lead is Dictionary:
+		march["lead"] = lead
+	marches.append(march)
+	_next_march += 1
+	save_game()
+	changed.emit()
+	marches_changed.emit()
+	return ""
+
+
+func _fight_village(m: Dictionary) -> void:
+	## Offline: your army reaches a village. A win carries off its store and,
+	## if your keep has room, makes the village yours.
+	var id := String(m.village)
+	var info := village_info(id)
+	m.state = "home"
+	if info.is_empty() or is_my_village(id):
+		m.survivors = m.army
+		return
+	var state := village_state(id)
+	var lead: Dictionary = m.get("lead", {})
+	var result := village_rules.attack(rules, baron_rules, info, state, m.army, int(m.id) * 7919 + hash(id), float(m.arrive),
+			m.get("waves", []), m.get("tools", {}), lead.get("fx", {}))
+	m.survivors = result.survivors
+	m.loot = result.loot
+	var won: bool = result.winner == "a"
+	var room := village_rules.check_room(player_castle.keep_level(), my_villages().size()) == ""
+	if won and room:
+		village_states[id] = VillageRules.capture(state, OFFLINE_OWNER, float(m.arrive))
+		villages_changed.emit()
+	var led := {}
+	if not lead.is_empty():
+		led = gear_rules.add_xp(player_castle, int(lead.id), gear_rules.xp_win_per_level * int(info.level) if won else gear_rules.xp_loss)
+	attack_resolved.emit({
+		"player": "a", "village": true, "name": info.name, "other": "", "place": info.name,
+		"winner": result.winner, "a": result.a, "b": result.b, "loot": 0, "spoils": result.loot,
+		"walls": result.walls, "courtyard": result.courtyard, "tools": result.get("tools", {}), "lead": led,
+		"captured": won and room, "no_room": won and not room, "level": int(info.level), "resource": info.resource,
+		"home_in": maxf(0.0, float(m.back) - now()),
+	})
+
+
+func _collect_villages(t: float) -> void:
+	## Offline: what your villages made comes into your castle, up to its storage.
+	var cap := player_castle.storage_capacity()
+	for v: Dictionary in villages:
+		var id := String(v.id)
+		if not is_my_village(id):
+			continue
+		var paid := village_rules.collect(v, village_state(id), t)
+		if int(paid.amount) <= 0:
+			continue
+		village_states[id].paid_at = paid.paid_at
+		var have := float(player_castle.resources.get(v.resource, 0.0))
+		player_castle.resources[v.resource] = maxf(have, minf(cap, have + int(paid.amount)))
+
+
+func check_station(id: String, army: Dictionary) -> String:
+	if not online:
+		return "Only villages online need guards."
+	if not is_my_village(id):
+		return "That village isn't yours."
+	return _check_army(army)
+
+
+func station(id: String, army: Dictionary) -> String:
+	## Online: sends soldiers from your garrison to guard your village.
+	var why := check_station(id, army)
+	if why != "":
+		return why
+	var sent := {}
+	for unit: String in army:
+		if int(army[unit]) > 0:
+			sent[unit] = int(army[unit])
+			player_castle.troops[unit] = int(player_castle.troops[unit]) - int(army[unit])
+	get_node("/root/Online").order({"action": "station", "village": id, "army": sent})
+	changed.emit()
+	return ""
+
+
+func recall_guard(id: String) -> void:
+	## Online: your guards leave the village for home.
+	get_node("/root/Online").order({"action": "recall_guard", "village": id})
+
+
+func abandon_village(id: String) -> String:
+	## Gives the village back to the militia (online its guards walk home first).
+	if not is_my_village(id):
+		return "That village isn't yours."
+	if online:
+		get_node("/root/Online").order({"action": "abandon_village", "village": id})
+		return ""
+	village_states.erase(id)
+	save_game()
+	villages_changed.emit()
+	changed.emit()
+	return ""
+
+
+func _take_villages(list: Array) -> void:
+	## Online: who holds each village, as the server has it.
+	var fresh := {}
+	for v: Variant in list:
+		if v is Dictionary and v.has("id"):
+			fresh[String(v.id)] = v
+	if JSON.stringify(fresh) != JSON.stringify(village_states):
+		village_states = fresh
+		villages_changed.emit()
+
+
+func village_text(r: Dictionary) -> String:
+	## A line for a village report with no battle in it.
+	match String(r.get("result", "")):
+		"peace":
+			return "Your army reached %s, but it had just changed hands and is at peace. They're coming home." % r.get("name", "")
+		"joined":
+			return "Your army reached %s, which is already yours, and stayed to guard it." % r.get("name", "")
+		"lost":
+			return "Your guards reached %s, but %s had taken it. They're coming home." % [r.get("name", ""), r.get("other", "someone")]
+	return ""
 
 
 func claim_quest(kind: String, index := 0) -> String:
