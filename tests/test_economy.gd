@@ -1126,7 +1126,9 @@ func test_capitals() -> void:
 	eco._collect_villages(float(m.arrive) + 2.0)
 	near(eco.capital_bonus(), cr.bonus(int(info.level)), "economy: the capital's bonus")
 	near(eco.player_castle.production_per_hour().wood, before * (1.0 + cr.bonus(int(info.level))), "economy: production goes up", 0.01)
-	check(eco.village_income().get("gold", 0) == cr.yield_per_hour("gold", int(info.level)), "economy: the capital sends gold")
+	var gold: float = eco.player_castle.resources.gold
+	eco._collect_villages(float(eco.village_state(info.id).paid_at) + 3600.0)
+	near(float(eco.player_castle.resources.gold), gold + cr.yield_per_hour("gold", int(info.level)), "economy: the capital sends gold", 0.5)
 	check(eco.check_village_attack(String(world[1].id), {"swordsman": 10}) == "You already hold a capital.", "economy: one capital")
 	check(eco.check_village_attack(String(eco.villages[0].id), {"swordsman": 10}) != "You already hold a capital.",
 			"economy: a capital takes no village slot")

@@ -1625,8 +1625,6 @@ func village_income() -> Dictionary:
 	var out := {}
 	for v: Dictionary in my_villages():
 		out[v.resource] = int(out.get(v.resource, 0)) + village_rules.yield_per_hour(v.resource, int(v.level))
-	for v: Dictionary in my_capitals():
-		out[v.resource] = int(out.get(v.resource, 0)) + capital_rules.yield_per_hour(v.resource, int(v.level))
 	return out
 
 

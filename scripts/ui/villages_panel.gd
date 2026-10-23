@@ -144,7 +144,9 @@ func _add_capitals() -> void:
 			+ ("every castle of your alliance produces more: up to +%d%% in all. You can hold %d, your alliance %d."
 				% [roundi(cr.max_bonus * 100.0), cr.per_player, cr.per_alliance] if Economy.online
 				else "your castle produces more: up to +%d%% in all. You can hold %d." % [roundi(cr.max_bonus * 100.0), cr.per_player])
-			+ (" Now: +%d%%." % roundi(Economy.capital_bonus() * 100.0) if Economy.capital_bonus() > 0.0 else ""), 14, MenuStyle.MUTED)
+			+ (" Now: +%d%%." % roundi(Economy.capital_bonus() * 100.0) if Economy.capital_bonus() > 0.0 else "")
+			+ "".join(Economy.my_capitals().map(func(v: Dictionary) -> String:
+				return " %s sends you %d gold an hour." % [v.name, cr.yield_per_hour(v.resource, int(v.level))])), 14, MenuStyle.MUTED)
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	hint.custom_minimum_size = Vector2(780, 0)
 	_body.add_child(hint)
