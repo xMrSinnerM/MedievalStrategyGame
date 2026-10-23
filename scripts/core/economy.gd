@@ -611,7 +611,7 @@ func _fight_camp(m: Dictionary) -> void:
 		"winner": result.winner, "a": result.a, "b": result.b, "loot": 0, "spoils": result.loot,
 		"walls": result.walls, "courtyard": result.courtyard, "tools": result.get("tools", {}),
 		"level": result.level, "leveled": result.leveled, "new_level": camp.level,
-		"defeats": camp.defeats, "needed": baron_rules.defeats_needed(camp.level),
+		"defeats": camp.defeats, "needed": baron_rules.for_camp(camp).defeats_needed(camp.level),
 		"home_in": maxf(0.0, float(m.back) - now()),
 	})
 
@@ -932,6 +932,7 @@ func apply_server(answer: Dictionary) -> void:
 			camp.level = fresh.level
 			camp.defeats = fresh.defeats
 			camp.rebuilt_at = fresh.rebuilt_at
+			camp.fortress = fresh.fortress
 	# Invader camps leave when their invasion is over.
 	var kept := barons.filter(func(b: BaronCamp) -> bool: return listed.has(b.id))
 	if kept.size() != barons.size():
@@ -1013,6 +1014,7 @@ func _server_report(r: Dictionary) -> Dictionary:
 		"invader": r.has("event"), "points": int(r.get("points", 0)),
 		"walls": r.get("walls", {}), "courtyard": r.get("courtyard", {}), "tools": r.get("tools", {}),
 		"lead": r.get("lead", {}), "gear": r.get("gear", {}), "bag_full": r.get("bag_full", false),
+		"fortress": r.get("fortress", false),
 	}
 
 
@@ -1311,9 +1313,10 @@ func event_effect(effect: String) -> float:
 	return factor
 
 
-func baron_loot(level: int) -> Dictionary:
-	## What a camp of this level drops now, with any event bonus (as the server works it out).
-	var loot := baron_rules.loot(level)
+func baron_loot(level: int, camp: BaronCamp = null) -> Dictionary:
+	## What a camp of this level (a fortress, if `camp` is one) drops now,
+	## with any event bonus (as the server works it out).
+	var loot := (baron_rules if camp == null else baron_rules.for_camp(camp)).loot(level)
 	var factor := event_effect("baron_loot")
 	if factor != 1.0:
 		for r: String in loot:

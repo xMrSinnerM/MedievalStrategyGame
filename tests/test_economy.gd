@@ -42,6 +42,7 @@ func _initialize() -> void:
 	test_outpost()
 	test_villages()
 	test_capitals()
+	test_fortresses()
 	print("%d checks, %d failed" % [checks, failures])
 	quit(1 if failures > 0 else 0)
 
@@ -1083,6 +1084,21 @@ func test_outpost() -> void:
 	eco.delete_slot(1)
 	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://test_saves"))
 	eco.free()
+
+
+func test_fortresses() -> void:
+	var br := BaronRules.load_default()
+	check(br.fortress != null and br.fortress.drop_level_bonus > 0, "the fortress rules load")
+	var camp := BaronCamp.create("aldmere_castle_ravenhold", "Ravenhold", Vector2(10, 10))
+	check(br.for_camp(camp) == br, "a camp has the baron rules")
+	camp.fortress = true
+	check(br.for_camp(camp) == br.fortress, "a fortress has its own")
+	check(camp.garrison(br) == br.fortress.garrison(1), "a fortress's garrison")
+	var back := BaronCamp.from_dict(camp.to_dict())
+	check(back.fortress and not BaronCamp.from_dict(BaronCamp.create("b", "B", Vector2.ZERO).to_dict()).fortress, "saved as a fortress")
+	var world = JSON.parse_string(FileAccess.get_file_as_string("res://server/world/world.json"))
+	check(world.fortresses.size() == 10 and world.fortresses.all(func(f: Dictionary) -> bool: return f.id != "player_castle"),
+			"every other castle is a fortress")
 
 
 func test_capitals() -> void:

@@ -39,6 +39,7 @@ func _initialize() -> void:
 		"outpost": {},
 		"villages": {},
 		"capitals": {},
+		"fortresses": [],
 		"hashes": {},
 	}
 	for run in 4:
@@ -67,6 +68,12 @@ func _initialize() -> void:
 	data.villages = village_run(villages, VillageRules.load_villages(), 25)
 	data.capitals = village_run(capitals, CapitalRules.load_capitals(), 300)
 	data.capitals["bonus"] = capital_bonus_run()
+	var fr := baron_rules.fortress
+	for level in range(1, fr.max_level + 1):
+		data.fortresses.append({
+			"level": level, "garrison": fr.garrison(level), "palisade": fr.palisade(level), "loot": fr.loot(level),
+			"defeats_needed": fr.defeats_needed(level), "rebuild_time": fr.rebuild_time(level),
+		})
 	for s in ["baron_0", "baron_7", "baron_29", "", "Ölberg", "a long camp id", "village_0", "village_35"]:
 		data.hashes[s] = hash(s)
 	var file := FileAccess.open(OUT, FileAccess.WRITE)

@@ -28,7 +28,7 @@ test("a new player gets the starting castle and every camp", () => {
   assert.equal(p.name, "Valentin");
   assert.equal(p.castle.name, "Valentin's Castle");
   assert.equal(p.castle.last_update, T0);
-  assert.equal(p.camps.length, world.camps.length);
+  assert.equal(p.camps.length, (world.camps.length + (world.fortresses?.length ?? 0)));
   assert.deepEqual([p.home_x, p.home_y], world.home);
   assert.ok(p.camps.every((c) => c.defeats === 0 && c.rebuilt_at === 0));
 });
@@ -95,7 +95,8 @@ test("new players get free spots, and camp levels count from their spot", () => 
   assert.ok(world.spots.length > 100);
   // At the game's own castle spot the camps start at the levels the game gives them.
   const first = newPlayer(rules, world, "First", T0);
-  assert.deepEqual(first.camps.map((c) => c.level), world.camps.map((c) => c.level));
+  assert.deepEqual(first.camps.filter((c) => !c.fortress).map((c) => c.level), world.camps.map((c) => c.level));
+  assert.ok(first.camps.filter((c) => c.fortress).every((c) => c.level === 1), "fortresses start at level 1");
   const taken: [number, number][] = [];
   const roomy = (s: [number, number]) => (world.invasion_spots?.[world.spots.indexOf(s)]?.length ?? 0) >= 3;
   const roomyCount = world.spots.filter(roomy).length;
@@ -112,7 +113,7 @@ test("new players get free spots, and camp levels count from their spot", () => 
     Math.hypot(a[0] - world.home[0], a[1] - world.home[1]) ? b : a));
   const p = newPlayer(rules, world, "Faraway", T0, far);
   assert.deepEqual([p.home_x, p.home_y], far);
-  const nearest = p.camps.reduce((a, b) => (Math.hypot(b.position[0] - far[0], b.position[1] - far[1]) <
+  const nearest = p.camps.filter((c) => !c.fortress).reduce((a, b) => (Math.hypot(b.position[0] - far[0], b.position[1] - far[1]) <
     Math.hypot(a.position[0] - far[0], a.position[1] - far[1]) ? b : a));
   assert.equal(nearest.level, 1);
   assert.equal(castleLevel(p.castle), 1);

@@ -603,6 +603,19 @@ changed hands is at peace for 6 hours. The numbers live in
 `CapitalRules` in `server/rules/villages.ts` follow the same rules (checked by
 the server fixtures).
 
+## Fortresses (online)
+
+Online, the castles of the old kingdoms on the map (Ravenhold, Ulfhall,
+Seawatch and the rest) are fortresses. Click one to see its level, garrison,
+walls and loot. Each player has their own fortresses, like the robber
+barons' camps: they all start at level 1 (120 soldiers behind stone walls),
+and every win raises one a level (two wins each from level 10), up to level
+30, with a bigger garrison, stronger walls and richer loot. A beaten lord
+needs an hour or more to rebuild, and fortresses drop better gear than baron
+camps. The castle's label shows the fortress's level. In single player the
+castles stay as they were: faction castles you can besiege and capture. The
+numbers live in `data/fortresses.json` (the same keys as `data/barons.json`).
+
 ## Multiplayer (in progress)
 
 The multiplayer server runs on Supabase. It uses the same rules as the game,

@@ -156,11 +156,12 @@ func show_baron_report(report: Dictionary) -> void:
 		if int(report.get("points", 0)) > 0:
 			lines.append("Baron Invasion: +%d event points." % int(report.points))
 		if report.leveled:
-			lines.append("%s rises to level %d: more soldiers, more loot." % [report.defender, report.new_level])
+			lines.append("%s rises to level %d: more soldiers, more loot%s." % [report.defender, report.new_level,
+					", better gear" if report.get("fortress", false) else ""])
 		else:
 			lines.append("Wins %d of %d before %s reaches level %d." % [report.defeats, report.needed, report.defender, report.new_level + 1])
 	else:
-		lines.append("The camp held. Your surviving soldiers are marching home.")
+		lines.append("The %s held. Your surviving soldiers are marching home." % ("fortress" if report.get("fortress", false) else "camp"))
 	_footer.text = "\n".join(lines)
 	_add_siege_line(report, true)
 

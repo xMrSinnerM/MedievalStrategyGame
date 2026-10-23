@@ -4,7 +4,9 @@ extends Node3D
 ## from them (and, offline, to and from resource villages). Camps are placed
 ## by BaronPlacer the first time a game sees them.
 ## Online, the invader camps of a Baron Invasion come and go with the event;
-## they fly a red banner.
+## they fly a red banner. Fortresses (the old kingdoms' castles, online) are
+## camps too, without a model: the castle stands there, and its label shows
+## the fortress's level.
 
 const PICK_RADIUS := 16.0
 const LABEL_MAX_ZOOM := 0.9
@@ -20,6 +22,7 @@ const INVADER_LABEL := Color(1.0, 0.42, 0.32)
 const ARMY := Color(0.85, 0.7, 0.25)
 
 var _camps := {}          ## camp id -> {"node", "label"}
+var settlements: Node3D   ## the settlements layer, for the fortresses' labels
 var _armies := {}         ## march id -> {"node", "label"}
 var _zoom_t := 0.0
 var _label_timer := 0.0
@@ -70,6 +73,8 @@ func _sync_camps() -> void:
 
 
 func _add_camp(camp: BaronCamp) -> void:
+	if camp.fortress:
+		return
 	var root := Node3D.new()
 	root.name = camp.id
 	var x := camp.position.x
@@ -118,6 +123,9 @@ func _add_camp(camp: BaronCamp) -> void:
 func _refresh_labels() -> void:
 	var now := Economy.now()
 	for camp in Economy.barons:
+		if camp.fortress and settlements != null:
+			settlements.show_fortress(camp.id, "Lv %d" % camp.level + ("" if camp.is_ready(now)
+					else "\nRebuilding %s" % _clock(camp.rebuilt_at - now)), camp.is_ready(now))
 		if not _camps.has(camp.id):
 			continue
 		var label: Label3D = _camps[camp.id].label

@@ -203,6 +203,11 @@ func _on_click(screen_pos: Vector2) -> void:
 		return
 	EventBus.player_selected.emit("")
 	var settlement := _settlement_at(target)
+	if settlement.get("type", "") == "castle" and Economy.get_baron(String(settlement.id)) != null:
+		# Online, the castles are fortresses.
+		EventBus.settlement_selected.emit("")
+		EventBus.baron_selected.emit(String(settlement.id))
+		return
 	if settlement.get("type", "") == "castle":
 		EventBus.settlement_selected.emit(settlement.id)
 		return

@@ -31,6 +31,7 @@ func _ready() -> void:
 	vegetation.build()
 	barons = preload("res://scripts/world/barons_layer.gd").new()
 	barons.name = "Barons"
+	barons.settlements = settlements
 	add_child(barons)
 	barons.build()
 	if Economy.online:

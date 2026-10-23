@@ -23,6 +23,10 @@ export class BaronRules {
   marchSpeed = 6;
   /** Multiplies camp loot at a given time: timed events online (server/rules/events.ts). */
   lootFactor: (t: number) => number = () => 1;
+  /** A fortress drops gear like a camp this many levels higher (data/fortresses.json). */
+  dropLevelBonus = 0;
+  /** The numbers for fortresses (data/fortresses.json), camps with `fortress` set; none without them. */
+  fortress?: BaronRules;
 
   constructor(data: Json) {
     this.maxLevel = Number(data.max_level ?? this.maxLevel);
@@ -38,6 +42,12 @@ export class BaronRules {
     this.rebuildBase = Number(data.rebuild_base ?? this.rebuildBase);
     this.rebuildPerLevel = Number(data.rebuild_per_level ?? this.rebuildPerLevel);
     this.marchSpeed = Number(data.march_speed ?? this.marchSpeed);
+    this.dropLevelBonus = Number(data.drop_level_bonus ?? 0);
+  }
+
+  /** The rules for this camp: the fortress rules for a fortress, else these. */
+  forCamp(camp: { fortress?: boolean }): BaronRules {
+    return camp.fortress && this.fortress ? this.fortress : this;
   }
 
   garrison(level: number): Dict {

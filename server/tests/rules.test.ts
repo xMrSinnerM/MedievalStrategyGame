@@ -16,7 +16,7 @@ import { claimQuest, cofferReward, cofferStreak, currentStory, dailyProgress, pi
 const root = new URL("../../", import.meta.url);
 const json = (path: string) => JSON.parse(readFileSync(new URL(path, root), "utf8"));
 const rules = makeRules(json("data/buildings.json"), json("data/units.json"), json("data/barons.json"), json("data/gear.json"),
-  json("data/outposts.json"), json("data/villages.json"), json("data/capitals.json"));
+  json("data/outposts.json"), json("data/villages.json"), json("data/capitals.json"), json("data/fortresses.json"));
 const fixtures = json("server/tests/fixtures.json");
 const T0 = 1_000_000;
 const quests: QuestRules = json("data/quests.json");
@@ -159,6 +159,17 @@ test("baron rules by level", () => {
       defeats_needed: r.defeatsNeeded(b.level), rebuild_time: r.rebuildTime(b.level), march_time: r.marchTime(b.level * 37.5) },
       { garrison: b.garrison, palisade: b.palisade, loot: b.loot, defeats_needed: b.defeats_needed,
         rebuild_time: b.rebuild_time, march_time: b.march_time }, `level ${b.level}`);
+  }
+});
+
+test("fortress rules by level", () => {
+  const r = rules.barons.forCamp({ fortress: true });
+  assert.notEqual(r, rules.barons);
+  for (const b of fixtures.fortresses) {
+    same({ garrison: r.garrison(b.level), palisade: r.palisade(b.level), loot: r.loot(b.level),
+      defeats_needed: r.defeatsNeeded(b.level), rebuild_time: r.rebuildTime(b.level) },
+      { garrison: b.garrison, palisade: b.palisade, loot: b.loot, defeats_needed: b.defeats_needed, rebuild_time: b.rebuild_time },
+      `fortress level ${b.level}`);
   }
 });
 

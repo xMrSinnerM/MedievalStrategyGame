@@ -20,6 +20,8 @@ export interface CampData {
   points?: number;
   /** Invader camps only: seconds it rebuilds after a defeat. */
   rebuild?: number;
+  /** A fortress (one of the old kingdoms' castles), with the fortress rules (BaronRules.forCamp()). */
+  fortress?: boolean;
 }
 
 export interface CampAttack extends SiegeResult {
@@ -39,13 +41,14 @@ export function isReady(camp: CampData, now: number): boolean {
  * DEFAULT_LAYOUT, and updates the camp. `lead` is what the army's commander
  * adds (gear.ts effects()): harder blows, and `loot` more carried home.
  */
-export function attackCamp(camp: CampData, rules: BaronRules, units: BuildingRules, army: Dict, seed: number, now: number,
+export function attackCamp(camp: CampData, barons: BaronRules, units: BuildingRules, army: Dict, seed: number, now: number,
   waves?: Wave[], tools: Tools = {}, lead: Dict = {}): CampAttack {
+  const rules = barons.forCamp(camp);
   const result = siege(units, waves ?? autoWaves(army), rules.garrison(camp.level), DEFAULT_LAYOUT, seed,
     wallFromDefense(rules.palisade(camp.level)), { a: tools, lead_a: lead });
   const out: CampAttack = { ...result, level: camp.level, leveled: false, survivors: survivors(result.a), loot: {} };
   if (result.winner !== "a") return out;
-  const factor = rules.lootFactor(now);
+  const factor = barons.lootFactor(now);
   const stock: Dict = {};
   for (const [r, n] of Object.entries(rules.loot(camp.level))) stock[r] = Math.floor(n * factor);
   out.loot = carried(stock, rules.carry(out.survivors) * (1 + (lead.loot ?? 0)));
