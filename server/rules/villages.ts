@@ -3,6 +3,9 @@
 // to its owner's castle, and online other players can take it from them. A
 // port of scripts/economy/village_rules.gd; the numbers are in
 // data/villages.json, where the villages stand in server/world/world.json.
+// Capitals (the towns, data/capitals.json) are villages with a stronger
+// guard that also raise their holder's alliance's production: CapitalRules,
+// a port of scripts/economy/capital_rules.gd.
 
 import { carried } from "./baron_camp.ts";
 import type { BaronRules } from "./baron_rules.ts";
@@ -21,6 +24,10 @@ export interface VillageInfo {
   level: number;
   /** The resource it works. */
   resource: string;
+  /** A capital (one of the towns), with CapitalRules. */
+  capital?: boolean;
+  /** For a capital: the faction whose town it is. */
+  faction?: string;
 }
 
 /** Who holds a village and since when (the villages table online). */
@@ -180,4 +187,67 @@ export function capture(state: VillageState, owner: string, t: number): VillageS
 /** A village as nobody has touched it yet. */
 export function untouched(id: string): VillageState {
   return { id, owner: "", guard: {}, taken_at: 0, paid_at: 0 };
+}
+
+/** Capitals: towns that work like villages, with their own numbers, room and production bonus. */
+export class CapitalRules extends VillageRules {
+  minKeep: number;
+  perPlayer: number;
+  perAlliance: number;
+  bonusBase: number;
+  bonusPerLevel: number;
+  maxBonus: number;
+
+  constructor(data: Json = {}) {
+    super(data);
+    this.minKeep = Number(data.min_keep ?? 4);
+    this.perPlayer = Number(data.per_player ?? 1);
+    this.perAlliance = Number(data.per_alliance ?? 3);
+    this.bonusBase = Number(data.bonus_base ?? 0);
+    this.bonusPerLevel = Number(data.bonus_per_level ?? 0);
+    this.maxBonus = Number(data.max_bonus ?? 0);
+  }
+
+  override slotsFor(keep: number): number {
+    return keep >= this.minKeep ? this.perPlayer : 0;
+  }
+
+  override firstSlotKeep(): number {
+    return this.minKeep;
+  }
+
+  /** Why you can't hold one more capital ("" if you can). */
+  override checkRoom(keep: number, held: number): string {
+    if (keep < this.minKeep) return `Your keep must reach level ${this.minKeep} to take a capital.`;
+    if (held >= this.perPlayer) return this.perPlayer === 1 ? "You already hold a capital." : `You already hold ${this.perPlayer} capitals.`;
+    return "";
+  }
+
+  /** Why your alliance can't hold one more capital, given how many it holds. */
+  checkAlliance(held: number): string {
+    return held < this.perAlliance ? "" : `Your alliance already holds ${this.perAlliance} capitals.`;
+  }
+
+  /** How much more every castle of the holder's alliance produces for one capital. */
+  bonus(level: number): number {
+    return this.bonusBase + this.bonusPerLevel * (level - 1);
+  }
+
+  /** The production bonus for capitals of these levels, at most maxBonus. */
+  totalBonus(levels: number[]): number {
+    return Math.min(levels.reduce((sum, level) => sum + this.bonus(level), 0), this.maxBonus);
+  }
+
+  /** The castle boost (CastleState.boost) for capitals of these levels. */
+  boost(levels: number[], resources: string[]): Dict {
+    const b = this.totalBonus(levels);
+    const out: Dict = {};
+    if (b > 0) for (const r of resources) out[r] = b;
+    return out;
+  }
+}
+
+/** The rules for this village or capital. */
+export function rulesFor(rules: { villages: VillageRules; capitals: CapitalRules }, info: VillageInfo): VillageRules {
+  return info.capital ? rules.capitals : rules.villages;
 }

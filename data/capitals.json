@@ -1,0 +1,21 @@
+{
+	"_comment": "Capitals: the ten towns on the map (data/settlements.json), written into server/world/world.json by scripts/tools/export_server_world.gd. A faction's capital town (factions.json `capital`) is level 2, every other town level 1. A town guard (`guard` soldiers: base * growth^(level - 1), mixed as `guard_armies`) holds each one behind strong walls (palisade_base + palisade_per_level * (level - 1)) until someone beats them. Whoever takes a town gets `yields` (per hour, base * yield_growth^(level - 1), stored up to store_hours) and every castle of the holder's alliance (online; only the holder offline) produces `bonus` more of everything: bonus_base + bonus_per_level * (level - 1) per capital, at most max_bonus in all. Your keep must reach min_keep to take one; a player holds at most per_player capitals and an alliance at most per_alliance. A capital just taken can't be attacked for peace_hours.",
+	"yields": { "gold": 150 },
+	"yield_growth": 1.5,
+	"store_hours": 12,
+	"guard_base": 400,
+	"guard_growth": 1.5,
+	"guard_armies": [
+		{ "from_level": 1, "mix": { "spearman": 0.3, "archer": 0.3, "swordsman": 0.25, "horseman": 0.15 } }
+	],
+	"palisade_base": 260,
+	"palisade_per_level": 60,
+	"peace_hours": 6,
+	"max_level": 2,
+	"min_keep": 4,
+	"per_player": 1,
+	"per_alliance": 3,
+	"bonus_base": 0.05,
+	"bonus_per_level": 0.03,
+	"max_bonus": 0.2
+}

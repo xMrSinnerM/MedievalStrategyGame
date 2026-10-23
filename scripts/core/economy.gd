@@ -72,6 +72,10 @@ var quest_book: QuestBook
 var gear_rules: GearRules
 var outpost_rules: OutpostRules
 var village_rules: VillageRules
+## Capitals: the towns, held and attacked like villages (CapitalRules); their
+## states are in village_states too.
+var capital_rules: CapitalRules
+var capitals: Array = []
 ## The resource villages on the map (server/world/world.json), and who holds
 ## each: id -> {"owner" ("" for the militia), "guard", "taken_at", "paid_at"}.
 ## Online the server's view adds "mine", "ally", "tag", "peace_until" and "stock".
@@ -980,7 +984,8 @@ func _server_report(r: Dictionary) -> Dictionary:
 				"winner": r.get("winner", "b"), "a": r.get("a", {}), "b": r.get("b", {}), "loot": 0,
 				"spoils": r.get("spoils", {}), "walls": r.get("walls", {}), "courtyard": r.get("courtyard", {}),
 				"tools": r.get("tools", {}), "lead": r.get("lead", {}), "captured": r.get("captured", false),
-				"no_room": r.get("no_room", false), "level": int(r.get("level", 1)), "resource": r.get("resource", "")}
+				"no_room": r.get("no_room", false), "level": int(r.get("level", 1)), "resource": r.get("resource", ""),
+				"capital": r.get("capital", false)}
 	if r.get("kind", "") == "raid":
 		var attacking: bool = r.get("role", "") == "attacker"
 		var other := String(r.get("name", ""))
@@ -1533,15 +1538,31 @@ const OFFLINE_OWNER := "You"
 
 func _load_villages() -> void:
 	village_rules = VillageRules.load_default()
+	capital_rules = CapitalRules.load_capital_rules()
 	if villages.is_empty():
 		villages = VillageRules.load_villages()
+	if capitals.is_empty():
+		capitals = CapitalRules.load_capitals()
 
 
 func village_info(id: String) -> Dictionary:
+	## A village or a capital, as the map has it ({} if there's none).
 	for v: Dictionary in villages:
 		if String(v.id) == id:
 			return v
+	for v: Dictionary in capitals:
+		if String(v.id) == id:
+			return v
 	return {}
+
+
+func is_capital(id: String) -> bool:
+	return bool(village_info(id).get("capital", false))
+
+
+func village_rules_for(id: String) -> VillageRules:
+	## The rules for this village, or for this capital.
+	return capital_rules if is_capital(id) else village_rules
 
 
 func village_state(id: String) -> Dictionary:
@@ -1564,6 +1585,36 @@ func my_villages() -> Array:
 	return villages.filter(func(v: Dictionary) -> bool: return is_my_village(String(v.id)))
 
 
+func my_capitals() -> Array:
+	## The capitals you hold.
+	return capitals.filter(func(v: Dictionary) -> bool: return is_my_village(String(v.id)))
+
+
+func capital_levels() -> Array:
+	## The levels of the capitals your alliance holds (online), or you hold (offline).
+	var out := []
+	for v: Dictionary in capitals:
+		if is_my_village(String(v.id)) or (online and village_state(String(v.id)).get("ally", false)):
+			out.append(int(v.level))
+	return out
+
+
+func capital_bonus() -> float:
+	## How much more your castles produce thanks to capitals.
+	return capital_rules.total_bonus(capital_levels())
+
+
+func alliance_capitals() -> int:
+	## How many capitals your alliance holds, you included (online).
+	return capital_levels().size()
+
+
+func _apply_capital_boost() -> void:
+	## Offline: your castle produces more for the capitals you hold (online the server sets it).
+	if not online:
+		player_castle.boost = capital_rules.boost(capital_levels(), rules.resources)
+
+
 func village_slots() -> int:
 	## How many villages your keep can hold.
 	return village_rules.slots_for(player_castle.keep_level())
@@ -1574,6 +1625,8 @@ func village_income() -> Dictionary:
 	var out := {}
 	for v: Dictionary in my_villages():
 		out[v.resource] = int(out.get(v.resource, 0)) + village_rules.yield_per_hour(v.resource, int(v.level))
+	for v: Dictionary in my_capitals():
+		out[v.resource] = int(out.get(v.resource, 0)) + capital_rules.yield_per_hour(v.resource, int(v.level))
 	return out
 
 
@@ -1582,12 +1635,12 @@ func village_stock(id: String) -> int:
 	var state := village_state(id)
 	if online and state.has("stock"):
 		return int(state.stock)
-	return village_rules.stock(village_info(id), state, now())
+	return village_rules_for(id).stock(village_info(id), state, now())
 
 
 func village_peace_until(id: String) -> float:
 	var state := village_state(id)
-	return float(state.get("peace_until", 0.0)) if online else village_rules.peace_until(state)
+	return float(state.get("peace_until", 0.0)) if online else village_rules_for(id).peace_until(state)
 
 
 func village_march_time(id: String) -> float:
@@ -1595,19 +1648,20 @@ func village_march_time(id: String) -> float:
 
 
 func check_village_attack(id: String, army: Dictionary, waves: Array = [], tools := {}, commander := 0) -> String:
-	## Why this army can't be sent to take the village ("" if it can); the
-	## same checks as the server's (supabase/functions/game/villages.ts).
+	## Why this army can't be sent to take the village or capital ("" if it
+	## can); the same checks as the server's (supabase/functions/game/villages.ts).
 	var info := village_info(id)
 	if info.is_empty():
 		return "There's no such village."
 	var state := village_state(id)
+	var what := "capital" if info.get("capital", false) else "village"
 	if is_my_village(id):
-		return "This village is already yours."
+		return "This %s is already yours." % what
 	if state.get("ally", false):
-		return "This village belongs to your alliance."
+		return "This %s belongs to your alliance." % what
 	if now() < village_peace_until(id):
-		return "This village just changed hands and is at peace for now."
-	var why := village_rules.check_room(player_castle.keep_level(), my_villages().size())
+		return "This %s just changed hands and is at peace for now." % what
+	var why := _check_room(id)
 	if why != "":
 		return why
 	why = _check_waves(waves)
@@ -1620,6 +1674,16 @@ func check_village_attack(id: String, army: Dictionary, waves: Array = [], tools
 	if lead is String:
 		return lead
 	return _check_army(army)
+
+
+func _check_room(id: String) -> String:
+	## Why your keep (and, online, your alliance) can't hold this village or capital as well.
+	if not is_capital(id):
+		return village_rules.check_room(player_castle.keep_level(), my_villages().size())
+	var why := capital_rules.check_room(player_castle.keep_level(), my_capitals().size())
+	if why == "" and online:
+		why = capital_rules.check_alliance(alliance_capitals())
+	return why
 
 
 func _check_army(army: Dictionary) -> String:
@@ -1684,8 +1748,8 @@ func send_village_attack(id: String, army: Dictionary, waves: Array = [], tools 
 
 
 func _fight_village(m: Dictionary) -> void:
-	## Offline: your army reaches a village. A win carries off its store and,
-	## if your keep has room, makes the village yours.
+	## Offline: your army reaches a village or capital. A win carries off its
+	## store and, if your keep has room, makes it yours.
 	var id := String(m.village)
 	var info := village_info(id)
 	m.state = "home"
@@ -1694,14 +1758,15 @@ func _fight_village(m: Dictionary) -> void:
 		return
 	var state := village_state(id)
 	var lead: Dictionary = m.get("lead", {})
-	var result := village_rules.attack(rules, baron_rules, info, state, m.army, int(m.id) * 7919 + hash(id), float(m.arrive),
+	var result := village_rules_for(id).attack(rules, baron_rules, info, state, m.army, int(m.id) * 7919 + hash(id), float(m.arrive),
 			m.get("waves", []), m.get("tools", {}), lead.get("fx", {}))
 	m.survivors = result.survivors
 	m.loot = result.loot
 	var won: bool = result.winner == "a"
-	var room := village_rules.check_room(player_castle.keep_level(), my_villages().size()) == ""
+	var room := _check_room(id) == ""
 	if won and room:
 		village_states[id] = VillageRules.capture(state, OFFLINE_OWNER, float(m.arrive))
+		_apply_capital_boost()
 		villages_changed.emit()
 	var led := {}
 	if not lead.is_empty():
@@ -1711,18 +1776,20 @@ func _fight_village(m: Dictionary) -> void:
 		"winner": result.winner, "a": result.a, "b": result.b, "loot": 0, "spoils": result.loot,
 		"walls": result.walls, "courtyard": result.courtyard, "tools": result.get("tools", {}), "lead": led,
 		"captured": won and room, "no_room": won and not room, "level": int(info.level), "resource": info.resource,
-		"home_in": maxf(0.0, float(m.back) - now()),
+		"capital": bool(info.get("capital", false)), "home_in": maxf(0.0, float(m.back) - now()),
 	})
 
 
 func _collect_villages(t: float) -> void:
-	## Offline: what your villages made comes into your castle, up to its storage.
+	## Offline: what your villages and capitals made comes into your castle,
+	## up to its storage, and your capitals boost its production.
+	_apply_capital_boost()
 	var cap := player_castle.storage_capacity()
-	for v: Dictionary in villages:
+	for v: Dictionary in villages + capitals:
 		var id := String(v.id)
 		if not is_my_village(id):
 			continue
-		var paid := village_rules.collect(v, village_state(id), t)
+		var paid := village_rules_for(id).collect(v, village_state(id), t)
 		if int(paid.amount) <= 0:
 			continue
 		village_states[id].paid_at = paid.paid_at
@@ -1766,6 +1833,7 @@ func abandon_village(id: String) -> String:
 		get_node("/root/Online").order({"action": "abandon_village", "village": id})
 		return ""
 	village_states.erase(id)
+	_apply_capital_boost()
 	save_game()
 	villages_changed.emit()
 	changed.emit()

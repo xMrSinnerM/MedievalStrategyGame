@@ -118,6 +118,8 @@ func _refresh() -> void:
 			lines.append("%d defenders from %s, for %s more" % [n, a.sender_name, _clock(float(a.leave) - Economy.now())])
 	if castle == Economy.player_castle and Economy.newcomer_protected():
 		lines.append("Safe from sieges until your keep reaches level %d" % Economy.PROTECTED_BELOW_KEEP)
+	if castle == Economy.player_castle and Economy.capital_bonus() > 0.0:
+		lines.append("Capitals: +%d%% production" % roundi(Economy.capital_bonus() * 100.0))
 	var rates := castle.net_per_hour()
 	var income: PackedStringArray = []
 	for r in castle.rules.resources:

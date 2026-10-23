@@ -4,12 +4,15 @@
 // ("station"); index.ts stores them as raids rows with `village` set and
 // resolves them here when they arrive, whoever's request comes first. Every
 // request also collects what your villages made since the last one.
+// Capitals (the towns) are villages too, in the same table, with their own
+// rules (rulesFor()); they also raise the production of every castle in the
+// holder's alliance (capitalBoost()).
 
 import { godotHash, type Dict } from "../../../server/rules/util.ts";
 import type { Side, SiegeResult } from "../../../server/rules/battle.ts";
 import type { Lead } from "../../../server/rules/gear.ts";
 import type { Rules } from "../../../server/rules/load.ts";
-import { capture, type VillageInfo, type VillageRules, type VillageState } from "../../../server/rules/villages.ts";
+import { capture, CapitalRules, rulesFor, type VillageInfo, type VillageRules, type VillageState } from "../../../server/rules/villages.ts";
 import type { CastleState } from "../../../server/rules/castle_state.ts";
 import type { Raid } from "./game.ts";
 
@@ -19,8 +22,10 @@ export interface VillageTarget {
   state: VillageState;
   /** Its owner is in the same alliance as the player giving the order. */
   ally: boolean;
-  /** How many villages that player holds now. */
+  /** How many villages (or, for a capital, capitals) that player holds now. */
   held: number;
+  /** For a capital: how many capitals the player's alliance holds now. */
+  allianceHeld?: number;
 }
 
 /** What happened at a village, as each side's report shows it. */
@@ -33,6 +38,8 @@ export interface VillageReport {
   name: string;
   resource: string;
   level: number;
+  /** It was a capital. */
+  capital?: boolean;
   /** The other side: the owner the attacker found there ("" for the militia), or the attacker. */
   other: string;
   at: number;
@@ -73,12 +80,23 @@ export interface VillageOutcome {
   lead?: Lead;
 }
 
-/** Why this village can't be attacked by `me` now ("" if it can). */
+/** Why this village or capital can't be attacked by `me` now ("" if it can). */
 export function checkVillageAttack(rules: VillageRules, castle: CastleState, me: string, v: VillageTarget, now: number): string {
-  if (v.state.owner === me) return "This village is already yours.";
-  if (v.ally) return "This village belongs to your alliance.";
-  if (now < rules.peaceUntil(v.state)) return "This village just changed hands and is at peace for now.";
-  return rules.checkRoom(castle.keepLevel(), v.held);
+  const what = v.info.capital ? "capital" : "village";
+  if (v.state.owner === me) return `This ${what} is already yours.`;
+  if (v.ally) return `This ${what} belongs to your alliance.`;
+  if (now < rules.peaceUntil(v.state)) return `This ${what} just changed hands and is at peace for now.`;
+  const why = rules.checkRoom(castle.keepLevel(), v.held);
+  if (why !== "" || !(rules instanceof CapitalRules)) return why;
+  return rules.checkAlliance(v.allianceHeld ?? 0);
+}
+
+/**
+ * The castle boost for a player whose alliance (or who alone, outside one)
+ * holds capitals of these levels.
+ */
+export function capitalBoost(rules: Rules, levels: number[]): Dict {
+  return rules.capitals.boost(levels, rules.buildings.resources);
 }
 
 function add(to: Dict, more: Dict): Dict {
@@ -98,7 +116,7 @@ export function resolveVillageRaid(rules: Rules, info: VillageInfo, state: Villa
   const at = raid.arrive;
   const base = {
     kind: "village" as const, raid: raid.id, village: info.id, name: info.name, resource: info.resource, level: info.level,
-    at, spoils: {}, captured: false,
+    ...(info.capital ? { capital: true } : {}), at, spoils: {}, captured: false,
   };
   const none = { state, ownerReport: null, survivors: {}, loot: {}, guardHome: {} };
   if (raid.mission === "station") {
@@ -110,11 +128,12 @@ export function resolveVillageRaid(rules: Rules, info: VillageInfo, state: Villa
     return { ...none, state: { ...state, guard: add(state.guard, raid.army) },
       attackerReport: { ...base, role: "attacker", other: "", result: "joined" } };
   }
-  if (at < rules.villages.peaceUntil(state)) {
+  const vr = rulesFor(rules, info);
+  if (at < vr.peaceUntil(state)) {
     return { ...none, survivors: raid.army, attackerReport: { ...base, role: "attacker", other: state.owner, result: "peace" } };
   }
   const seed = raid.id * 7919 + godotHash(info.id);
-  const f = rules.villages.attack(rules.buildings, rules.barons, info, state, raid.army, seed, at, raid.waves, raid.tools ?? {},
+  const f = vr.attack(rules.buildings, rules.barons, info, state, raid.army, seed, at, raid.waves, raid.tools ?? {},
     raid.lead?.fx ?? {});
   const won = f.winner === "a";
   const held = state.owner !== "";

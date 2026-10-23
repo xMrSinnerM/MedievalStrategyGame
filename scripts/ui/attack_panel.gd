@@ -156,7 +156,7 @@ func open_for(id: String) -> void:
 		_player = ""
 		_village = String(info.id)
 		_title.text = "Attack %s (level %d)" % [info.name, int(info.level)]
-		_enemy_title.text = "The village"
+		_enemy_title.text = "The capital" if info.get("capital", false) else "The village"
 	elif id.begins_with("player:"):
 		var other := Economy.get_other(id.trim_prefix("player:"))
 		if other.is_empty():
@@ -411,7 +411,7 @@ func _simulate(waves: Array, foe: Dictionary) -> Dictionary:
 func _defence() -> Dictionary:
 	## What defends the target: {"troops", "layout", "wall"}, or {} if unknown.
 	if _village != "":
-		var vr := Economy.village_rules
+		var vr := Economy.village_rules_for(_village)
 		var info := Economy.village_info(_village)
 		return {"troops": vr.defenders(info, Economy.village_state(_village)), "layout": Battle.DEFAULT_LAYOUT,
 				"wall": Battle.wall_from_defense(vr.palisade(int(info.level)))}
@@ -609,19 +609,22 @@ func _describe_camp(camp: BaronCamp) -> void:
 
 
 func _describe_village() -> void:
-	var vr := Economy.village_rules
+	var vr := Economy.village_rules_for(_village)
 	var info := Economy.village_info(_village)
+	var capital: bool = info.get("capital", false)
 	var foe := _defence()
 	var lines: PackedStringArray = []
 	var owner := String(Economy.village_state(_village).get("owner", ""))
-	lines.append("Held by %s" % (owner if owner != "" else "the militia"))
+	lines.append("Held by %s" % (owner if owner != "" else "the town guard" if capital else "the militia"))
 	for unit: String in foe.troops:
 		lines.append("%d %s" % [int(foe.troops[unit]), Economy.rules.unit_plural(unit)])
 	if foe.troops.is_empty():
 		lines.append("Nobody guards it")
-	lines.append("Palisade: +%d%% defence" % roundi((float(foe.wall) - 1.0) * 100.0))
+	lines.append("%s: +%d%% defence" % ["Walls" if capital else "Palisade", roundi((float(foe.wall) - 1.0) * 100.0)])
 	if not foe.troops.is_empty():
 		lines.append_array(_posts(foe.troops, Battle.DEFAULT_LAYOUT))
+	if capital:
+		lines.append("Win it and your castles produce +%d%% more" % roundi(Economy.capital_rules.bonus(int(info.level)) * 100.0))
 	lines.append("Holds %d %s; win it and it sends you %d an hour" % [Economy.village_stock(_village), info.resource,
 			vr.yield_per_hour(info.resource, int(info.level))])
 	_enemy.text = "\n".join(lines)

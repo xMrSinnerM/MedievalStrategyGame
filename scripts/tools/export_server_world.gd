@@ -3,13 +3,14 @@ extends SceneTree
 ## the game places them (BaronPlacer), how their starting level grows with
 ## distance, the spots where players' castles can stand (PlayerSpots), and
 ## for each spot the places around it where invader camps can stand during a
-## Baron Invasion, and the resource villages (VillagePlacer). The server
+## Baron Invasion, the resource villages (VillagePlacer) and the capitals
+## (the towns of data/settlements.json, see capitals()). The server
 ## can't read the terrain, so it uses these lists; the game reads the
 ## villages from here too.
 ##
 ## Run from the project folder after changing the terrain, settlements,
-## player.json, the "camps" section of barons.json or the "placement" section
-## of villages.json:
+## player.json, factions.json, the "camps" section of barons.json or the
+## "placement" section of villages.json:
 ##   godot --headless --path . --script res://scripts/tools/export_server_world.gd
 
 const OUT := "res://server/world/world.json"
@@ -49,11 +50,13 @@ func _initialize() -> void:
 		"spots": spots,
 		"invasion_spots": invaders,
 		"villages": villages,
+		"capitals": capitals(game_data),
 	}
 	var file := FileAccess.open(OUT, FileAccess.WRITE)
 	file.store_string(JSON.stringify(out, "\t", false))
 	file.close()
-	print("wrote %s with %d camps, %d spots and %d villages" % [OUT, camps.size(), spots.size(), villages.size()])
+	print("wrote %s with %d camps, %d spots, %d villages and %d capitals" % [OUT, camps.size(), spots.size(), villages.size(),
+			out.capitals.size()])
 	game_data.free()
 	quit()
 
@@ -67,6 +70,20 @@ const INVADER_MAX_SLOPE := 0.15
 ## A village needs a little more room than an invader camp.
 const VILLAGE_RADIUS := 11.0
 const VILLAGE_MAX_SLOPE := 0.15
+
+
+static func capitals(game_data) -> Array:
+	## Every town as a capital: a faction's capital town is level 2, the others level 1.
+	var seats := {}
+	for f: Dictionary in game_data.factions:
+		seats[String(f.get("capital", ""))] = true
+	var out := []
+	for s: Dictionary in game_data.settlements:
+		if s.get("type", "") != "town":
+			continue
+		out.append({"id": s.id, "name": s.name, "position": [s.position[0], s.position[1]], "level": 2 if seats.has(s.id) else 1,
+				"resource": "gold", "capital": true, "faction": s.faction})
+	return out
 
 
 static func invasion_spots(game_data, spots: Array, camps: Array) -> Array:

@@ -1,10 +1,11 @@
 extends PanelContainer
 ## The villages screen (B): the resource villages you hold, what they send
 ## you each hour and who guards them, how many more your keep can hold, and
-## the villages nearest your castle with who holds them. "Show" takes the map
-## there and opens the village's panel.
+## the villages nearest your castle with who holds them, and the capitals
+## (the towns) nearest you. "Show" takes the map there and opens the panel.
 
 const NEAREST := 8
+const NEAREST_CAPITALS := 5
 
 var _body: VBoxContainer
 var _signature := ""
@@ -133,6 +134,45 @@ func _refresh() -> void:
 		others.add_child(MenuStyle.label(_clock(Economy.village_march_time(id)), 15, MenuStyle.TEXT))
 		others.add_child(_show_button(id))
 	_body.add_child(others)
+	_add_capitals()
+
+
+func _add_capitals() -> void:
+	var cr := Economy.capital_rules
+	_body.add_child(MenuStyle.label("Capitals", 20, MenuStyle.GOLD))
+	var hint := MenuStyle.label(("Beat a town's guard (from keep level %d) and it sends you gold every hour, and " % cr.min_keep)
+			+ ("every castle of your alliance produces more: up to +%d%% in all. You can hold %d, your alliance %d."
+				% [roundi(cr.max_bonus * 100.0), cr.per_player, cr.per_alliance] if Economy.online
+				else "your castle produces more: up to +%d%% in all. You can hold %d." % [roundi(cr.max_bonus * 100.0), cr.per_player])
+			+ (" Now: +%d%%." % roundi(Economy.capital_bonus() * 100.0) if Economy.capital_bonus() > 0.0 else ""), 14, MenuStyle.MUTED)
+	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	hint.custom_minimum_size = Vector2(780, 0)
+	_body.add_child(hint)
+	var grid := _grid()
+	for text in ["Capital", "Level", "Held by", "Bonus", "March", ""]:
+		grid.add_child(MenuStyle.label(text, 14, MenuStyle.MUTED))
+	var home := Economy.home_position()
+	var list := Economy.capitals.duplicate()
+	list.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		var mine_a := Economy.is_my_village(String(a.id))
+		if mine_a != Economy.is_my_village(String(b.id)):
+			return mine_a
+		return home.distance_to(Vector2(float(a.position[0]), float(a.position[1]))) \
+				< home.distance_to(Vector2(float(b.position[0]), float(b.position[1]))))
+	for v: Dictionary in list.slice(0, NEAREST_CAPITALS):
+		var id := String(v.id)
+		var state := Economy.village_state(id)
+		var owner := String(state.get("owner", ""))
+		var tag := String(state.get("tag", ""))
+		var mine := Economy.is_my_village(id)
+		grid.add_child(MenuStyle.label(String(v.name), 15, MenuStyle.TEXT))
+		grid.add_child(MenuStyle.label("%d" % int(v.level), 15, MenuStyle.TEXT))
+		grid.add_child(MenuStyle.label("you" if mine else ("[%s] " % tag if tag != "" else "") + owner if owner != "" else "the town guard", 15,
+				MenuStyle.GOLD if mine else Color(0.55, 0.95, 0.55) if state.get("ally", false) else MenuStyle.TEXT))
+		grid.add_child(MenuStyle.label("+%d%%" % roundi(cr.bonus(int(v.level)) * 100.0), 15, MenuStyle.TEXT))
+		grid.add_child(MenuStyle.label(_clock(Economy.village_march_time(id)), 15, MenuStyle.TEXT))
+		grid.add_child(_show_button(id))
+	_body.add_child(grid)
 
 
 func _nearest() -> Array:

@@ -16,7 +16,7 @@ import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { makeRules } from "../rules/load.ts";
 import { nearestSpot } from "../rules/outposts.ts";
-import { untouched, type VillageState } from "../rules/villages.ts";
+import { CapitalRules, rulesFor, untouched, type VillageInfo, type VillageState } from "../rules/villages.ts";
 import { effectAt, eventsView, lastInvasion, withOverrides, type EventOverride, type EventRules } from "../rules/events.ts";
 import { CastleState } from "../rules/castle_state.ts";
 import {
@@ -29,7 +29,7 @@ import {
 import { chatView, MemoryChatStore, send as sendChat, type Speaker } from "../../supabase/functions/game/chat.ts";
 import { deliver, recall, type Aid, type AidRules } from "../../supabase/functions/game/aid.ts";
 import { invade } from "../../supabase/functions/game/invasion.ts";
-import { resolveVillageRaid, type VillageTarget } from "../../supabase/functions/game/villages.ts";
+import { capitalBoost, resolveVillageRaid, type VillageTarget } from "../../supabase/functions/game/villages.ts";
 import type { QuestRules } from "../rules/quests.ts";
 import {
   adminEvents, checkGift, giftReport, giveCastle, NOT_ADMIN, startEvent, stopEvent, type AdminLogEntry,
@@ -38,8 +38,10 @@ import {
 const root = new URL("../../", import.meta.url);
 const json = (path: string) => JSON.parse(readFileSync(new URL(path, root), "utf8"));
 const rules = makeRules(json("data/buildings.json"), json("data/units.json"), json("data/barons.json"), json("data/gear.json"),
-  json("data/outposts.json"), json("data/villages.json"));
+  json("data/outposts.json"), json("data/villages.json"), json("data/capitals.json"));
 const world: World = json("server/world/world.json");
+// The resource villages and the capitals (the towns), kept the same way.
+const PLACES: VillageInfo[] = [...(world.villages ?? []), ...(world.capitals ?? [])];
 const pvp: PvpRules = json("data/pvp.json");
 const allianceRules: AllianceRules = json("data/alliances.json");
 const aidRules: AidRules = json("data/aid.json");
@@ -77,9 +79,9 @@ let nextAid = 1;
 const store = new MemoryAllianceStore(() => new Map([...players].map(([id, p]) => [id,
   { name: p.name, level: castleLevel(p.castle), might: might(p.castle, pvp) }])));
 const chat = new MemoryChatStore();
-// Who holds each village; `holder` is the owner's account (null for the militia).
+// Who holds each village and capital; `holder` is the owner's account (null for the militia).
 const villages = new Map<string, VillageState & { holder: string | null }>(
-  (world.villages ?? []).map((v) => [v.id, { ...untouched(v.id), holder: null }]));
+  PLACES.map((v) => [v.id, { ...untouched(v.id), holder: null }]));
 const ALLIANCE_ORDERS = new Set([
   "alliance", "join_alliance", "accept_invite", "decline_invite", "cancel_request", "leave_alliance", "disband_alliance",
   "invite", "cancel_invite", "kick", "answer_request", "set_role", "alliance_settings",
@@ -145,32 +147,53 @@ function view(user: string, state: PlayerState, extra: Record<string, unknown> =
 // --- Resource villages: the same as in index.ts, without the database ------------
 
 function villagesView(user: string) {
-  return (world.villages ?? []).map((info) => {
+  return PLACES.map((info) => {
     const v = villages.get(info.id)!;
     const { holder, ...state } = v;
+    const vr = rulesFor(rules, info);
     return { id: info.id, owner: state.owner, mine: holder === user, tag: holder ? tagOf(holder) : "",
       ally: holder !== null && holder !== user && allies(user, holder), guard: state.guard, taken_at: state.taken_at,
-      peace_until: rules.villages.peaceUntil(state), stock: rules.villages.stock(info, state, now()) };
+      peace_until: vr.peaceUntil(state), stock: vr.stock(info, state, now()) };
   });
 }
 
-function held(user: string): number {
-  return [...villages.values()].filter((v) => v.holder === user).length;
+/** How many villages (or, with `capital`, capitals) this player holds. */
+function held(user: string, capital = false): number {
+  return PLACES.filter((info) => Boolean(info.capital) === capital && villages.get(info.id)!.holder === user).length;
+}
+
+/** The levels of the capitals held by this player's alliance (by the player alone outside one). */
+function allianceCapitals(user: string): number[] {
+  return (world.capitals ?? []).flatMap((info) => {
+    const holder = villages.get(info.id)!.holder;
+    return holder !== null && (holder === user || allies(user, holder)) ? [info.level] : [];
+  });
+}
+
+function hasRoom(user: string, info: VillageInfo): boolean {
+  const p = players.get(user);
+  if (!p) return false;
+  const vr = rulesFor(rules, info);
+  if (vr.checkRoom(castleLevel(p.castle), held(user, Boolean(info.capital))) !== "") return false;
+  return !(vr instanceof CapitalRules) || vr.checkAlliance(allianceCapitals(user).length) === "";
 }
 
 function findVillage(id: unknown, user: string): { target: VillageTarget; holder: string | null } | undefined {
-  const info = (world.villages ?? []).find((v) => v.id === id);
+  const info = PLACES.find((v) => v.id === id);
   if (!info) return undefined;
   const { holder, ...state } = villages.get(info.id)!;
-  return { target: { info, state, ally: holder !== null && holder !== user && allies(user, holder), held: held(user) }, holder };
+  const target: VillageTarget = { info, state, ally: holder !== null && holder !== user && allies(user, holder),
+    held: held(user, Boolean(info.capital)) };
+  if (info.capital) target.allianceHeld = allianceCapitals(user).length;
+  return { target, holder };
 }
 
 function collectVillages(user: string): Record<string, number> {
   const income: Record<string, number> = {};
-  for (const info of world.villages ?? []) {
+  for (const info of PLACES) {
     const v = villages.get(info.id)!;
     if (v.holder !== user) continue;
-    const paid = rules.villages.collect(info, v, now());
+    const paid = rulesFor(rules, info).collect(info, v, now());
     if (paid.amount <= 0) continue;
     v.paid_at = paid.paid_at;
     income[info.resource] = (income[info.resource] ?? 0) + paid.amount;
@@ -180,7 +203,7 @@ function collectVillages(user: string): Record<string, number> {
 
 function sendHome(user: string, villageId: string, survivors: Record<string, number>, t: number) {
   const p = players.get(user);
-  const info = (world.villages ?? []).find((v) => v.id === villageId);
+  const info = PLACES.find((v) => v.id === villageId);
   if (!p || !info || Object.keys(survivors).length === 0) return;
   const travel = rules.barons.marchTime(Math.hypot(info.position[0] - p.home_x, info.position[1] - p.home_y));
   raids.push({ id: nextRaid++, attacker: user, defender: null, attacker_name: p.name, defender_name: info.name, village: info.id,
@@ -190,11 +213,10 @@ function sendHome(user: string, villageId: string, survivors: Record<string, num
 
 function resolveVillageRaids() {
   for (const raid of raids.filter((r) => r.village && r.state === "out" && r.arrive <= now()).sort((a, b) => a.arrive - b.arrive)) {
-    const info = (world.villages ?? []).find((v) => v.id === raid.village)!;
+    const info = PLACES.find((v) => v.id === raid.village)!;
     const v = villages.get(info.id)!;
     const { holder, ...before } = v;
-    const attacker = players.get(raid.attacker);
-    const room = attacker !== undefined && rules.villages.checkRoom(castleLevel(attacker.castle), held(raid.attacker)) === "";
+    const room = hasRoom(raid.attacker, info);
     const out = resolveVillageRaid(rules, info, before, raid, room);
     const captured = out.state.owner !== before.owner;
     villages.set(info.id, { ...out.state, holder: captured ? raid.attacker : holder });
@@ -463,7 +485,8 @@ createServer(async (req, res) => {
     const outpostSpot = body.action === "found_outpost" && !me.outpost ? nearestSpot(world.spots, [me.home_x, me.home_y], takenSpots()) : null;
     const outcome = act(rules, me, body, t,
       { pvp, outpostSpot, target: target?.target, homecomings, alliances: allianceRules, aid: aidRules,
-        events: { rules: eventRules, world, offset: EVENTS_OFFSET }, quests: questRules, village: village?.target, villageIncome });
+        events: { rules: eventRules, world, offset: EVENTS_OFFSET }, quests: questRules, village: village?.target, villageIncome,
+        capitalBoost: capitalBoost(rules, allianceCapitals(user)) });
     players.set(user, outcome.state);
     for (const r of outcome.reports) report(user, r);
     if (outcome.raid && village) {

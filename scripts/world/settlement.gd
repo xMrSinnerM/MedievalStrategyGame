@@ -83,5 +83,11 @@ func setup(data: Dictionary) -> void:
 	add_child(_label)
 
 
+func set_holder(holder: String, color: Color) -> void:
+	## Shows who holds this town (a capital) under its name; "" for the town guard.
+	_label.text = settlement_name if holder == "" else "%s\n%s" % [settlement_name, holder]
+	_label.modulate = color
+
+
 func set_zoom(zoom_t: float) -> void:
 	_label.visible = zoom_t <= LABEL_MAX_ZOOM[type]

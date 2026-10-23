@@ -5,6 +5,9 @@ extends PanelContainer
 ## after it changed hands, the march time and your chances. A button opens
 ## the attack screen. For your own village: online, send soldiers to guard
 ## it or bring them home; and give the village up.
+## Capitals (the towns) use the same panel: they send gold, and whoever holds
+## one makes every castle of their alliance produce more. Offline you can
+## also send your party there.
 
 const TEXT := Color(0.95, 0.9, 0.8)
 const MUTED := Color(0.78, 0.72, 0.62)
@@ -19,6 +22,7 @@ var _details: Label
 var _odds: Label
 var _note: Label
 var _attack: Button
+var _travel: Button
 var _guard_box: VBoxContainer
 var _guard_spins := {}         ## unit -> SpinBox
 var _station: Button
@@ -55,6 +59,10 @@ func _ready() -> void:
 	box.add_child(_odds)
 	_attack = _button("Prepare attack", func() -> void: EventBus.attack_screen_requested.emit("village:" + village_id))
 	box.add_child(_attack)
+	_travel = _button("Travel here", func() -> void:
+		EventBus.travel_requested.emit(village_id)
+		show_village(""))
+	box.add_child(_travel)
 	_guard_box = VBoxContainer.new()
 	_guard_box.add_theme_constant_override("separation", 4)
 	box.add_child(_guard_box)
@@ -101,22 +109,37 @@ func _refresh() -> void:
 	if info.is_empty():
 		visible = false
 		return
-	var vr := Economy.village_rules
+	var vr := Economy.village_rules_for(village_id)
+	var capital: bool = info.get("capital", false)
+	var what := "capital" if capital else "village"
 	var state := Economy.village_state(village_id)
 	var mine := Economy.is_my_village(village_id)
 	var owner := String(state.get("owner", ""))
 	var level := int(info.level)
 	var per_hour := vr.yield_per_hour(info.resource, level)
+	var bonus := "+%d%%" % roundi(Economy.capital_rules.bonus(level) * 100.0)
 	var now := Economy.now()
 	_title.text = String(info.name)
-	_kind.text = "%s, level %d" % [vr.resource_names.get(info.resource, "Village"), level]
+	if capital:
+		var faction := String(GameData.get_faction(String(info.get("faction", ""))).get("name", ""))
+		_kind.text = ("Royal capital, level %d" if level >= 2 else "Town, level %d") % level + (", %s" % faction if faction != "" else "")
+	else:
+		_kind.text = "%s, level %d" % [vr.resource_names.get(info.resource, "Village"), level]
 	var lines: PackedStringArray = []
 	if mine:
 		lines.append("Yours: it sends you %d %s an hour" % [per_hour, info.resource])
+		if capital:
+			lines.append(("Your alliance's castles produce %s more" if Economy.online else "Your castle produces %s more") % bonus)
 	elif owner != "":
 		var tag := String(state.get("tag", ""))
 		lines.append("Held by %s%s%s" % ["[%s] " % tag if tag != "" else "", owner, " (your alliance)" if state.get("ally", false) else ""])
 		lines.append("Sends its holder %d %s an hour" % [per_hour, info.resource])
+		if capital:
+			lines.append(("Your castle produces %s more for it" if state.get("ally", false) else "Their alliance's castles produce %s more") % bonus)
+	elif capital:
+		lines.append("Held by the town guard")
+		lines.append("Take it and it sends you %d %s an hour" % [per_hour, info.resource])
+		lines.append(("and every castle of your alliance produces %s more" if Economy.online else "and your castle produces %s more") % bonus)
 	else:
 		lines.append("Held by the local militia")
 		lines.append("Take it and it sends you %d %s an hour" % [per_hour, info.resource])
@@ -126,29 +149,39 @@ func _refresh() -> void:
 	var total := 0
 	for unit: String in defenders:
 		total += int(defenders[unit])
-	lines.append(("Guards: %d soldiers" if owner != "" else "Militia: %d soldiers") % total)
+	lines.append(("Guards: %d soldiers" if owner != "" else "Town guard: %d soldiers" if capital else "Militia: %d soldiers") % total)
 	for unit: String in defenders:
 		lines.append("    %d %s" % [int(defenders[unit]), Economy.rules.unit_plural(unit)])
 	var wall := Battle.wall_from_defense(vr.palisade(level))
-	lines.append("Palisade: defenders +%d%% defence" % roundi((wall - 1.0) * 100.0))
+	lines.append("%s: defenders +%d%% defence" % ["Walls" if capital else "Palisade", roundi((wall - 1.0) * 100.0)])
 	var peace := Economy.village_peace_until(village_id)
 	if peace > now:
 		lines.append("At peace for %s after changing hands" % _long_clock(peace - now))
 	lines.append("March: %s each way" % _clock(Economy.village_march_time(village_id)))
-	lines.append("Your villages: %d of %d (keep level %d)" % [Economy.my_villages().size(), Economy.village_slots(),
-			Economy.player_castle.keep_level()])
+	if not capital:
+		lines.append("Your villages: %d of %d (keep level %d)" % [Economy.my_villages().size(), Economy.village_slots(),
+				Economy.player_castle.keep_level()])
+	else:
+		var cr := Economy.capital_rules
+		lines.append("You hold %d of %d capital%s (from keep level %d)" % [Economy.my_capitals().size(), cr.per_player,
+				"" if cr.per_player == 1 else "s", cr.min_keep])
+		if Economy.online:
+			lines.append("Your alliance holds %d of %d" % [Economy.alliance_capitals(), cr.per_alliance])
+		if Economy.capital_bonus() > 0.0:
+			lines.append("Capitals give you +%d%% production now" % roundi(Economy.capital_bonus() * 100.0))
 	_details.text = "\n".join(lines)
 	_attack.visible = not mine
+	_travel.visible = capital and not Economy.online
 	_recall.visible = mine and Economy.online and total > 0
 	_abandon.visible = mine
-	_abandon.text = "Click again to give it up" if _abandon_armed else "Give up this village"
+	_abandon.text = "Click again to give it up" if _abandon_armed else "Give up this %s" % what
 	_guard_box.visible = mine and Economy.online
 	if mine and Economy.online and _guard_spins.is_empty():
 		_build_guard_rows()
 	var army: Dictionary = Economy.player_castle.troops
 	var have := Economy.player_castle.troop_count()
 	if mine:
-		_odds.text = "" if Economy.online else "Nobody comes to take villages from you here; online, other players will."
+		_odds.text = "" if Economy.online else "Nobody comes to take %ss from you here; online, other players will." % what
 		_odds.add_theme_color_override("font_color", MUTED)
 		return
 	var why := Economy.check_village_attack(village_id, army)
@@ -210,7 +243,9 @@ func _give_up() -> void:
 		return
 	var why := Economy.abandon_village(village_id)
 	_abandon_armed = false
-	_note.text = why if why != "" else "You gave up %s; the militia take it back." % Economy.village_info(village_id).get("name", "")
+	var info := Economy.village_info(village_id)
+	_note.text = why if why != "" else "You gave up %s; %s take it back." % [info.get("name", ""),
+			"the town guard" if info.get("capital", false) else "the militia"]
 	_refresh()
 
 

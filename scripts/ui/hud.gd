@@ -275,9 +275,9 @@ func _process(delta: float) -> void:
 		var shield := ""
 		if Economy.is_protected():
 			shield = "    Beginner protection: %s left (ends if you attack a player)" % _hours(Economy.protected_until - Economy.now())
-		_info.text = "Online as %s" % Online.email + shield + "\nClick: pick your castle, another player's, a robber baron camp or a village    C: your castle    L: leaderboard    G: alliance    V: events    J: quests    H: commanders    P: outpost    B: villages    Enter: chat" + ("    O: owner tools" if Economy.is_admin else "") + "\nWASD / drag: pan    Q E / right-drag: rotate    wheel: zoom\nM: parchment map    Home: recentre    F1: hide    Esc: menu\nzoom %d%%    %d fps" % [int(_zoom_t * 100.0), Engine.get_frames_per_second()]
+		_info.text = "Online as %s" % Online.email + shield + "\nClick: pick your castle, another player's, a robber baron camp, a village or a town    C: your castle    L: leaderboard    G: alliance    V: events    J: quests    H: commanders    P: outpost    B: villages    Enter: chat" + ("    O: owner tools" if Economy.is_admin else "") + "\nWASD / drag: pan    Q E / right-drag: rotate    wheel: zoom\nM: parchment map    Home: recentre    F1: hide    Esc: menu\nzoom %d%%    %d fps" % [int(_zoom_t * 100.0), Engine.get_frames_per_second()]
 		return
-	_info.text = "Click: travel there, or pick a castle, party or village    F: find your party    C: your castle    K: diplomacy    J: quests    H: commanders    P: outpost    B: villages\nWASD / drag: pan    Q E / right-drag: rotate    wheel: zoom\nM: parchment map    Home: recentre    F1: hide    Esc: menu\nYour party: %s\nzoom %d%%    %d fps" % [_party_status, int(_zoom_t * 100.0), Engine.get_frames_per_second()]
+	_info.text = "Click: travel there, or pick a castle, town, party or village    F: find your party    C: your castle    K: diplomacy    J: quests    H: commanders    P: outpost    B: villages\nWASD / drag: pan    Q E / right-drag: rotate    wheel: zoom\nM: parchment map    Home: recentre    F1: hide    Esc: menu\nYour party: %s\nzoom %d%%    %d fps" % [_party_status, int(_zoom_t * 100.0), Engine.get_frames_per_second()]
 
 
 func _show_event() -> void:
