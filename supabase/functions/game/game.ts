@@ -16,7 +16,7 @@ import { claimReward, eventPoints, invade, rewardTiers } from "./invasion.ts";
 import { claimQuest, rollDay, type QuestRules } from "../../../server/rules/quests.ts";
 import type { GearRules, Lead } from "../../../server/rules/gear.ts";
 import { deliverCarts, OUTPOST_ID, unload, type Cart, type OutpostData } from "../../../server/rules/outposts.ts";
-import type { VillageInfo } from "../../../server/rules/villages.ts";
+import { rulesFor, type VillageInfo } from "../../../server/rules/villages.ts";
 import { checkVillageAttack, type VillageTarget } from "./villages.ts";
 
 /** A player as stored in the players table (the game columns). */
@@ -145,6 +145,8 @@ export interface Context {
   village?: VillageTarget;
   /** What your villages sent your castle since the last request (data/villages.json). */
   villageIncome?: Dict;
+  /** The production boost from capitals your alliance holds (capitalBoost() in villages.ts); kept as stored without it. */
+  capitalBoost?: Dict;
 }
 
 export interface World {
@@ -158,6 +160,8 @@ export interface World {
   invasion_spots?: [number, number][][];
   /** The resource villages (data/villages.json). */
   villages?: VillageInfo[];
+  /** The capitals: the towns, as villages with `capital` set (data/capitals.json). */
+  capitals?: VillageInfo[];
 }
 
 /** What other players see of you on the map. */
@@ -278,6 +282,7 @@ export function act(rules: Rules, given: PlayerState, req: Request, now: number,
     home: [stored.home_x, stored.home_y],
     gear: rules.gear,
   };
+  if (ctx.capitalBoost) army.castle.boost = { ...ctx.capitalBoost };
   const reports = advanceMarches(army, rules.barons, now);
   const castle = army.castle;
   for (const raid of [...(ctx.homecomings ?? [])].sort((x, y) => x.back - y.back)) comeHomeFromRaid(rules.gear, castle, raid);
@@ -424,7 +429,7 @@ export function act(rules: Rules, given: PlayerState, req: Request, now: number,
       }
       const sent = waves ? wavesArmy(waves) : isArmy(req.army) ? req.army : null;
       if (v === undefined) error = "There's no such village.";
-      else if (attack) error = checkVillageAttack(rules.villages, castle, stored.name, v, now);
+      else if (attack) error = checkVillageAttack(rulesFor(rules, v.info), castle, stored.name, v, now);
       else if (v.state.owner !== stored.name) error = "That village isn't yours.";
       if (error === "") error = sent === null ? "Bad army." : checkArmy(castle, sent);
       const kit = attack ? checkTools(rules.buildings, req.tools, "attack", rules.buildings.toolSlots(castle.keepLevel()), castle.tools) : {};

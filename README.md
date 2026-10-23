@@ -19,6 +19,7 @@ The continent, its names and its factions are original to this game.
 | --- | --- |
 | Left click on the ground or a settlement | Send your party there |
 | Left click on a castle or a lord's party | Open its panel (travel, look inside, attack) |
+| Left click on a town | Open its capital panel (who holds it, attack, travel) |
 | F | Centre the camera on your party |
 | WASD / arrow keys, or left/middle drag | Pan |
 | Q / E, or right drag | Rotate |
@@ -579,6 +580,28 @@ your alliance can't be attacked. The numbers live in `data/villages.json`;
 `server/rules/villages.ts` follow the same rules (checked by the server
 fixtures). Where the villages stand is in `server/world/world.json`, written by
 `scripts/tools/export_server_world.gd`.
+
+## Capitals
+
+The ten towns on the map are capitals. Click one (or find the nearest in the
+**B** screen) to see who holds it. Each faction's royal seat (Highford,
+Frostgard, Qasr Umbar, Elderholm and Saltmere) is level 2, the other towns are
+level 1.
+
+A town guard of 400 soldiers (600 at a royal seat) holds each one behind
+stone walls until someone beats them. Your keep must reach level 4 to take a
+capital, and you can hold one at a time. Attack it like a village. Win and it
+sends you gold every hour (150, or 225 from a royal seat, stored up to 12
+hours), and your castle produces more of everything: +5% for a town, +8% for
+a royal seat.
+
+Online, the bonus goes to every castle of the holder's alliance, up to +20% in
+all, and an alliance can hold at most 3 capitals. Other players can take a
+capital from you; station soldiers there to keep it. A capital that has just
+changed hands is at peace for 6 hours. The numbers live in
+`data/capitals.json`; `CapitalRules` (`scripts/economy/capital_rules.gd`) and
+`CapitalRules` in `server/rules/villages.ts` follow the same rules (checked by
+the server fixtures).
 
 ## Multiplayer (in progress)
 

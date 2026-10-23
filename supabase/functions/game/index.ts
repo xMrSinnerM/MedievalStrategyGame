@@ -33,6 +33,7 @@
 //   on the free spot nearest your home; "place", "upgrade", "cancel" and "move" then take "castle": "outpost"
 // POST { "action": "send_carts", "from": "home" | "outpost", "resources": { wood: n } }   between your castles
 // POST { "action": "attack_village", "village": id, "army" | "waves", "tools", "commander" }   take a resource village (data/villages.json)
+//   or a capital, by its town id (data/capitals.json)
 // POST { "action": "station", "village": id, "army": { unit: count } }   soldiers to guard your village
 // POST { "action": "recall_guard" | "abandon_village", "village": id }   bring your guards home (and give the village up)
 // POST { "action": "found_alliance", "name", "tag" }  costs gold (data/alliances.json)
@@ -67,6 +68,9 @@
 // resolved by the first request after they arrive, whoever sends it; every
 // request first collects what your villages made, and every answer with your
 // castle lists who holds each village.
+// Capitals (the towns) are rows of the same table, with their own rules
+// (data/capitals.json); every request sets your castle's production boost
+// from the capitals your alliance holds (or you alone, outside one).
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
@@ -81,13 +85,14 @@ import questsData from "../../../data/quests.json" with { type: "json" };
 import gearData from "../../../data/gear.json" with { type: "json" };
 import outpostsData from "../../../data/outposts.json" with { type: "json" };
 import villagesData from "../../../data/villages.json" with { type: "json" };
+import capitalsData from "../../../data/capitals.json" with { type: "json" };
 import world from "../../../server/world/world.json" with { type: "json" };
 import { makeRules } from "../../../server/rules/load.ts";
 import { effectAt, eventsView, lastInvasion, withOverrides, type EventOverride, type EventRules } from "../../../server/rules/events.ts";
 import { CastleState } from "../../../server/rules/castle_state.ts";
 import { nearestSpot } from "../../../server/rules/outposts.ts";
-import type { VillageInfo, VillageState } from "../../../server/rules/villages.ts";
-import { resolveVillageRaid, type VillageTarget } from "./villages.ts";
+import { CapitalRules, rulesFor, type VillageInfo, type VillageState } from "../../../server/rules/villages.ts";
+import { capitalBoost, resolveVillageRaid, type VillageTarget } from "./villages.ts";
 import {
   act, castleLevel, checkName, fightRaid, isProtected, might, newPlayer, pickSpot, spyReport,
   type Homecoming, type PlayerState, type PvpRules, type Raid, type Target, type World,
@@ -103,8 +108,10 @@ import {
   adminEvents, checkGift, giftReport, giveCastle, NOT_ADMIN, OVERRIDES_KEPT, startEvent, stopEvent, type Gift,
 } from "./admin.ts";
 
-const rules = makeRules(buildings, units, barons, gearData, outpostsData, villagesData);
-const VILLAGES: VillageInfo[] = (world as World).villages ?? [];
+const rules = makeRules(buildings, units, barons, gearData, outpostsData, villagesData, capitalsData);
+const CAPITALS: VillageInfo[] = (world as World).capitals ?? [];
+const VILLAGES: VillageInfo[] = [...((world as World).villages ?? []), ...CAPITALS];
+const CAPITAL_IDS = CAPITALS.map((c) => c.id);
 const VILLAGE_COLUMNS = "id, owner, owner_name, guard, taken_at, paid_at, version";
 const pvp = pvpData as PvpRules;
 const allianceRules = alliancesData as AllianceRules;
@@ -191,7 +198,7 @@ async function view(userId: string, state: PlayerState, extra: Record<string, un
 
 let villagesReady = false;
 
-/** Makes sure every village on the map has its row (the militia hold new ones). */
+/** Makes sure every village and capital on the map has its row (the militia hold new ones). */
 async function ensureVillages() {
   if (villagesReady) return;
   const { error } = await admin.from("villages").upsert(VILLAGES.map((v) => ({ id: v.id })), { onConflict: "id", ignoreDuplicates: true });
@@ -222,10 +229,39 @@ async function villagesView(userId: string) {
     return [{
       id: r.id, owner: state.owner, mine: r.owner === userId, tag: r.holder?.alliance?.tag ?? "",
       ally: r.owner !== null && r.owner !== userId && me !== null && me.alliance_id !== null && Number(r.holder?.alliance_id) === me.alliance_id,
-      guard: state.guard, taken_at: state.taken_at, peace_until: rules.villages.peaceUntil(state),
-      stock: rules.villages.stock(info, state, t),
+      guard: state.guard, taken_at: state.taken_at, peace_until: rulesFor(rules, info).peaceUntil(state),
+      stock: rulesFor(rules, info).stock(info, state, t),
     }];
   });
+}
+
+/** How many villages, and how many capitals, this player holds. */
+async function holdings(userId: string): Promise<{ villages: number; capitals: number }> {
+  const { data } = await admin.from("villages").select("id").eq("owner", userId);
+  const capitals = (data ?? []).filter((r: Row) => CAPITAL_IDS.includes(r.id)).length;
+  return { villages: (data ?? []).length - capitals, capitals };
+}
+
+/** The levels of the capitals held by this player's alliance (by the player alone outside one). */
+async function allianceCapitals(userId: string): Promise<number[]> {
+  const me = await store.player(userId);
+  const { data } = await admin.from("villages").select("id, owner, holder:players!villages_owner_fkey(alliance_id)")
+    .in("id", CAPITAL_IDS).not("owner", "is", null);
+  return (data ?? []).flatMap((r: Row) => {
+    const ours = r.owner === userId || (me !== null && me.alliance_id !== null && Number(r.holder?.alliance_id) === me.alliance_id);
+    const info = villageInfo(r.id);
+    return ours && info ? [info.level] : [];
+  });
+}
+
+/** Whether this player's keep (and, for a capital, alliance) has room for one more of these. */
+async function hasRoom(userId: string, info: VillageInfo): Promise<boolean> {
+  const { data: p } = await admin.from("players").select("level").eq("user_id", userId).maybeSingle();
+  if (!p) return false;
+  const held = await holdings(userId);
+  const vr = rulesFor(rules, info);
+  if (vr.checkRoom(Number(p.level), info.capital ? held.capitals : held.villages) !== "") return false;
+  return !(vr instanceof CapitalRules) || vr.checkAlliance((await allianceCapitals(userId)).length) === "";
 }
 
 /** The village an order names, as act() needs it, with its row. */
@@ -236,11 +272,13 @@ async function findVillage(id: unknown, userId: string): Promise<{ target: Villa
   const { data: row } = await admin.from("villages").select(`${VILLAGE_COLUMNS}, holder:players!villages_owner_fkey(alliance_id)`)
     .eq("id", info.id).maybeSingle();
   if (!row) return null;
-  const { count } = await admin.from("villages").select("id", { count: "exact", head: true }).eq("owner", userId);
+  const held = await holdings(userId);
   const me = await store.player(userId);
   const ally = row.owner !== null && row.owner !== userId && me !== null && me.alliance_id !== null &&
     Number((row as Row).holder?.alliance_id) === me.alliance_id;
-  return { target: { info, state: villageState(row), ally, held: count ?? 0 }, row };
+  const target: VillageTarget = { info, state: villageState(row), ally, held: info.capital ? held.capitals : held.villages };
+  if (info.capital) target.allianceHeld = (await allianceCapitals(userId)).length;
+  return { target, row };
 }
 
 /** Takes what this player's villages made since they were last paid; the castle gets it with this request. */
@@ -252,7 +290,7 @@ async function collectVillages(userId: string): Promise<Record<string, number>> 
     const info = villageInfo(r.id);
     if (!info) continue;
     const state = villageState(r);
-    const paid = rules.villages.collect(info, state, t);
+    const paid = rulesFor(rules, info).collect(info, state, t);
     if (paid.amount <= 0) continue;
     // Only if nobody else collected or took it meanwhile.
     const { data: took } = await admin.from("villages").update({ paid_at: paid.paid_at, version: r.version + 1 })
@@ -291,10 +329,8 @@ async function resolveVillageRaids() {
       continue;
     }
     await ensureVillages();
-    // Whether the attacker's keep has room for one more village.
-    const { data: attacker } = await admin.from("players").select("level").eq("user_id", row.attacker).maybeSingle();
-    const { count: held } = await admin.from("villages").select("id", { count: "exact", head: true }).eq("owner", row.attacker);
-    const room = attacker !== null && rules.villages.checkRoom(Number(attacker.level), held ?? 0) === "";
+    // Whether the attacker's keep has room for one more village (or capital).
+    const room = await hasRoom(row.attacker, info);
     for (let attempt = 0; attempt < RETRIES; attempt++) {
       const { data: v } = await admin.from("villages").select(VILLAGE_COLUMNS).eq("id", info.id).maybeSingle();
       if (!v) break;
@@ -717,6 +753,8 @@ Deno.serve(async (req: Request) => {
     villageError = await villageOrder(userId, body);
     body = { action: "state" };
   }
+  // Your castle's boost from the capitals your alliance holds.
+  const boost = capitalBoost(rules, await allianceCapitals(userId));
   let village: { target: VillageTarget; row: Row } | null = null;
   if (body.action === "attack_village" || body.action === "station") village = await findVillage(body.village, userId);
 
@@ -757,7 +795,8 @@ Deno.serve(async (req: Request) => {
       outpostSpot = nearestSpot((world as World).spots, [stored.home_x, stored.home_y], taken);
     }
     const outcome = act(rules, stored, body, t, { pvp, outpostSpot, target: target?.target, homecomings, alliances: allianceRules, aid: aidRules,
-      events: { rules: calendar, world: world as World }, quests: questRules, village: village?.target, villageIncome });
+      events: { rules: calendar, world: world as World }, quests: questRules, village: village?.target, villageIncome,
+      capitalBoost: boost });
     // Save only if nobody else changed the row meanwhile; otherwise start over.
     const { data: saved, error: saveError } = await admin.from("players")
       .update({ ...outcome.state, ...publicColumns(outcome.state), version: version + 1, updated_at: new Date().toISOString() })

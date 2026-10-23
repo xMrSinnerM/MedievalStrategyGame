@@ -206,6 +206,10 @@ func _on_click(screen_pos: Vector2) -> void:
 	if settlement.get("type", "") == "castle":
 		EventBus.settlement_selected.emit(settlement.id)
 		return
+	if settlement.get("type", "") == "town" and Economy.is_capital(String(settlement.id)):
+		EventBus.settlement_selected.emit("")
+		EventBus.village_selected.emit(String(settlement.id))
+		return
 	EventBus.settlement_selected.emit("")
 	if player == null:
 		return

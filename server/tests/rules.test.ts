@@ -16,7 +16,7 @@ import { claimQuest, cofferReward, cofferStreak, currentStory, dailyProgress, pi
 const root = new URL("../../", import.meta.url);
 const json = (path: string) => JSON.parse(readFileSync(new URL(path, root), "utf8"));
 const rules = makeRules(json("data/buildings.json"), json("data/units.json"), json("data/barons.json"), json("data/gear.json"),
-  json("data/outposts.json"), json("data/villages.json"));
+  json("data/outposts.json"), json("data/villages.json"), json("data/capitals.json"));
 const fixtures = json("server/tests/fixtures.json");
 const T0 = 1_000_000;
 const quests: QuestRules = json("data/quests.json");
@@ -276,9 +276,8 @@ test("outposts", () => {
   for (const c of run.nearest) same(nearestSpot(run.spots, c.home, c.taken), c.spot, `nearest to ${c.home}`);
 });
 
-test("villages", () => {
-  const run = fixtures.villages;
-  const v = rules.villages;
+for (const [name, v] of [["villages", rules.villages], ["capitals", rules.capitals]] as const) test(name, () => {
+  const run = fixtures[name];
   for (const l of run.levels) {
     same(v.militia(l.level), l.militia, `militia ${l.level}`);
     same(v.palisade(l.level), l.palisade, `palisade ${l.level}`);
@@ -295,6 +294,14 @@ test("villages", () => {
     const got = v.attack(rules.buildings, rules.barons, a.info, a.state, a.army, a.seed, a.t, a.waves.length > 0 ? a.waves : undefined,
       {}, a.lead);
     const { survivors, guardLeft, ...rest } = got;
-    same({ ...rest, survivors, guard_left: guardLeft }, a.result, `village attack ${i}`);
+    same({ ...rest, survivors, guard_left: guardLeft }, a.result, `${name} attack ${i}`);
   });
+});
+
+test("capital bonus", () => {
+  for (const b of fixtures.capitals.bonus) {
+    same(rules.capitals.totalBonus(b.levels), b.total, `bonus ${b.levels}`);
+    same(rules.capitals.boost(b.levels, rules.buildings.resources), b.boost, `boost ${b.levels}`);
+    same(rules.capitals.checkAlliance(b.levels.length), b.alliance, `alliance ${b.levels}`);
+  }
 });

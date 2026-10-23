@@ -2823,5 +2823,127 @@
 			"level": 1,
 			"resource": "gold"
 		}
+	],
+	"capitals": [
+		{
+			"id": "aldmere_town_highford",
+			"name": "Highford",
+			"position": [
+				1032.0,
+				828.0
+			],
+			"level": 2,
+			"resource": "gold",
+			"capital": true,
+			"faction": "aldmere"
+		},
+		{
+			"id": "aldmere_town_wexmoor",
+			"name": "Wexmoor",
+			"position": [
+				948.0,
+				1200.0
+			],
+			"level": 1,
+			"resource": "gold",
+			"capital": true,
+			"faction": "aldmere"
+		},
+		{
+			"id": "varnholt_town_frostgard",
+			"name": "Frostgard",
+			"position": [
+				972.0,
+				240.0
+			],
+			"level": 2,
+			"resource": "gold",
+			"capital": true,
+			"faction": "varnholt"
+		},
+		{
+			"id": "varnholt_town_kaldvik",
+			"name": "Kaldvik",
+			"position": [
+				1356.0,
+				564.0
+			],
+			"level": 1,
+			"resource": "gold",
+			"capital": true,
+			"faction": "varnholt"
+		},
+		{
+			"id": "ashkar_town_qasr_umbar",
+			"name": "Qasr Umbar",
+			"position": [
+				876.0,
+				1776.0
+			],
+			"level": 2,
+			"resource": "gold",
+			"capital": true,
+			"faction": "ashkar"
+		},
+		{
+			"id": "ashkar_town_zahirah",
+			"name": "Zahirah",
+			"position": [
+				1212.0,
+				1368.0
+			],
+			"level": 1,
+			"resource": "gold",
+			"capital": true,
+			"faction": "ashkar"
+		},
+		{
+			"id": "thornwald_town_elderholm",
+			"name": "Elderholm",
+			"position": [
+				492.0,
+				972.0
+			],
+			"level": 2,
+			"resource": "gold",
+			"capital": true,
+			"faction": "thornwald"
+		},
+		{
+			"id": "thornwald_town_briarwick",
+			"name": "Briarwick",
+			"position": [
+				648.0,
+				1320.0
+			],
+			"level": 1,
+			"resource": "gold",
+			"capital": true,
+			"faction": "thornwald"
+		},
+		{
+			"id": "corvane_town_saltmere",
+			"name": "Saltmere",
+			"position": [
+				1716.0,
+				924.0
+			],
+			"level": 2,
+			"resource": "gold",
+			"capital": true,
+			"faction": "corvane"
+		},
+		{
+			"id": "corvane_town_port_calder",
+			"name": "Port Calder",
+			"position": [
+				1584.0,
+				1296.0
+			],
+			"level": 1,
+			"resource": "gold",
+			"capital": true,
+			"faction": "corvane"
+		}
 	]
 }

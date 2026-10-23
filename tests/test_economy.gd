@@ -41,6 +41,7 @@ func _initialize() -> void:
 	test_gear()
 	test_outpost()
 	test_villages()
+	test_capitals()
 	print("%d checks, %d failed" % [checks, failures])
 	quit(1 if failures > 0 else 0)
 
@@ -1079,6 +1080,62 @@ func test_outpost() -> void:
 	var food := float(eco.outpost_castle().resources.food)
 	eco._deliver_carts(float(eco.outpost.carts[0].arrive) + 1.0)
 	check(eco.outpost.carts.is_empty() and eco.outpost_castle().resources.food >= food + 299.0, "economy: carts unload at the outpost")
+	eco.delete_slot(1)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://test_saves"))
+	eco.free()
+
+
+func test_capitals() -> void:
+	var cr := CapitalRules.load_capital_rules()
+	var world := CapitalRules.load_capitals()
+	check(world.size() == 10, "every town is a capital")
+	check(world.all(func(c: Dictionary) -> bool: return c.capital and c.resource == "gold"), "capitals send gold")
+	check(world.filter(func(c: Dictionary) -> bool: return int(c.level) == 2).size() == 5, "each faction's capital is level 2")
+	check(cr.check_room(cr.min_keep - 1, 0) == "Your keep must reach level %d to take a capital." % cr.min_keep, "capitals need a big keep")
+	check(cr.check_room(cr.min_keep, 0) == "" and cr.check_room(cr.min_keep, cr.per_player) != "", "one capital a player")
+	check(cr.check_alliance(cr.per_alliance - 1) == "" and cr.check_alliance(cr.per_alliance) != "", "a few capitals an alliance")
+	near(cr.total_bonus([1]), cr.bonus_base, "one town's bonus")
+	near(cr.total_bonus([2, 2, 2, 2, 2, 2]), cr.max_bonus, "the bonus has a ceiling")
+	var vr := VillageRules.load_default()
+	var guard := 0
+	for unit: String in cr.militia(1):
+		guard += int(cr.militia(1)[unit])
+	var strongest := 0
+	for unit: String in vr.militia(vr.max_level):
+		strongest += int(vr.militia(vr.max_level)[unit])
+	check(guard > strongest and cr.palisade(1) > vr.palisade(vr.max_level), "a town's guard outdoes any village's")
+	# Offline through the economy: a capital is taken like a village and boosts your castle.
+	var eco = load("res://scripts/core/economy.gd").new()
+	eco.save_dir = "user://test_saves"
+	eco.begin_new(1)
+	var info: Dictionary = world[0]
+	check(eco.is_capital(info.id) and eco.village_rules_for(info.id) == eco.capital_rules, "economy: the capital's rules")
+	check(eco.my_villages().is_empty() and not eco.villages.any(func(v: Dictionary) -> bool: return v.has("capital")),
+			"economy: capitals aren't among the villages")
+	eco.player_castle.troops = {"swordsman": 2000, "horseman": 800}
+	check(eco.check_village_attack(info.id, {"swordsman": 100}) == "Your keep must reach level %d to take a capital." % cr.min_keep,
+			"economy: keep too low for a capital")
+	for b in eco.player_castle.buildings:
+		if b.type == "keep":
+			b.level = cr.min_keep
+	var before: float = eco.player_castle.production_per_hour().wood
+	check(eco.send_village_attack(info.id, {"swordsman": 2000, "horseman": 800}) == "", "economy: army sent to the capital")
+	var m: Dictionary = eco.marches[0]
+	eco.advance_marches(float(m.arrive) + 1.0)
+	check(eco.is_my_village(info.id) and eco.my_capitals().size() == 1 and eco.my_villages().is_empty(), "economy: the capital is taken")
+	eco._collect_villages(float(m.arrive) + 2.0)
+	near(eco.capital_bonus(), cr.bonus(int(info.level)), "economy: the capital's bonus")
+	near(eco.player_castle.production_per_hour().wood, before * (1.0 + cr.bonus(int(info.level))), "economy: production goes up", 0.01)
+	var gold: float = eco.player_castle.resources.gold
+	eco._collect_villages(float(eco.village_state(info.id).paid_at) + 3600.0)
+	near(float(eco.player_castle.resources.gold), gold + cr.yield_per_hour("gold", int(info.level)), "economy: the capital sends gold", 0.5)
+	check(eco.check_village_attack(String(world[1].id), {"swordsman": 10}) == "You already hold a capital.", "economy: one capital")
+	check(eco.check_village_attack(String(eco.villages[0].id), {"swordsman": 10}) != "You already hold a capital.",
+			"economy: a capital takes no village slot")
+	eco.save_game()
+	eco.begin_load(1)
+	check(eco.is_my_village(info.id) and eco.capital_bonus() > 0.0, "economy: capitals are saved")
+	check(eco.abandon_village(info.id) == "" and eco.player_castle.boost.is_empty(), "economy: given up, the bonus goes")
 	eco.delete_slot(1)
 	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://test_saves"))
 	eco.free()

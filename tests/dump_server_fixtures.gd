@@ -14,6 +14,7 @@ var quest_book: QuestBook
 var gear: GearRules
 var outposts: OutpostRules
 var villages: VillageRules
+var capitals: CapitalRules
 var rng := RandomNumberGenerator.new()
 
 
@@ -24,6 +25,7 @@ func _initialize() -> void:
 	gear = GearRules.load_default()
 	outposts = OutpostRules.load_default()
 	villages = VillageRules.load_default()
+	capitals = CapitalRules.load_capital_rules()
 	rng.seed = 20261011
 	var data := {
 		"castles": [],
@@ -36,6 +38,7 @@ func _initialize() -> void:
 		"armoury": {},
 		"outpost": {},
 		"villages": {},
+		"capitals": {},
 		"hashes": {},
 	}
 	for run in 4:
@@ -61,7 +64,9 @@ func _initialize() -> void:
 		data.drops.append({"level": level, "seed": seed_value, "item": gear.roll_drop(level, seed_value)})
 	data.armoury = armoury_run()
 	data.outpost = outpost_run()
-	data.villages = village_run()
+	data.villages = village_run(villages, VillageRules.load_villages(), 25)
+	data.capitals = village_run(capitals, CapitalRules.load_capitals(), 300)
+	data.capitals["bonus"] = capital_bonus_run()
 	for s in ["baron_0", "baron_7", "baron_29", "", "Ölberg", "a long camp id", "village_0", "village_35"]:
 		data.hashes[s] = hash(s)
 	var file := FileAccess.open(OUT, FileAccess.WRITE)
@@ -421,28 +426,39 @@ func outpost_run() -> Dictionary:
 	return {"t0": T0, "checks": checks, "region": "stone", "steps": steps, "spots": spots, "nearest": nearest}
 
 
-func village_run() -> Dictionary:
-	## The numbers for every village level, what owned villages hold and send
-	## at random times, and attacks on random villages from the world, held by
-	## the militia or by a player's guard.
+func capital_bonus_run() -> Array:
+	## Production bonuses for random sets of capitals, and alliance room.
+	var out: Array = []
+	for k in 12:
+		var levels: Array = []
+		for i in rng.randi_range(0, 6):
+			levels.append(rng.randi_range(1, 2))
+		out.append({"levels": levels, "total": capitals.total_bonus(levels), "boost": capitals.boost(levels, rules.resources),
+				"alliance": capitals.check_alliance(levels.size())})
+	return out
+
+
+func village_run(vr: VillageRules, world: Array, army_per_level: int) -> Dictionary:
+	## The numbers for every village (or capital) level, what owned ones hold
+	## and send at random times, and attacks on random ones from the world,
+	## held by the militia or by a player's guard.
 	var levels: Array = []
-	for level in range(1, villages.max_level + 1):
+	for level in range(1, vr.max_level + 1):
 		var yields := {}
-		for r: String in villages.yields:
-			yields[r] = [villages.yield_per_hour(r, level), villages.store_cap(r, level)]
-		levels.append({"level": level, "militia": villages.militia(level), "palisade": villages.palisade(level), "yields": yields})
+		for r: String in vr.yields:
+			yields[r] = [vr.yield_per_hour(r, level), vr.store_cap(r, level)]
+		levels.append({"level": level, "militia": vr.militia(level), "palisade": vr.palisade(level), "yields": yields})
 	var slots: Array = []
 	for keep in range(0, 7):
-		slots.append([villages.slots_for(keep), villages.check_room(keep, 0), villages.check_room(keep, 1), villages.check_room(keep, 3)])
-	var world: Array = VillageRules.load_villages()
+		slots.append([vr.slots_for(keep), vr.check_room(keep, 0), vr.check_room(keep, 1), vr.check_room(keep, 3)])
 	var payouts: Array = []
 	for k in 40:
 		var info: Dictionary = world[rng.randi() % world.size()]
 		var state := {"id": info.id, "owner": "" if k % 7 == 0 else "Someone", "guard": {},
 				"taken_at": T0, "paid_at": T0 + rng.randf_range(0.0, 3600.0)}
 		var t := T0 + rng.randf_range(0.0, 3600.0 * 30.0)
-		payouts.append({"info": info, "state": state, "t": t, "stock": villages.stock(info, state, t),
-				"collect": villages.collect(info, state, t), "peace": villages.peace_until(state)})
+		payouts.append({"info": info, "state": state, "t": t, "stock": vr.stock(info, state, t),
+				"collect": vr.collect(info, state, t), "peace": vr.peace_until(state)})
 	var attacks: Array = []
 	var units: Array = ["spearman", "archer", "swordsman", "horseman"]
 	for k in 30:
@@ -454,7 +470,7 @@ func village_run() -> Dictionary:
 		var army := {}
 		for unit: String in units:
 			if rng.randf() < 0.7:
-				army[unit] = rng.randi_range(1, 25 * int(info.level))
+				army[unit] = rng.randi_range(1, army_per_level * int(info.level))
 		var waves: Array = []
 		if k % 2 == 0:
 			# Two waves: the flanks first, then the front.
@@ -470,5 +486,5 @@ func village_run() -> Dictionary:
 		var lead := {"wall_attack": 0.1, "loot": 0.2} if k % 4 == 3 else {}
 		var t := T0 + rng.randf_range(0.0, 7200.0)
 		attacks.append({"info": info, "state": state, "army": army, "waves": waves, "seed": seed_value, "t": t, "lead": lead,
-				"result": villages.attack(rules, baron_rules, info, state, army, seed_value, t, waves, {}, lead)})
+				"result": vr.attack(rules, baron_rules, info, state, army, seed_value, t, waves, {}, lead)})
 	return {"levels": levels, "slots": slots, "payouts": payouts, "attacks": attacks}

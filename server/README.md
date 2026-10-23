@@ -156,6 +156,14 @@ village are `raids` rows with `village` and `mission` ("attack", "station" or
 request first pays each of your villages' yield into your castle, and `view`
 lists `villages` with their holder and alliance tag.
 
+Capitals (the towns, `data/capitals.json`, listed under `capitals` in
+`server/world/world.json`) are rows of the same `villages` table, attacked
+and guarded with the same orders by their town id. `rulesFor()` picks
+`CapitalRules` for them: a stronger guard, a keep of level 4, one capital a
+player and three an alliance. Every request sets your castle's `boost` from
+the capitals your alliance holds (or you alone), so all its members produce
+more.
+
 The game owner's tools (`supabase/functions/game/admin.ts`) work only for
 accounts in the `admins` table, which the game can never change. Add one in
 the SQL editor:
