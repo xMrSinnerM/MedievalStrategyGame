@@ -823,8 +823,10 @@ The castle screen uses the KayKit Medieval Hexagon Pack by Kay Lousberg
 (CC0, www.kaylousberg.com), in `assets/kaykit/` with its licence. Its models
 share one gradient atlas; `shaders/kit.gdshader` repaints the atlas's team
 swatch (the bottom-left cell) in the owner's colour, and `KitModels` merges
-the pieces of a building into one mesh. The world map still uses placeholder
-primitives. Other CC0 packs that would fit:
+the pieces of a building into one mesh. On the world map, towns (capitals),
+castles, villages and robber baron camps are built from it too; trees,
+parties and armies are still placeholder primitives. Other CC0 packs that
+would fit:
 
 - Trees and nature: Quaternius Ultimate/Stylized Nature, Kenney Nature Kit
 - Castles and walls: Kenney Castle Kit

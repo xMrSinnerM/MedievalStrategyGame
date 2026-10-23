@@ -14,8 +14,8 @@ enum Mode { SELECT, PLACE, MOVE }
 
 const CELL := CastleModels.CELL
 const CLICK_SLOP := 6.0
-## Roof colour of the player's own castles; NPC castles use their faction's colour.
-const PLAYER_COLOR := Color(0.66, 0.2, 0.16)
+const PLAYER_COLOR := KitModels.PLAYER_COLOR
+## Roof colour of castles that are neither yours nor a faction's.
 const OTHER_COLOR := Color(0.38, 0.4, 0.46)
 
 var castle: CastleState

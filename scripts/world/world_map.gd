@@ -28,12 +28,12 @@ func _ready() -> void:
 	water.build()
 	rivers.build()
 	settlements.build()
-	vegetation.build()
 	barons = preload("res://scripts/world/barons_layer.gd").new()
 	barons.name = "Barons"
 	barons.settlements = settlements
 	add_child(barons)
 	barons.build()
+	vegetation.build()   # after the camps, which clear the trees around them
 	if Economy.online:
 		players = preload("res://scripts/world/players_layer.gd").new()
 		players.name = "Players"

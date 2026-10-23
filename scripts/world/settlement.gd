@@ -1,6 +1,6 @@
 class_name Settlement
 extends Node3D
-## One town, castle or village on the campaign map: its placeholder model on a
+## One town, castle or village on the campaign map: its model on a
 ## small earth plinth, the owner's banner and a name label.
 
 ## Label font size per type; labels keep this size on screen at any zoom.
@@ -9,9 +9,9 @@ const LABEL_SIZE := {"town": 44, "castle": 38, "village": 34}
 const LABEL_MAX_ZOOM := {"town": 1.01, "castle": 0.95, "village": 0.8}
 ## Banner pole foot (model space) and pole height per type.
 const BANNER_SPOT := {
-	"town": [Vector3(0, 22.0, -4.0), 10.0],
-	"castle": [Vector3(-2.0, 20.0, -2.0), 8.0],
-	"village": [Vector3(3.0, 0.0, 3.0), 9.0],
+	"town": [Vector3(0.0, 0.0, 10.0), 14.0],
+	"castle": [Vector3(9.0, 0.0, -10.0), 12.0],
+	"village": [Vector3(6.0, 0.0, 6.0), 9.0],
 }
 
 var id := ""
@@ -46,10 +46,12 @@ func setup(data: Dictionary) -> void:
 	position = Vector3(x, base, z)
 	rotation.y = deg_to_rad(float(data.get("rotation_deg", 0.0)))
 
-	var style: Dictionary = faction.get("style", {})
+	var team: Color = faction.color if not faction.is_empty() else KitModels.VILLAGE_COLOR
+	if data.get("player", false):
+		team = KitModels.PLAYER_COLOR
 	var model := MeshInstance3D.new()
 	model.name = "Model"
-	model.mesh = SettlementModels.build(type, style, hash(id))
+	model.mesh = SettlementModels.build(type, team, hash(id))
 	add_child(model)
 
 	var plinth := MeshInstance3D.new()

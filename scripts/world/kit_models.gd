@@ -8,6 +8,10 @@ const ROOT := "res://assets/kaykit/"
 const SHADER := preload("res://shaders/kit.gdshader")
 const ATLAS := preload("res://assets/kaykit/buildings/hexagons_medieval.png")
 const FOLDERS := ["buildings/", "nature/", "props/"]
+## Roof colour of the player's own castles; factions use their banner colour.
+const PLAYER_COLOR := Color(0.66, 0.2, 0.16)
+## Roof colour of unowned villages.
+const VILLAGE_COLOR := Color(0.55, 0.33, 0.2)
 
 static var _pieces := {}      ## name -> Array of [Mesh, Transform3D]
 static var _materials := {}   ## "team:fog" -> ShaderMaterial
