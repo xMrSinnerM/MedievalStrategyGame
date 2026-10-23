@@ -1,7 +1,8 @@
 extends Node3D
 ## Places every settlement from data/settlements.json and a bridge wherever a
 ## road crosses a river (found by RoadNetwork). Towns are capitals: their
-## labels say who holds them.
+## labels say who holds them. The villages are resource villages, drawn by
+## villages_layer.gd.
 
 const BRIDGE_STONE := Color(0.6, 0.56, 0.5)
 const BRIDGE_DECK := Color(0.45, 0.34, 0.24)
@@ -17,6 +18,8 @@ var _zoom_t := 0.0
 
 func build() -> void:
 	for data in GameData.settlements:
+		if data.type == "village":
+			continue  # a resource village now: villages_layer.gd draws it
 		var s := Settlement.new()
 		add_child(s)
 		s.setup(data)

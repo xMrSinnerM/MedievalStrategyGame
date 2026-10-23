@@ -1160,7 +1160,19 @@ func test_capitals() -> void:
 func test_villages() -> void:
 	var vr := VillageRules.load_default()
 	var world := VillageRules.load_villages()
-	check(world.size() == int(vr.placement.count), "every village is on the map")
+	var old_villages: Array = JSON.parse_string(FileAccess.get_file_as_string("res://data/settlements.json")).settlements.filter(
+			func(s: Dictionary) -> bool: return s.type == "village")
+	check(world.size() == int(vr.placement.count) + old_villages.size(), "every village is on the map, the old ones too")
+	var by_id := {}
+	for v: Dictionary in world:
+		by_id[v.id] = v
+	var converted := 0
+	for s: Dictionary in old_villages:
+		var v: Dictionary = by_id.get(s.id, {})
+		if not v.is_empty() and v.name == s.name and vr.yields.has(v.resource) \
+				and Vector2(v.position[0], v.position[1]).distance_to(Vector2(s.position[0], s.position[1])) < 0.1:
+			converted += 1
+	check(converted == old_villages.size(), "the old villages are resource villages, where they always stood")
 	check(vr.slots_for(1) == 0 and vr.slots_for(2) == 1 and vr.slots_for(5) == 4, "keep levels hold villages")
 	var total := 0
 	for unit: String in vr.militia(1):

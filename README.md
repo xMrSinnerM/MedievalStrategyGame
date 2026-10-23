@@ -145,8 +145,9 @@ switching is instant and the map keeps its camera and your party's route.
 **Your Castle** stands just south-east of Highford, with its name in gold.
 Every castle on the map now has an economy. Click one to see who holds it,
 its keep level, defence and income, then **Enter castle** (yours),
-**Look inside** (an NPC lord's) or **Travel here**. Clicking towns, villages
-and open ground still sends your party straight there.
+**Look inside** (an NPC lord's) or **Travel here**. Clicking open ground still
+sends your party straight there; towns and villages open their panels
+(see Capitals and Resource villages).
 
 - Your castle's map position is in `data/player.json`, so regenerating
   `settlements.json` doesn't lose it.
@@ -554,8 +555,9 @@ fixtures).
 
 ## Resource villages
 
-36 villages lie across the map, each working one resource: wood, stone, food
-or gold (a market village). Press **B** (or the **Villages** button) for the
+58 villages lie across the map, each working one resource: wood, stone, food
+or gold (a market village). 22 of them are the old villages by the towns
+(Millbrook, Ashby and the rest), which used to be scenery. Press **B** (or the **Villages** button) for the
 ones you hold and the nearest others, or click one on the map. Villages near
 the edge of the map are level 1 and get stronger towards the middle, up to
 level 5; a higher level sends more and is guarded by more soldiers.
@@ -579,7 +581,8 @@ your alliance can't be attacked. The numbers live in `data/villages.json`;
 `VillageRules` (`scripts/economy/village_rules.gd`) and the server's
 `server/rules/villages.ts` follow the same rules (checked by the server
 fixtures). Where the villages stand is in `server/world/world.json`, written by
-`scripts/tools/export_server_world.gd`.
+`scripts/tools/export_server_world.gd`: 36 spread by `VillagePlacer`, then the
+villages of `data/settlements.json` with their own ids and names.
 
 ## Capitals
 
