@@ -2945,5 +2945,87 @@
 			"capital": true,
 			"faction": "corvane"
 		}
+	],
+	"fortresses": [
+		{
+			"id": "aldmere_castle_ravenhold",
+			"name": "Ravenhold",
+			"position": [
+				1284.0,
+				1080.0
+			]
+		},
+		{
+			"id": "aldmere_castle_brackenwall",
+			"name": "Brackenwall",
+			"position": [
+				756.0,
+				804.0
+			]
+		},
+		{
+			"id": "varnholt_castle_ulfhall",
+			"name": "Ulfhall",
+			"position": [
+				696.0,
+				456.0
+			]
+		},
+		{
+			"id": "varnholt_castle_isenvarde",
+			"name": "Isenvarde",
+			"position": [
+				1212.0,
+				408.0
+			]
+		},
+		{
+			"id": "ashkar_castle_dar_sennek",
+			"name": "Dar Sennek",
+			"position": [
+				612.0,
+				1584.0
+			]
+		},
+		{
+			"id": "ashkar_castle_qalat_yaruq",
+			"name": "Qalat Yaruq",
+			"position": [
+				948.0,
+				1440.0
+			]
+		},
+		{
+			"id": "thornwald_castle_hollowmere",
+			"name": "Hollowmere",
+			"position": [
+				408.0,
+				1428.0
+			]
+		},
+		{
+			"id": "thornwald_castle_greywood",
+			"name": "Greywood",
+			"position": [
+				732.0,
+				1020.0
+			]
+		},
+		{
+			"id": "corvane_castle_gullcrest",
+			"name": "Gullcrest",
+			"position": [
+				1656.0,
+				312.0
+			]
+		},
+		{
+			"id": "corvane_castle_seawatch",
+			"name": "Seawatch",
+			"position": [
+				1584.0,
+				756.0
+			]
+		}
 	]
 }

@@ -170,7 +170,7 @@ func open_for(id: String) -> void:
 			return
 		_player = ""
 		_title.text = "Attack %s (level %d)" % [camp.camp_name, camp.level]
-		_enemy_title.text = "The camp"
+		_enemy_title.text = "The fortress" if camp.fortress else "The camp"
 	camp_id = id
 	_note.text = ""
 	_note.visible = false
@@ -428,7 +428,7 @@ func _defence() -> Dictionary:
 	var camp := Economy.get_baron(camp_id)
 	if camp == null:
 		return {}
-	var br := Economy.baron_rules
+	var br := Economy.baron_rules.for_camp(camp)
 	return {"troops": camp.garrison(br), "layout": Battle.DEFAULT_LAYOUT,
 			"wall": Battle.wall_from_defense(br.palisade(camp.level))}
 
@@ -592,15 +592,15 @@ func _lead_fx() -> Dictionary:
 # --- The other side --------------------------------------------------------------
 
 func _describe_camp(camp: BaronCamp) -> void:
-	var br := Economy.baron_rules
+	var br := Economy.baron_rules.for_camp(camp)
 	var lines: PackedStringArray = []
 	var garrison := camp.garrison(br)
 	for unit: String in garrison:
 		lines.append("%d %s" % [garrison[unit], Economy.rules.unit_plural(unit)])
 	var wall := Battle.wall_from_defense(br.palisade(camp.level))
-	lines.append("Palisade: +%d%% defence" % roundi((wall - 1.0) * 100.0))
+	lines.append("%s: +%d%% defence" % ["Walls" if camp.fortress else "Palisade", roundi((wall - 1.0) * 100.0)])
 	lines.append_array(_posts(garrison, Battle.DEFAULT_LAYOUT))
-	var loot := Economy.baron_loot(camp.level)
+	var loot := Economy.baron_loot(camp.level, camp)
 	var parts: PackedStringArray = []
 	for r: String in loot:
 		parts.append("%d %s" % [loot[r], r])
@@ -730,7 +730,7 @@ func _update() -> void:
 			return
 		if total > 0:
 			var loot_total := 0
-			var loot := Economy.baron_loot(camp.level)
+			var loot := Economy.baron_loot(camp.level, camp)
 			for r: String in loot:
 				loot_total += int(loot[r])
 			var carry := br.carry(army) * (1.0 + float(fx.get("loot", 0.0)))

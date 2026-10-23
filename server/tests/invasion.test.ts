@@ -43,7 +43,7 @@ test("invader camps appear when the invasion starts and points start from 0", ()
   assert.ok(invaders.every((c) => c.event === START && c.points === 10 && c.rebuild === 120));
   assert.equal(q.event_key, START);
   assert.equal(q.event_points, 0);
-  assert.equal(q.camps.length, world.camps.length + 3);
+  assert.equal(q.camps.length, (world.camps.length + (world.fortresses?.length ?? 0)) + 3);
   // Asking again changes nothing.
   assert.equal(invade(q, events, world, START + 120), q);
 });
@@ -79,14 +79,14 @@ test("winning raises an invader camp a level and earns points; the camps leave a
   out = act(rules, p, { action: "state" }, END + 1, ctx);
   out = act(rules, out.state, { action: "state" }, END + 2, ctx);
   assert.equal(out.state.camps.filter((c) => c.event !== undefined).length, 0, "gone once the event is over");
-  assert.equal(out.state.camps.length, world.camps.length);
+  assert.equal(out.state.camps.length, (world.camps.length + (world.fortresses?.length ?? 0)));
   assert.equal(out.state.event_points, 10, "points are kept until the next invasion");
 });
 
 test("a castle on a spot with no places gets no invaders, and other camps are never touched", () => {
   const p = { ...player(START - 3600), home_x: 1, home_y: 1 };
   const q = invade(p, events, world, START);
-  assert.equal(q.camps.length, world.camps.length);
+  assert.equal(q.camps.length, (world.camps.length + (world.fortresses?.length ?? 0)));
   assert.equal(q.event_key, START);
 });
 

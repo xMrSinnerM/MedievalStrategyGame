@@ -145,6 +145,8 @@ export interface Context {
   village?: VillageTarget;
   /** What your villages sent your castle since the last request (data/villages.json). */
   villageIncome?: Dict;
+  /** The fortresses on the map; a player who has none of them yet gets them at level 1. */
+  fortresses?: World["fortresses"];
   /** The production boost from capitals your alliance holds (capitalBoost() in villages.ts); kept as stored without it. */
   capitalBoost?: Dict;
 }
@@ -162,6 +164,8 @@ export interface World {
   villages?: VillageInfo[];
   /** The capitals: the towns, as villages with `capital` set (data/capitals.json). */
   capitals?: VillageInfo[];
+  /** The fortresses: the old kingdoms' castles, every player's own camps with `fortress` set (data/fortresses.json). */
+  fortresses?: { id: string; name: string; position: [number, number] }[];
 }
 
 /** What other players see of you on the map. */
@@ -258,7 +262,9 @@ export function newPlayer(rules: Rules, world: World, name: string, now: number,
     home_x: spot[0],
     home_y: spot[1],
     castle: castle.toDict(),
-    camps: world.camps.map((c) => ({ id: c.id, name: c.name, position: [c.position[0], c.position[1]], level: startLevel(c.position), defeats: 0, rebuilt_at: 0 })),
+    camps: withFortresses(
+      world.camps.map((c) => ({ id: c.id, name: c.name, position: [c.position[0], c.position[1]], level: startLevel(c.position), defeats: 0, rebuilt_at: 0 })),
+      world.fortresses),
     marches: [],
     next_march: 1,
     protected_until: pvp ? now + pvp.protection_hours * 3600 : 0,
@@ -270,13 +276,22 @@ export function newPlayer(rules: Rules, world: World, name: string, now: number,
   };
 }
 
+/** These camps with every fortress added that isn't among them yet, at level 1. */
+export function withFortresses(camps: CampData[], fortresses: World["fortresses"] = []): CampData[] {
+  const have = new Set(camps.map((c) => c.id));
+  const added = fortresses.filter((f) => !have.has(f.id))
+    .map((f) => ({ id: f.id, name: f.name, position: [f.position[0], f.position[1]] as [number, number], level: 1, defeats: 0,
+      rebuilt_at: 0, fortress: true }));
+  return added.length > 0 ? [...camps, ...added] : camps;
+}
+
 /** Brings the player's world up to `now`, then carries out the order (if any). */
 export function act(rules: Rules, given: PlayerState, req: Request, now: number, ctx: Context = {}): Outcome {
   const ev = ctx.events;
   const stored = ev ? invade(given, ev.rules, ev.world, now, ev.offset ?? 0) : given;
   const army: Army = {
     castle: CastleState.fromDict(rules.buildings, stored.castle),
-    camps: structuredClone(stored.camps),
+    camps: withFortresses(structuredClone(stored.camps), ctx.fortresses),
     marches: structuredClone(stored.marches),
     nextMarch: stored.next_march,
     home: [stored.home_x, stored.home_y],

@@ -164,6 +164,12 @@ player and three an alliance. Every request sets your castle's `boost` from
 the capitals your alliance holds (or you alone), so all its members produce
 more.
 
+Fortresses (the old kingdoms' castles, `data/fortresses.json`, listed under
+`fortresses` in `server/world/world.json`) are camps in each player's
+`camps` with `fortress` set: `BaronRules.forCamp()` gives them the fortress
+numbers. `act()` adds any a player doesn't have yet, at level 1. They are
+attacked with `attack` like any camp.
+
 The game owner's tools (`supabase/functions/game/admin.ts`) work only for
 accounts in the `admins` table, which the game can never change. Add one in
 the SQL editor:

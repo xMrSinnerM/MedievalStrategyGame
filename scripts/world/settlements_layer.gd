@@ -43,6 +43,14 @@ func rebuild(settlement_id: String) -> void:
 		return
 
 
+func show_fortress(id: String, text: String, ready: bool) -> void:
+	## Online: a castle is a fortress; its label shows its level (and any rebuilding).
+	for s in settlements:
+		if s.id == id:
+			s.set_holder(text, LABEL_OTHER if ready else Color(0.7, 0.62, 0.58))
+			return
+
+
 func _show_holders() -> void:
 	## Writes who holds each capital under its town's name.
 	for s in settlements:

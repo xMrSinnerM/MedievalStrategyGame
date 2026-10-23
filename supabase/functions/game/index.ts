@@ -71,6 +71,9 @@
 // Capitals (the towns) are rows of the same table, with their own rules
 // (data/capitals.json); every request sets your castle's production boost
 // from the capitals your alliance holds (or you alone, outside one).
+// Fortresses (the old kingdoms' castles) are every player's own camps, like
+// the robber barons' (data/fortresses.json); act() adds them to a player who
+// doesn't have them yet.
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
@@ -86,6 +89,7 @@ import gearData from "../../../data/gear.json" with { type: "json" };
 import outpostsData from "../../../data/outposts.json" with { type: "json" };
 import villagesData from "../../../data/villages.json" with { type: "json" };
 import capitalsData from "../../../data/capitals.json" with { type: "json" };
+import fortressesData from "../../../data/fortresses.json" with { type: "json" };
 import world from "../../../server/world/world.json" with { type: "json" };
 import { makeRules } from "../../../server/rules/load.ts";
 import { effectAt, eventsView, lastInvasion, withOverrides, type EventOverride, type EventRules } from "../../../server/rules/events.ts";
@@ -108,7 +112,7 @@ import {
   adminEvents, checkGift, giftReport, giveCastle, NOT_ADMIN, OVERRIDES_KEPT, startEvent, stopEvent, type Gift,
 } from "./admin.ts";
 
-const rules = makeRules(buildings, units, barons, gearData, outpostsData, villagesData, capitalsData);
+const rules = makeRules(buildings, units, barons, gearData, outpostsData, villagesData, capitalsData, fortressesData);
 const CAPITALS: VillageInfo[] = (world as World).capitals ?? [];
 const VILLAGES: VillageInfo[] = [...((world as World).villages ?? []), ...CAPITALS];
 const CAPITAL_IDS = CAPITALS.map((c) => c.id);
@@ -796,7 +800,7 @@ Deno.serve(async (req: Request) => {
     }
     const outcome = act(rules, stored, body, t, { pvp, outpostSpot, target: target?.target, homecomings, alliances: allianceRules, aid: aidRules,
       events: { rules: calendar, world: world as World }, quests: questRules, village: village?.target, villageIncome,
-      capitalBoost: boost });
+      capitalBoost: boost, fortresses: (world as World).fortresses });
     // Save only if nobody else changed the row meanwhile; otherwise start over.
     const { data: saved, error: saveError } = await admin.from("players")
       .update({ ...outcome.state, ...publicColumns(outcome.state), version: version + 1, updated_at: new Date().toISOString() })

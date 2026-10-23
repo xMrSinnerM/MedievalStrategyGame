@@ -38,7 +38,7 @@ import {
 const root = new URL("../../", import.meta.url);
 const json = (path: string) => JSON.parse(readFileSync(new URL(path, root), "utf8"));
 const rules = makeRules(json("data/buildings.json"), json("data/units.json"), json("data/barons.json"), json("data/gear.json"),
-  json("data/outposts.json"), json("data/villages.json"), json("data/capitals.json"));
+  json("data/outposts.json"), json("data/villages.json"), json("data/capitals.json"), json("data/fortresses.json"));
 const world: World = json("server/world/world.json");
 // The resource villages and the capitals (the towns), kept the same way.
 const PLACES: VillageInfo[] = [...(world.villages ?? []), ...(world.capitals ?? [])];
@@ -486,7 +486,7 @@ createServer(async (req, res) => {
     const outcome = act(rules, me, body, t,
       { pvp, outpostSpot, target: target?.target, homecomings, alliances: allianceRules, aid: aidRules,
         events: { rules: eventRules, world, offset: EVENTS_OFFSET }, quests: questRules, village: village?.target, villageIncome,
-        capitalBoost: capitalBoost(rules, allianceCapitals(user)) });
+        capitalBoost: capitalBoost(rules, allianceCapitals(user)), fortresses: world.fortresses });
     players.set(user, outcome.state);
     for (const r of outcome.reports) report(user, r);
     if (outcome.raid && village) {

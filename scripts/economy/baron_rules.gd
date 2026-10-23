@@ -10,6 +10,7 @@ extends RefCounted
 ## the same numbers.
 
 const PATH := "res://data/barons.json"
+const FORTRESS_PATH := "res://data/fortresses.json"
 
 var max_level := 40
 var garrison_base := 14.0
@@ -26,6 +27,10 @@ var rebuild_per_level := 30.0
 var march_speed := 6.0            ## map units an army covers per second
 var camps: Dictionary = {}        ## how camps are spread over the map (BaronPlacer)
 var names: Dictionary = {}        ## "first" and "second" halves of camp names
+var drop_level_bonus := 0         ## a fortress drops gear like a camp this many levels higher
+## The numbers for fortresses (data/fortresses.json): online, the old
+## kingdoms' castles are camps with "fortress" set (BaronCamp.fortress).
+var fortress: BaronRules
 
 
 static func load_default() -> BaronRules:
@@ -35,7 +40,16 @@ static func load_default() -> BaronRules:
 		push_error("Could not read %s" % PATH)
 		data = {}
 	rules.load_from(data)
+	var forts = JSON.parse_string(FileAccess.get_file_as_string(FORTRESS_PATH))
+	if forts is Dictionary:
+		rules.fortress = BaronRules.new()
+		rules.fortress.load_from(forts)
 	return rules
+
+
+func for_camp(camp: BaronCamp) -> BaronRules:
+	## The rules for this camp: the fortress rules for a fortress, else these.
+	return fortress if camp.fortress and fortress != null else self
 
 
 func load_from(data: Dictionary) -> void:
@@ -54,6 +68,7 @@ func load_from(data: Dictionary) -> void:
 	march_speed = float(data.get("march_speed", march_speed))
 	camps = data.get("camps", {})
 	names = data.get("names", {})
+	drop_level_bonus = int(data.get("drop_level_bonus", 0))
 
 
 func garrison(level: int) -> Dictionary:

@@ -56,6 +56,8 @@ export interface Report {
   new_level: number;
   defeats: number;
   needed: number;
+  /** The camp was a fortress. */
+  fortress?: boolean;
   /** Invader camps: the invasion it belongs to, and the event points this win earned. */
   event?: number;
   points?: number;
@@ -159,7 +161,7 @@ function fightCamp(world: Army, rules: BaronRules, m: March): Report {
   m.state = "home";
   const report: Report = { march: m.id, camp: m.camp, name: camp?.name ?? "", at: m.arrive, empty: false,
     winner: "a", a: {}, b: {}, spoils: {}, level: camp?.level ?? 0, leveled: false, new_level: camp?.level ?? 0,
-    defeats: camp?.defeats ?? 0, needed: camp ? rules.defeatsNeeded(camp.level) : 0 };
+    defeats: camp?.defeats ?? 0, needed: camp ? rules.forCamp(camp).defeatsNeeded(camp.level) : 0 };
   if (camp === undefined || !isReady(camp, m.arrive)) {
     // The camp was beaten by an earlier army and is still in ashes.
     m.survivors = m.army;
@@ -172,7 +174,7 @@ function fightCamp(world: Army, rules: BaronRules, m: March): Report {
   m.loot = result.loot;
   if (result.winner === "a") world.castle.stats.barons += 1;
   const out: Report = { ...report, winner: result.winner, a: result.a, b: result.b, walls: result.walls, courtyard: result.courtyard, ...(result.tools ? { tools: result.tools } : {}), spoils: result.loot, level: result.level,
-    leveled: result.leveled, new_level: camp.level, defeats: camp.defeats, needed: rules.defeatsNeeded(camp.level) };
+    leveled: result.leveled, new_level: camp.level, defeats: camp.defeats, needed: rules.forCamp(camp).defeatsNeeded(camp.level) };
   const gear = world.gear;
   if (gear) {
     if (m.lead) {
@@ -180,12 +182,13 @@ function fightCamp(world: Army, rules: BaronRules, m: March): Report {
       const lead = gear.addXp(world.castle, m.lead.id, xp);
       if (lead) out.lead = lead;
     }
-    const item = result.winner === "a" ? gear.rollDrop(result.level, seed + DROP_SEED) : null;
+    const item = result.winner === "a" ? gear.rollDrop(result.level + rules.forCamp(camp).dropLevelBonus, seed + DROP_SEED) : null;
     if (item) {
       out.gear = item;
       if (!gear.give(world.castle, item)) out.bag_full = true;
     }
   }
+  if (camp.fortress) out.fortress = true;
   if (camp.event !== undefined) {
     out.event = camp.event;
     out.points = result.winner === "a" ? (camp.points ?? 0) * result.level : 0;

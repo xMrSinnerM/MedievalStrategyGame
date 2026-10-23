@@ -4,7 +4,8 @@ extends SceneTree
 ## distance, the spots where players' castles can stand (PlayerSpots), and
 ## for each spot the places around it where invader camps can stand during a
 ## Baron Invasion, the resource villages (VillagePlacer) and the capitals
-## (the towns of data/settlements.json, see capitals()). The server
+## (the towns of data/settlements.json, see capitals()) and the fortresses
+## (its other castles, see fortresses()). The server
 ## can't read the terrain, so it uses these lists; the game reads the
 ## villages from here too.
 ##
@@ -51,12 +52,13 @@ func _initialize() -> void:
 		"invasion_spots": invaders,
 		"villages": villages,
 		"capitals": capitals(game_data),
+		"fortresses": fortresses(game_data),
 	}
 	var file := FileAccess.open(OUT, FileAccess.WRITE)
 	file.store_string(JSON.stringify(out, "\t", false))
 	file.close()
-	print("wrote %s with %d camps, %d spots, %d villages and %d capitals" % [OUT, camps.size(), spots.size(), villages.size(),
-			out.capitals.size()])
+	print("wrote %s with %d camps, %d spots, %d villages, %d capitals and %d fortresses" % [OUT, camps.size(), spots.size(),
+			villages.size(), out.capitals.size(), out.fortresses.size()])
 	game_data.free()
 	quit()
 
@@ -83,6 +85,15 @@ static func capitals(game_data) -> Array:
 			continue
 		out.append({"id": s.id, "name": s.name, "position": [s.position[0], s.position[1]], "level": 2 if seats.has(s.id) else 1,
 				"resource": "gold", "capital": true, "faction": s.faction})
+	return out
+
+
+static func fortresses(game_data) -> Array:
+	## Every castle but yours, as a fortress (data/fortresses.json).
+	var out := []
+	for s: Dictionary in game_data.settlements:
+		if s.get("type", "") == "castle" and s.id != MAIN_CASTLE:
+			out.append({"id": s.id, "name": s.name, "position": [s.position[0], s.position[1]]})
 	return out
 
 

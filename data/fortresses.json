@@ -1,0 +1,23 @@
+{
+	"_comment": "Fortresses (online): the castles of the old kingdoms (the castles in data/settlements.json, listed under `fortresses` in server/world/world.json), held by their lords' garrisons. They work like robber baron camps with these numbers (the same keys as data/barons.json): every player has their own, starting at level 1, and every win (two from level 10) raises it a level, up to max_level, with a bigger garrison behind stronger walls and richer loot. A fortress beaten at level L rebuilds for rebuild_base + rebuild_per_level * (L - 1) seconds. It drops gear like a baron camp drop_level_bonus levels higher.",
+	"max_level": 30,
+	"garrison_base": 120,
+	"garrison_growth": 1.12,
+	"armies": [
+		{ "from_level": 1, "mix": { "spearman": 0.35, "archer": 0.3, "swordsman": 0.25, "horseman": 0.1 } },
+		{ "from_level": 10, "mix": { "spearman": 0.25, "archer": 0.3, "swordsman": 0.3, "horseman": 0.15 } }
+	],
+	"palisade_base": 120,
+	"palisade_per_level": 15,
+	"loot_base": { "wood": 1500, "stone": 1100, "food": 1500, "gold": 800 },
+	"loot_growth": 1.12,
+	"carry_per_soldier": 20,
+	"defeats_per_level": [
+		{ "from_level": 1, "defeats": 1 },
+		{ "from_level": 10, "defeats": 2 }
+	],
+	"rebuild_base": 3600,
+	"rebuild_per_level": 300,
+	"march_speed": 6,
+	"drop_level_bonus": 15
+}

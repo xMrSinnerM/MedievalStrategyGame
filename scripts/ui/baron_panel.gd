@@ -69,10 +69,11 @@ func _refresh() -> void:
 	if camp == null:
 		visible = false
 		return
-	var br := Economy.baron_rules
+	var br := Economy.baron_rules.for_camp(camp)
 	var now := Economy.now()
 	_title.text = camp.camp_name
-	_level.text = ("Invader camp, level %d" if camp.is_invader() else "Robber baron camp, level %d") % camp.level
+	_level.text = ("Invader camp, level %d" if camp.is_invader() else "Fortress, level %d" if camp.fortress
+			else "Robber baron camp, level %d") % camp.level
 	var lines: PackedStringArray = []
 	if camp.is_invader():
 		lines.append("Baron Invasion: a win gives %d event points and raises it a level" % (camp.points * camp.level))
@@ -89,15 +90,18 @@ func _refresh() -> void:
 	for unit: String in garrison:
 		lines.append("    %d %s" % [garrison[unit], Economy.rules.unit_plural(unit)])
 	var wall := Battle.wall_from_defense(br.palisade(camp.level))
-	lines.append("Palisade: defenders +%d%% defence" % roundi((wall - 1.0) * 100.0))
-	var loot := Economy.baron_loot(camp.level)
+	lines.append("%s: defenders +%d%% defence" % ["Walls" if camp.fortress else "Palisade", roundi((wall - 1.0) * 100.0)])
+	var loot := Economy.baron_loot(camp.level, camp)
 	var parts: PackedStringArray = []
 	for r: String in loot:
 		parts.append("%d %s" % [loot[r], r])
 	lines.append("Loot: " + ", ".join(parts) + Economy.loot_bonus_note())
 	lines.append("March: %s each way" % _clock(Economy.march_time_to(camp)))
+	if camp.fortress:
+		lines.append("Its lord drops better gear than any baron")
 	if not camp.is_ready(now):
-		lines.append("Rebuilding for %s" % _clock(camp.rebuilt_at - now))
+		lines.append(("Its lord is rebuilding for %s" if camp.fortress else "Rebuilding for %s") % _long_clock(camp.rebuilt_at - now)
+				if camp.rebuilt_at - now >= 3600.0 else ("Rebuilding for %s" % _clock(camp.rebuilt_at - now)))
 	_details.text = "\n".join(lines)
 	var army: Dictionary = Economy.player_castle.troops
 	var mine := Economy.player_castle.troop_count()

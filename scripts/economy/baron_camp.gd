@@ -18,6 +18,9 @@ var rebuilt_at := 0.0        ## unix time it can be attacked again
 ## a win. The server decides its fights; it rises a level with every win.
 var event := 0.0
 var points := 0
+## Online only: a fortress, one of the old kingdoms' castles, with the
+## fortress rules (BaronRules.for_camp()).
+var fortress := false
 
 
 static func create(camp_id: String, display_name: String, pos: Vector2, start_level := 1) -> BaronCamp:
@@ -38,7 +41,7 @@ func is_ready(now: float) -> bool:
 
 
 func garrison(rules: BaronRules) -> Dictionary:
-	return rules.garrison(level)
+	return rules.for_camp(self).garrison(level)
 
 
 func attack(rules: BaronRules, units: BuildingRules, army: Dictionary, seed_value: int, now: float, waves: Array = [],
@@ -50,7 +53,9 @@ func attack(rules: BaronRules, units: BuildingRules, army: Dictionary, seed_valu
 	## "loot" (resource -> amount carried off, empty if the attack failed)
 	## and "survivors" (the attackers coming home). `lead` is what the army's
 	## commander adds (GearRules.effects()): harder blows, and "loot" more carried.
-	var result := Battle.siege(units, waves if not waves.is_empty() else Battle.auto_waves(army), garrison(rules), Battle.DEFAULT_LAYOUT,
+	var barons := rules
+	rules = barons.for_camp(self)
+	var result := Battle.siege(units, waves if not waves.is_empty() else Battle.auto_waves(army), garrison(barons), Battle.DEFAULT_LAYOUT,
 			seed_value, Battle.wall_from_defense(rules.palisade(level)), {"a": tools, "lead_a": lead})
 	result["level"] = level
 	result["leveled"] = false
@@ -86,6 +91,8 @@ func to_dict() -> Dictionary:
 	if is_invader():
 		out["event"] = event
 		out["points"] = points
+	if fortress:
+		out["fortress"] = true
 	return out
 
 
@@ -96,4 +103,5 @@ static func from_dict(data: Dictionary) -> BaronCamp:
 	camp.rebuilt_at = float(data.get("rebuilt_at", 0.0))
 	camp.event = float(data.get("event", 0.0))
 	camp.points = int(data.get("points", 0))
+	camp.fortress = bool(data.get("fortress", false))
 	return camp
