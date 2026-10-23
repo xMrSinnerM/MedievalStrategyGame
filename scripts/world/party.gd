@@ -12,10 +12,8 @@ const BASE_SPEED := 22.0
 const FAR_SCALE := 6.0
 const LABEL_MAX_ZOOM := 0.8
 
-const SKIN := Color(0.86, 0.68, 0.52)
-const STEEL := Color(0.62, 0.63, 0.66)
-const HORSE := Color(0.42, 0.29, 0.19)
-const WOOD := Color(0.4, 0.29, 0.18)
+## Seconds per walk frame while marching.
+const STEP_TIME := 0.22
 
 var id := ""
 var party_name := ""
@@ -32,6 +30,8 @@ var chasing: Party = null            ## party this one is marching on, if any
 var truce_until := 0.0               ## no fighting before this time (seconds since start)
 
 var _figures: Node3D
+var _model: MeshInstance3D
+var _frames: Array[ArrayMesh] = []
 var _label: Label3D
 var _scale := 1.0
 var _walk_time := 0.0
@@ -50,9 +50,10 @@ func setup(data: Dictionary) -> void:
 	_figures = Node3D.new()
 	_figures.name = "Figures"
 	add_child(_figures)
-	var model := MeshInstance3D.new()
-	model.mesh = _build_model(faction.get("color", Color.GRAY), faction.get("secondary_color", Color.WHITE))
-	_figures.add_child(model)
+	_model = MeshInstance3D.new()
+	_frames = _build_model(faction.get("color", Color.GRAY))
+	_model.mesh = _frames[0]
+	_figures.add_child(_model)
 	if not faction.is_empty():
 		var banner := Banners.make(faction, 5.5, 2.2)
 		banner.position = Vector3(0.9, 1.6, 0.0)
@@ -183,12 +184,12 @@ func _process(delta: float) -> void:
 	if heading != Vector2.ZERO:
 		var yaw := atan2(-heading.x, -heading.y)
 		_figures.rotation.y = lerp_angle(_figures.rotation.y, yaw, minf(delta * 8.0, 1.0))
-	# A little bob while marching.
+	# Step through the walk frames while marching.
 	_walk_time += delta
-	_figures.position.y = absf(sin(_walk_time * 7.0)) * 0.12 * _scale
+	_model.mesh = _frames[int(_walk_time / STEP_TIME) % 2]
 	if path.is_empty():
 		moving = false
-		_figures.position.y = 0.0
+		_model.mesh = _frames[0]
 		if not destination_settlement.is_empty():
 			enter_settlement(destination_settlement)
 		destination_settlement = ""
@@ -200,24 +201,12 @@ func _leave_settlement() -> void:
 	_label.visible = true
 
 
-func _build_model(tunic: Color, trim: Color) -> ArrayMesh:
-	## A mounted leader with a few soldiers on foot; facing -z.
-	var kit := MeshKit.new()
-	# Horse and rider.
-	kit.box(HORSE, Transform3D(Basis(), Vector3(0, 0.75, 0)), Vector3(0.7, 0.75, 1.9))
-	for leg in [Vector3(-0.25, 0, -0.7), Vector3(0.25, 0, -0.7), Vector3(-0.25, 0, 0.7), Vector3(0.25, 0, 0.7)]:
-		kit.box(HORSE, Transform3D(Basis(), leg), Vector3(0.18, 0.8, 0.18))
-	kit.box(HORSE, Transform3D(Basis(Vector3.RIGHT, 0.6), Vector3(0, 1.3, -0.95)), Vector3(0.35, 0.8, 0.4))
-	kit.cylinder(tunic, Transform3D(Basis(), Vector3(0, 1.45, 0.05)), 0.26, 0.85, 6, 0.2)
-	kit.dome(STEEL, Transform3D(Basis(), Vector3(0, 2.32, 0.05)), 0.2)
-	kit.cylinder(SKIN, Transform3D(Basis(), Vector3(0, 2.15, 0.05)), 0.16, 0.2, 6)
-	# Soldiers in two ranks behind the leader, spears up.
-	for spot in [Vector3(-0.7, 0, 1.6), Vector3(0.7, 0, 1.6), Vector3(-0.7, 0, 2.7), Vector3(0.7, 0, 2.7), Vector3(0, 0, 2.15)]:
-		var base := Transform3D(Basis(), spot)
-		kit.cylinder(tunic.darkened(0.1), base, 0.24, 1.0, 6, 0.18)
-		kit.box(trim, base.translated_local(Vector3(0, 0.55, 0)), Vector3(0.44, 0.08, 0.44))
-		kit.cylinder(SKIN, base.translated_local(Vector3(0, 1.0, 0)), 0.14, 0.2, 6)
-		kit.dome(STEEL, base.translated_local(Vector3(0, 1.18, 0)), 0.17)
-		kit.cylinder(WOOD, base.translated_local(Vector3(0.3, 0, -0.05)), 0.04, 2.1, 4)
-		kit.cone(STEEL, base.translated_local(Vector3(0.3, 2.1, -0.05)), 0.07, 0.25, 4)
-	return kit.commit()
+func _build_model(team: Color) -> Array[ArrayMesh]:
+	## A knight leading two knights and two crossbowmen; facing -z.
+	return Soldiers.troop([
+		Soldiers.figure("knight", Vector3(0, 0, -0.6), 1.05),
+		Soldiers.figure("knight", Vector3(-1.0, 0, 1.0), 0.85),
+		Soldiers.figure("knight", Vector3(1.0, 0, 1.0), 0.85),
+		Soldiers.figure("crossbowman", Vector3(-1.0, 0, 2.5), 0.85),
+		Soldiers.figure("crossbowman", Vector3(1.0, 0, 2.5), 0.85),
+	], team)

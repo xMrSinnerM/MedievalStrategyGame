@@ -1,10 +1,15 @@
 extends Node3D
-## Scatters clustered low-poly trees using the forest channel of the biome mask.
-## Trees are grouped into MultiMesh blocks so distant blocks are culled and fade
-## out as the camera rises.
+## Scatters clustered trees using the forest channel of the biome mask, and
+## boulders on steep and high ground. Models are KayKit pieces (CC0, see
+## KitModels). Trees are grouped into MultiMesh blocks so distant blocks are
+## culled and fade out as the camera rises.
 
-const TREE_SHADER := preload("res://shaders/tree.gdshader")
 const BLOCKS := 8   # blocks per side
+## Models by kind: 0 conifer, 1 broadleaf, then boulders.
+const PIECES := ["tree_single_A", "tree_single_B", "rock_single_B", "rock_single_C", "rock_single_E"]
+const ROCK := 2
+const TREE_SCALE := 8.5
+const ROCK_SCALE := 14.0
 
 var tree_count := 0
 
@@ -45,34 +50,28 @@ func build() -> void:
 			var h := terrain.get_height(x, z)
 			if h < terrain.sea_level + 2.5 or h > snow_height - 10.0:
 				continue
-			if terrain.get_slope(x, z) > max_slope:
-				continue
 			if roads.is_cleared(x, z):
+				continue
+			var slope := terrain.get_slope(x, z)
+			if slope > max_slope:
+				# Too steep for trees: now and then a boulder instead.
+				if slope < max_slope * 2.5 and rng.randf() < 0.25:
+					_place(buckets, block_size, ROCK + rng.randi() % (PIECES.size() - ROCK), x, h - 0.4, z, rng)
 				continue
 			var cold := biome.b > 0.15 or h > 140.0
 			var kind := 0 if (cold or rng.randf() < 0.3) else 1   # 0 conifer, 1 broadleaf
-			var s := rng.randf_range(0.8, 1.35)
-			var basis := Basis().rotated(Vector3.UP, rng.randf() * TAU).scaled(Vector3(s, s * rng.randf_range(0.9, 1.15), s))
-			var key := Vector3i(int(x / block_size), int(z / block_size), kind)
-			if not buckets.has(key):
-				buckets[key] = {"xforms": [], "tints": []}
-			buckets[key].xforms.append(Transform3D(basis, Vector3(x, h - 0.3, z)))
-			var v := rng.randf_range(0.82, 1.15)
-			buckets[key].tints.append(Color(v * rng.randf_range(0.95, 1.05), v, v * rng.randf_range(0.9, 1.0), float(kind == 0)))
+			_place(buckets, block_size, kind, x, h - 0.3, z, rng)
 
-	var trunk := ShaderMaterial.new()
-	trunk.shader = TREE_SHADER
-	MapStyle.apply_common(trunk)
-	trunk.set_shader_parameter("base_color", Color(0.36, 0.26, 0.17))
-	trunk.set_shader_parameter("alt_color", Color(0.32, 0.23, 0.15))
-	var foliage := ShaderMaterial.new()
-	foliage.shader = TREE_SHADER
-	MapStyle.apply_common(foliage)
-	foliage.set_shader_parameter("sway", 1.0)
-	var meshes: Array[ArrayMesh] = [TreeMeshes.conifer(), TreeMeshes.broadleaf()]
-	for mesh in meshes:
-		mesh.surface_set_material(TreeMeshes.Part.TRUNK, trunk)
-		mesh.surface_set_material(TreeMeshes.Part.FOLIAGE, foliage)
+	var meshes: Array[ArrayMesh] = []
+	for k in PIECES.size():
+		var kit := KitModels.new()
+		kit.add(PIECES[k], Transform3D())
+		var mesh := kit.commit(Color.WHITE, true)
+		var mat: ShaderMaterial = mesh.surface_get_material(0).duplicate()
+		mat.set_shader_parameter("instance_tint", true)
+		mat.set_shader_parameter("sway", 1.0 if k < ROCK else 0.0)
+		mesh.surface_set_material(0, mat)
+		meshes.append(mesh)
 
 	for key: Vector3i in buckets:
 		var bucket: Dictionary = buckets[key]
@@ -91,4 +90,17 @@ func build() -> void:
 		node.visibility_range_end_margin = visibility * 0.15
 		node.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
 		add_child(node)
-		tree_count += mm.instance_count
+		if key.z < ROCK:
+			tree_count += mm.instance_count
+
+
+func _place(buckets: Dictionary, block_size: float, kind: int, x: float, y: float, z: float, rng: RandomNumberGenerator) -> void:
+	var s := rng.randf_range(0.8, 1.35) * (TREE_SCALE if kind < ROCK else ROCK_SCALE)
+	var basis := Basis().rotated(Vector3.UP, rng.randf() * TAU).scaled(Vector3(s, s * rng.randf_range(0.9, 1.15), s))
+	var key := Vector3i(int(x / block_size), int(z / block_size), kind)
+	if not buckets.has(key):
+		buckets[key] = {"xforms": [], "tints": []}
+	buckets[key].xforms.append(Transform3D(basis, Vector3(x, y, z)))
+	# The kit's leaves are a bright toy green; deepen them a little, each tree its own shade.
+	var v := rng.randf_range(0.74, 0.98)
+	buckets[key].tints.append(Color(v * rng.randf_range(0.95, 1.1), v * 0.9, v * rng.randf_range(0.7, 0.82)))

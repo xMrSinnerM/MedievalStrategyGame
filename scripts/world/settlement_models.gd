@@ -7,6 +7,8 @@ extends RefCounted
 ## Sizes in map units: town ~95 across, castle ~32, village ~30.
 
 const DIRT := Color(0.47, 0.39, 0.29)
+const PAVING := Color(0.66, 0.63, 0.57)
+const KERB := Color(0.5, 0.47, 0.43)
 
 ## Height of the tallest part per type, used to place the label.
 const TOP := {"town": 44.0, "castle": 32.0, "village": 10.0}
@@ -19,6 +21,10 @@ static func foundation(type: String, depth: float) -> ArrayMesh:
 	var kit := MeshKit.new()
 	var r: float = RADIUS[type] * (0.95 if type == "town" else 0.8)
 	kit.cylinder(DIRT, Transform3D(Basis(), Vector3(0, -depth, 0)), r, depth + 0.25, 14, r * 0.97)
+	if type == "town":
+		# The paved market square between the market and the well, with a kerb.
+		kit.cylinder(KERB, Transform3D(Basis(), Vector3(0, 0.2, 15)), 14.0, 0.12, 20)
+		kit.cylinder(PAVING, Transform3D(Basis(), Vector3(0, 0.22, 15)), 12.8, 0.12, 20)
 	return kit.commit()
 
 
