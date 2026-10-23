@@ -36,7 +36,12 @@ const first = world.villages![0];
 
 test("the world has villages of every level and resource, with the numbers from the data", () => {
   const vs = world.villages!;
-  assert.equal(vs.length, data.placement.count);
+  const oldVillages = json("data/settlements.json").settlements.filter((s: { type: string }) => s.type === "village");
+  assert.equal(vs.length, data.placement.count + oldVillages.length, "the placed villages and the old ones");
+  for (const s of oldVillages) {
+    const found = vs.find((x) => x.id === s.id);
+    assert.ok(found && found.name === s.name && found.resource in data.yields, `${s.name} is a resource village`);
+  }
   assert.deepEqual([...new Set(vs.map((x) => x.level))].sort(), [1, 2, 3, 4, 5]);
   assert.deepEqual([...new Set(vs.map((x) => x.resource))].sort(), ["food", "gold", "stone", "wood"]);
   assert.equal(new Set(vs.map((x) => x.id)).size, vs.length, "ids are unique");

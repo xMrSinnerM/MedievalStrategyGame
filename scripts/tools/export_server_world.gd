@@ -3,7 +3,8 @@ extends SceneTree
 ## the game places them (BaronPlacer), how their starting level grows with
 ## distance, the spots where players' castles can stand (PlayerSpots), and
 ## for each spot the places around it where invader camps can stand during a
-## Baron Invasion, the resource villages (VillagePlacer) and the capitals
+## Baron Invasion, the resource villages (VillagePlacer, with the old villages
+## of data/settlements.json among them) and the capitals
 ## (the towns of data/settlements.json, see capitals()) and the fortresses
 ## (its other castles, see fortresses()). The server
 ## can't read the terrain, so it uses these lists; the game reads the
@@ -40,9 +41,12 @@ func _initialize() -> void:
 	for row: Array in invaders:
 		for s: Array in row:
 			passing.append(Vector2(s[0], s[1]))
-	var villages := VillagePlacer.place(VillageRules.load_default(),
+	var village_rules := VillageRules.load_default()
+	var villages := VillagePlacer.place(village_rules,
 			func(p: Vector2) -> bool: return _open(game_data, p, VILLAGE_RADIUS, VILLAGE_MAX_SLOPE),
 			game_data.settlements, avoid, passing, game_data.terrain.world_size)
+	# The old villages after the placed ones, so those keep their ids.
+	villages += VillagePlacer.from_settlements(village_rules, game_data.settlements, game_data.terrain.world_size)
 	var out := {
 		"home": [home.x, home.y],
 		"camp_levels": {"per_distance": float(baron_rules.camps.get("level_per_distance", 170.0)),

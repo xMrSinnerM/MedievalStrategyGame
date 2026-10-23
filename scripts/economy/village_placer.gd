@@ -3,7 +3,8 @@ extends RefCounted
 ## Spreads the resource villages over the map from a fixed seed: on open,
 ## gentle ground, clear of settlements, robber baron camps, players' castle
 ## spots and each other. Villages near the middle of the map are the richest
-## (and best guarded), so the centre is worth fighting over. Only
+## (and best guarded), so the centre is worth fighting over. The old villages
+## of data/settlements.json are resource villages too (from_settlements). Only
 ## scripts/tools/export_server_world.gd runs this; the game and the server
 ## both read the result from server/world/world.json.
 
@@ -23,13 +24,11 @@ static func place(rules: VillageRules, open: Callable, settlements: Array, avoid
 	var count := int(cfg.get("count", 36))
 	var gap := float(cfg.get("min_gap", 60.0))
 	var margin := float(cfg.get("edge_margin", 90.0))
-	var rings: Array = cfg.get("level_rings", [])
 	var resources: Array = rules.yields.keys()
 	var rng := RandomNumberGenerator.new()
 	rng.seed = int(cfg.get("seed", 5150))
 	var first: Array = rules.names.get("first", ["Mill"])
 	var second: Array = rules.names.get("second", ["ton"])
-	var centre := Vector2(map_size, map_size) * 0.5
 	var used_names := {}
 	var out: Array = []
 	var tries := 0
@@ -54,14 +53,33 @@ static func place(rules: VillageRules, open: Callable, settlements: Array, avoid
 			if not used_names.has(village_name):
 				break
 		used_names[village_name] = true
-		# Level 5 inside the first ring, 4 inside the second, and so on; 1 outside them all.
-		var level := 1
-		var d := p.distance_to(centre)
-		for i in rings.size():
-			if d < float(rings[i]):
-				level = rules.max_level - i
-				break
 		out.append({"id": "village_%d" % out.size(), "name": village_name,
-				"position": [snappedf(p.x, 0.1), snappedf(p.y, 0.1)], "level": level,
+				"position": [snappedf(p.x, 0.1), snappedf(p.y, 0.1)], "level": level_at(rules, p, map_size),
 				"resource": resources[out.size() % resources.size()]})
 	return out
+
+
+static func from_settlements(rules: VillageRules, settlements: Array, map_size: float) -> Array:
+	## The old villages of data/settlements.json, as resource villages: same
+	## id, name and place, the level of where they stand, and the resources
+	## taken in turn (from gold, so the first few aren't all wood).
+	var resources: Array = rules.yields.keys()
+	var out: Array = []
+	for s: Dictionary in settlements:
+		if s.get("type", "") != "village":
+			continue
+		var p := Vector2(float(s.position[0]), float(s.position[1]))
+		out.append({"id": String(s.id), "name": String(s.name),
+				"position": [snappedf(p.x, 0.1), snappedf(p.y, 0.1)], "level": level_at(rules, p, map_size),
+				"resource": resources[(out.size() + resources.size() - 1) % resources.size()]})
+	return out
+
+
+static func level_at(rules: VillageRules, p: Vector2, map_size: float) -> int:
+	## Level 5 inside the first ring, 4 inside the second, and so on; 1 outside them all.
+	var rings: Array = rules.placement.get("level_rings", [])
+	var d := p.distance_to(Vector2(map_size, map_size) * 0.5)
+	for i in rings.size():
+		if d < float(rings[i]):
+			return rules.max_level - i
+	return 1
