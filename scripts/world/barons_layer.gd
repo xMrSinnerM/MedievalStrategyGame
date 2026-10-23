@@ -10,8 +10,6 @@ extends Node3D
 
 const PICK_RADIUS := 16.0
 const LABEL_MAX_ZOOM := 0.9
-const STAKE := Color(0.36, 0.26, 0.17)
-const TENT := Color(0.62, 0.52, 0.38)
 const TENT_DARK := Color(0.42, 0.2, 0.16)
 const FIRE := Color(0.95, 0.5, 0.15)
 const BARON_BANNER := {"id": "barons", "color": Color(0.1, 0.09, 0.09), "secondary_color": Color(0.7, 0.12, 0.1),
@@ -79,25 +77,31 @@ func _add_camp(camp: BaronCamp) -> void:
 	root.name = camp.id
 	var x := camp.position.x
 	var z := camp.position.y
+	GameData.roads.clear_trees(camp.position, 18.0)
 	root.position = Vector3(x, GameData.terrain.get_height(x, z), z)
 	root.rotation.y = float(hash(camp.id) % 628) / 100.0
-	var kit := MeshKit.new()
-	# A ring of sharpened stakes with a gap for the gate.
-	for k in 22:
-		var angle := k * TAU / 24.0
-		var p := Vector3(cos(angle) * 8.0, -1.0, sin(angle) * 8.0)
-		var h := 3.6 + float((hash(camp.id) + k * 31) % 7) * 0.15
-		kit.cylinder(STAKE, Transform3D(Basis(), p), 0.45, h, 5)
-		kit.cone(STAKE, Transform3D(Basis(), p + Vector3(0, h, 0)), 0.45, 0.9, 5)
-	# Tents around a camp fire.
-	var tents := [Vector3(-3.0, 0, -2.5), Vector3(3.2, 0, -1.5), Vector3(-0.5, 0, 3.5)]
-	for i in tents.size():
-		kit.cone(TENT_DARK if i == 0 else TENT, Transform3D(Basis(), tents[i] + Vector3(0, -0.5, 0)), 2.4, 3.6, 6)
-	kit.cylinder(Color(0.3, 0.3, 0.3), Transform3D(Basis(), Vector3(0.2, -0.3, 0.3)), 0.9, 0.5, 6)
-	kit.cone(FIRE, Transform3D(Basis(), Vector3(0.2, 0.2, 0.3)), 0.6, 1.2, 5)
+	var kit := KitModels.new()
+	# A wooden palisade with a gap for the gate.
+	for k in 13:
+		var angle := (k + 0.5) * TAU / 14.0
+		var p := Vector3(cos(angle) * 12.0, -0.6, sin(angle) * 12.0)
+		kit.add("fence_wood_straight", Transform3D(Basis(Vector3.UP, -angle).scaled(Vector3(4.8, 6.0, 4.8)), p))
+	# Tents, stores and a training target around the camp fire.
+	var tents := [[Vector3(-5.0, -0.3, -3.5), 0.4], [Vector3(4.8, -0.3, -3.0), -0.5], [Vector3(-1.5, -0.3, 5.5), 2.8]]
+	for t: Array in tents:
+		kit.add("tent", Transform3D(Basis(Vector3.UP, t[1]).scaled(Vector3.ONE * 7.0), t[0]))
+	kit.add("weaponrack", Transform3D(Basis(Vector3.UP, 1.2).scaled(Vector3.ONE * 3.5), Vector3(6.5, -0.3, 4.0)))
+	kit.add("barrel", Transform3D(Basis().scaled(Vector3.ONE * 3.0), Vector3(-7.5, -0.3, 1.0)))
+	kit.add("crate_A_big", Transform3D(Basis(Vector3.UP, 0.5).scaled(Vector3.ONE * 3.0), Vector3(-7.0, -0.3, -1.0)))
 	var model := MeshInstance3D.new()
-	model.mesh = kit.commit()
+	model.mesh = kit.commit(TENT_DARK, true)
 	root.add_child(model)
+	var fire := MeshKit.new()
+	fire.cylinder(Color(0.3, 0.3, 0.3), Transform3D(Basis(), Vector3(0.2, -0.3, 0.3)), 0.9, 0.5, 6)
+	fire.cone(FIRE, Transform3D(Basis(), Vector3(0.2, 0.2, 0.3)), 0.6, 1.2, 5)
+	var fire_model := MeshInstance3D.new()
+	fire_model.mesh = fire.commit()
+	root.add_child(fire_model)
 	var banner := Banners.make(INVADER_BANNER if camp.is_invader() else BARON_BANNER, 8.0, 4.0)
 	banner.position = Vector3(-1.5, 0, -0.5)
 	root.add_child(banner)
