@@ -40,6 +40,69 @@ static func button(text: String, action: Callable, width := 260.0) -> Button:
 	return b
 
 
+static func ornate_panel() -> StyleBoxFlat:
+	## The title screen's dialogs: dark oak with a bright gold rim and a deep shadow.
+	var s := GameTheme.panel_box(0.95, 28, 4)
+	s.border_color = Color(0.9, 0.7, 0.34)
+	s.set_border_width_all(2)
+	s.shadow_color = Color(0, 0, 0, 0.55)
+	s.shadow_size = 18
+	s.shadow_offset = Vector2(0, 6)
+	return s
+
+
+static func menu_button(text: String, action: Callable, width := 300.0, primary := false) -> Button:
+	## A big title-screen button: dark crimson with a gold rim (or all gold for
+	## the main choice), glowing and growing a little under the mouse.
+	var b := button(text, action, width)
+	b.custom_minimum_size.y = 52
+	b.add_theme_font_size_override("font_size", 20)
+	b.add_theme_stylebox_override("normal", _menu_box(Color(0.24, 0.1, 0.07), Color(0.72, 0.53, 0.24)))
+	b.add_theme_stylebox_override("hover", _menu_box(Color(0.42, 0.13, 0.09), Color(1.0, 0.82, 0.45), true))
+	b.add_theme_stylebox_override("pressed", _menu_box(Color(0.3, 0.08, 0.06), Color(1.0, 0.82, 0.45)))
+	b.add_theme_stylebox_override("disabled", _menu_box(Color(0.17, 0.11, 0.08), Color(0.42, 0.33, 0.2)))
+	b.add_theme_color_override("font_color", Color(0.96, 0.9, 0.76))
+	b.add_theme_color_override("font_hover_color", GOLD)
+	b.add_theme_color_override("font_pressed_color", GOLD)
+	b.add_theme_color_override("font_disabled_color", Color(0.6, 0.55, 0.47))
+	b.add_theme_color_override("font_outline_color", Color(0.08, 0.03, 0.02))
+	b.add_theme_constant_override("outline_size", 6)
+	if primary:
+		b.add_theme_stylebox_override("normal", _menu_box(Color(0.84, 0.62, 0.27), Color(1.0, 0.88, 0.58)))
+		b.add_theme_stylebox_override("hover", _menu_box(Color(0.95, 0.74, 0.36), Color(1.0, 0.93, 0.7), true))
+		b.add_theme_stylebox_override("pressed", _menu_box(Color(0.74, 0.53, 0.22), Color(1.0, 0.88, 0.58)))
+		for state in ["font_color", "font_hover_color", "font_pressed_color"]:
+			b.add_theme_color_override(state, Color(0.22, 0.08, 0.04))
+		b.add_theme_constant_override("outline_size", 0)
+	b.resized.connect(func() -> void: b.pivot_offset = b.size * 0.5)
+	b.mouse_entered.connect(func() -> void: _grow(b, 1.04))
+	b.mouse_exited.connect(func() -> void: _grow(b, 1.0))
+	return b
+
+
+static func _grow(b: Button, to: float) -> void:
+	if b.disabled or not b.is_inside_tree():
+		return
+	b.create_tween().tween_property(b, "scale", Vector2.ONE * to, 0.12).set_trans(Tween.TRANS_SINE)
+
+
+static func _menu_box(bg: Color, rim: Color, glow := false) -> StyleBoxFlat:
+	var s := StyleBoxFlat.new()
+	s.bg_color = bg
+	s.border_color = rim
+	s.set_border_width_all(2)
+	s.border_width_bottom = 4
+	s.set_corner_radius_all(4)
+	s.content_margin_left = 18
+	s.content_margin_right = 18
+	s.content_margin_top = 6
+	s.content_margin_bottom = 6
+	s.shadow_color = Color(1.0, 0.75, 0.3, 0.35) if glow else Color(0, 0, 0, 0.45)
+	s.shadow_size = 10 if glow else 4
+	s.shadow_offset = Vector2.ZERO if glow else Vector2(0, 3)
+	return s
+
+
 static func war_button_text(button: Button, action: String, faction: String) -> void:
 	## Attacking a faction you are at peace with means declaring war first,
 	## which a truce forbids.
