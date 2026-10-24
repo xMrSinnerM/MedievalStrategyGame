@@ -7,31 +7,74 @@ const MUTED := Color(0.78, 0.72, 0.62)
 const WIN := Color(0.6, 0.9, 0.45)
 const LOSS := Color(0.95, 0.45, 0.35)
 
+const BANNER := preload("res://assets/ui/places/report_banner.png")
+
 var _title: Label
 var _place: Label
-var _grid: GridContainer
+var _banner: TextureRect
+var _mine: GridContainer       ## your soldiers: sent and fallen, per unit
+var _theirs: GridContainer
+var _mine_head: Label
+var _theirs_head: Label
+var _spoils_head: Label
+var _spoils_list: VBoxContainer
+var _walls_head: Label
 var _walls: GridContainer      ## how each wall and the courtyard went, for sieges in waves
 var _footer: Label
 
 
 func _ready() -> void:
-	add_theme_stylebox_override("panel", MenuStyle.panel(0.94, 18))
-	custom_minimum_size = Vector2(440, 0)
+	add_theme_stylebox_override("panel", MenuStyle.panel(0.96, 14))
+	custom_minimum_size = Vector2(780, 0)
 	visible = false
 	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 10)
+	box.add_theme_constant_override("separation", 12)
 	add_child(box)
-	_title = _label(26, WIN)
-	_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	box.add_child(_title)
-	_place = _label(15, MUTED)
+	# A painted banner with the crest, the outcome and where it happened.
+	_banner = TextureRect.new()
+	_banner.texture = BANNER
+	_banner.custom_minimum_size = Vector2(0, 170)
+	_banner.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_banner.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	box.add_child(_banner)
+	var shade := _Shade.new()
+	shade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_banner.add_child(shade)
+	var heading := VBoxContainer.new()
+	heading.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	heading.alignment = BoxContainer.ALIGNMENT_END
+	heading.add_theme_constant_override("separation", 0)
+	heading.offset_bottom = -10
+	_banner.add_child(heading)
+	var crest := Icons.rect("crest", 44)
+	crest.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	heading.add_child(crest)
+	_title = MenuStyle.title("", 36)
+	_title.add_theme_constant_override("outline_size", 8)
+	_title.add_theme_color_override("font_outline_color", Color(0.06, 0.04, 0.02))
+	heading.add_child(_title)
+	_place = _label(16, TEXT)
 	_place.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	box.add_child(_place)
-	_grid = GridContainer.new()
-	_grid.columns = 5
-	_grid.add_theme_constant_override("h_separation", 18)
-	_grid.add_theme_constant_override("v_separation", 4)
-	box.add_child(_grid)
+	_place.add_theme_constant_override("outline_size", 5)
+	_place.add_theme_color_override("font_outline_color", Color(0.06, 0.04, 0.02))
+	heading.add_child(_place)
+	# Your army, theirs and the spoils, side by side.
+	var columns := HBoxContainer.new()
+	columns.add_theme_constant_override("separation", 10)
+	box.add_child(columns)
+	var mine := _column(columns, "soldiers")
+	_mine_head = mine[0]
+	_mine = mine[1]
+	var theirs := _column(columns, "shield")
+	_theirs_head = theirs[0]
+	_theirs = theirs[1]
+	var spoils := _column(columns, "rewards")
+	_spoils_head = spoils[0]
+	_spoils_list = VBoxContainer.new()
+	_spoils_list.add_theme_constant_override("separation", 4)
+	(spoils[1] as Control).replace_by(_spoils_list)
+	_walls_head = MenuStyle.label("How the battle unfolded", 16, MenuStyle.GOLD)
+	box.add_child(_walls_head)
 	_walls = GridContainer.new()
 	_walls.columns = 4
 	_walls.add_theme_constant_override("h_separation", 18)
@@ -39,16 +82,57 @@ func _ready() -> void:
 	box.add_child(_walls)
 	_footer = _label(15, TEXT)
 	_footer.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_footer.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	box.add_child(_footer)
-	var ok := Button.new()
+	var ok := GameTheme.primary(Button.new())
 	ok.text = "Continue"
 	ok.focus_mode = Control.FOCUS_NONE
 	ok.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	ok.custom_minimum_size = Vector2(140, 0)
+	ok.custom_minimum_size = Vector2(240, 44)
+	ok.add_theme_font_size_override("font_size", 18)
 	ok.pressed.connect(func() -> void: visible = false)
 	box.add_child(ok)
 	EventBus.battle_fought.connect(_on_battle)
 	Economy.attack_resolved.connect(show_baron_report)
+
+
+func _column(row: HBoxContainer, icon: String) -> Array:
+	## A card with an icon, a title (and a line under it) and a grid; returns [title, grid].
+	var card := PanelContainer.new()
+	card.add_theme_stylebox_override("panel", GameTheme.panel_box(0.45, 12))
+	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(card)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 8)
+	card.add_child(box)
+	var head := HBoxContainer.new()
+	head.add_theme_constant_override("separation", 8)
+	head.add_child(Icons.rect(icon, 30))
+	var title := _label(17, MenuStyle.GOLD)
+	title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(title)
+	box.add_child(head)
+	var grid := GridContainer.new()
+	grid.columns = 3
+	grid.add_theme_constant_override("h_separation", 12)
+	grid.add_theme_constant_override("v_separation", 3)
+	box.add_child(grid)
+	return [title, grid]
+
+
+## The banner's shading: dark at the bottom so the title reads, and a gold rule.
+class _Shade extends Control:
+	func _init() -> void:
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	func _draw() -> void:
+		var top := Color(0.04, 0.03, 0.02, 0.0)
+		var bottom := Color(0.04, 0.03, 0.02, 0.92)
+		var mid := size.y * 0.25
+		draw_polygon(PackedVector2Array([Vector2(0, mid), Vector2(size.x, mid), size, Vector2(0, size.y)]),
+				PackedColorArray([top, top, bottom, bottom]))
+		draw_rect(Rect2(0, 0, size.x, size.y), Color(GameTheme.RIM, 0.8), false, 1.0)
 
 
 func _on_battle(report: Dictionary) -> void:
@@ -69,7 +153,7 @@ func show_report(report: Dictionary) -> void:
 			_title.text = {"captured": "Castle captured!", "sacked": "Castle sacked!"}.get(report.outcome, "The walls held")
 		else:
 			_title.text = {"captured": "Castle lost!", "sacked": "Castle sacked!"}.get(report.outcome, "The walls held!")
-	_title.add_theme_color_override("font_color", WIN if won else LOSS)
+	_title.add_theme_color_override("font_color", MenuStyle.GOLD if won else LOSS)
 	if siege and me == "a":
 		_place.text = "You stormed the walls of %s" % enemy
 	elif siege:
@@ -78,28 +162,34 @@ func show_report(report: Dictionary) -> void:
 		_place.text = "You attacked %s near %s" % [enemy, report.place]
 	else:
 		_place.text = "%s attacked you near %s" % [enemy, report.place]
-	for child in _grid.get_children():
-		_grid.remove_child(child)
-		child.queue_free()
-	var their_side := "Garrison" if siege and me == "a" else enemy
-	for text in ["", "Garrison" if siege and me == "b" else "Yours", "Fell", their_side, "Fell"]:
-		_grid.add_child(_label(14, MUTED, text))
+	_clear_grid()
+	_banner.modulate = Color.WHITE if won else Color(0.62, 0.55, 0.55)
 	var units: Array = []
 	for side in [report[me], report[them]]:
 		for unit: String in side:
 			if not units.has(unit):
 				units.append(unit)
 	var totals := [0, 0, 0, 0]
+	for text in ["", "Sent", "Fell"]:
+		_mine.add_child(_label(13, MUTED, text))
+		_theirs.add_child(_label(13, MUTED, text))
 	for unit: String in units:
 		var row := [_count(report[me], unit, "start"), _count(report[me], unit, "lost"),
 				_count(report[them], unit, "start"), _count(report[them], unit, "lost")]
-		_grid.add_child(_label(15, TEXT, Economy.rules.unit_plural(unit)))
 		for k in 4:
 			totals[k] += row[k]
-			_grid.add_child(_cell(row[k], k % 2 == 1))
-	_grid.add_child(_label(15, Color(1.0, 0.9, 0.65), "Total"))
-	for k in 4:
-		_grid.add_child(_cell(totals[k], k % 2 == 1))
+		for side in 2:
+			var grid := _mine if side == 0 else _theirs
+			if row[side * 2] == 0 and row[side * 2 + 1] == 0:
+				continue
+			grid.add_child(_unit(unit))
+			grid.add_child(_cell(row[side * 2], false))
+			grid.add_child(_cell(row[side * 2 + 1], true))
+	var mine_name := "Your garrison" if siege and me == "b" else "Your army"
+	_mine_head.text = "%s\n%d sent, %d survived" % [mine_name, totals[0], totals[0] - totals[1]]
+	var their_name := "The garrison" if siege and me == "a" else enemy
+	_theirs_head.text = "%s\n%d fought, %d survived" % [their_name, totals[2], totals[2] - totals[3]]
+	_show_spoils(report, me, won)
 	if siege and me == "a":
 		if report.outcome == "captured":
 			_footer.text = "%s is yours, with its buildings and stores." % enemy
@@ -188,7 +278,7 @@ func show_raid_report(report: Dictionary) -> void:
 		if not helped.is_empty():
 			_footer.text = "Defenders from %s fought beside your garrison.\n" % ", ".join(PackedStringArray(helped)) + _footer.text
 	_add_siege_line(report, attacking)
-	_title.add_theme_color_override("font_color", WIN if won else LOSS)
+	_title.add_theme_color_override("font_color", MenuStyle.GOLD if won else LOSS)
 
 
 func show_village_report(report: Dictionary) -> void:
@@ -233,7 +323,7 @@ func show_village_report(report: Dictionary) -> void:
 			lines.append("%s carried off %s, but had no room to hold the %s: it is still yours." % [other, _spoils(report.spoils), what])
 	_footer.text = "\n".join(lines)
 	_add_siege_line(report, attacking)
-	_title.add_theme_color_override("font_color", WIN if won else LOSS)
+	_title.add_theme_color_override("font_color", MenuStyle.GOLD if won else LOSS)
 
 
 func _add_siege_line(report: Dictionary, attacking: bool) -> void:
@@ -257,6 +347,7 @@ func _fill_walls(report: Dictionary, attacking: bool) -> void:
 		child.queue_free()
 	var walls: Dictionary = report.get("walls", {})
 	_walls.visible = not walls.is_empty()
+	_walls_head.visible = _walls.visible
 	if walls.is_empty():
 		return
 	var me := "a" if attacking else "b"
@@ -394,9 +485,46 @@ static func _tools_at(group: Variant) -> String:
 
 
 func _clear_grid() -> void:
-	for child in _grid.get_children():
-		_grid.remove_child(child)
-		child.queue_free()
+	for grid: Control in [_mine, _theirs, _spoils_list]:
+		for child in grid.get_children():
+			grid.remove_child(child)
+			child.queue_free()
+	_mine_head.text = "Your army"
+	_theirs_head.text = "The enemy"
+	_spoils_head.text = "Spoils"
+
+
+func _show_spoils(report: Dictionary, me: String, won: bool) -> void:
+	## What the winner carried off: yours as rewards, or what was taken from you.
+	var spoils: Dictionary = report.get("spoils", {}) if report.get("spoils") is Dictionary else {}
+	var amounts := spoils.duplicate()
+	if int(report.get("loot", 0)) > 0 and int(amounts.get("gold", 0)) == 0:
+		amounts["gold"] = int(report.loot)
+	var ours := won or me == "a"
+	_spoils_head.text = "Rewards" if ours else "Taken from you"
+	var shown := 0
+	for r: String in amounts:
+		if int(amounts[r]) <= 0 or (ours and not won):
+			continue
+		var line := HBoxContainer.new()
+		line.add_theme_constant_override("separation", 8)
+		line.add_child(Icons.rect(r, 22))
+		var what := _label(15, TEXT, r.capitalize())
+		what.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		line.add_child(what)
+		line.add_child(_label(15, MenuStyle.GOLD if ours else LOSS, ("%d" if ours else "-%d") % int(amounts[r])))
+		_spoils_list.add_child(line)
+		shown += 1
+	if shown == 0:
+		_spoils_list.add_child(_label(15, MUTED, "Nothing this time" if ours else "Nothing was taken"))
+
+
+func _unit(unit: String) -> Control:
+	var cell := HBoxContainer.new()
+	cell.add_theme_constant_override("separation", 6)
+	cell.add_child(Icons.rect(unit, 20))
+	cell.add_child(_label(15, TEXT, Economy.rules.unit_plural(unit)))
+	return cell
 
 
 func _spoils(spoils: Dictionary) -> String:

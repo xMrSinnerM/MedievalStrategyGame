@@ -50,33 +50,56 @@ var _tool_spins := {}          ## wall -> tool -> SpinBox
 var _tool_head: Label
 var _commander: OptionButton
 var _commander_fx: Label
+var _verdict: PanelContainer
+var _verdict_label: Label
+var _army_total: Label         ## "Your army" title; its Sub line counts the soldiers at home
+var _enemy_picture: InfoPicture
+var _my_losses: Label
+var _their_losses: Label
+var _ring: ChanceRing
 
 
 func _ready() -> void:
 	add_theme_stylebox_override("panel", MenuStyle.panel(0.95))
-	custom_minimum_size = Vector2(860, 0)
+	custom_minimum_size = Vector2(1000, 0)
 	visible = false
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 12)
 	add_child(box)
 	var head := HBoxContainer.new()
+	head.add_theme_constant_override("separation", 12)
 	box.add_child(head)
 	_title = MenuStyle.title("", 28)
 	_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(_title)
+	_verdict = PanelContainer.new()
+	_verdict.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var pill := HBoxContainer.new()
+	pill.add_theme_constant_override("separation", 6)
+	pill.add_child(Icons.rect("battle", 18))
+	_verdict_label = MenuStyle.label("", 15, MenuStyle.TEXT)
+	pill.add_child(_verdict_label)
+	_verdict.add_child(pill)
+	head.add_child(_verdict)
 	var close := Button.new()
 	close.text = "×"
 	close.focus_mode = Control.FOCUS_NONE
 	close.add_theme_font_size_override("font_size", 20)
+	close.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	close.pressed.connect(close_panel)
 	head.add_child(close)
 	var columns := HBoxContainer.new()
-	columns.add_theme_constant_override("separation", 36)
+	columns.add_theme_constant_override("separation", 16)
 	box.add_child(columns)
+
+	# Left: your army, wave by wave, with siege tools and a commander.
 	var mine := VBoxContainer.new()
-	mine.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	mine.add_child(MenuStyle.label("Your battle plan", 18, MenuStyle.GOLD))
+	mine.add_theme_constant_override("separation", 8)
+	var army_card := _card(mine)
+	army_card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	columns.add_child(army_card)
+	_army_total = _card_head(mine, "soldiers", "Your army")
 	_tabs = HBoxContainer.new()
 	_tabs.add_theme_constant_override("separation", 6)
 	mine.add_child(_tabs)
@@ -94,8 +117,19 @@ func _ready() -> void:
 		_new_plan()
 		_show_wave(_wave), 100))
 	mine.add_child(quick)
+	mine.add_child(HSeparator.new())
+	_tool_head = MenuStyle.label("", 16, MenuStyle.GOLD)
+	_tool_head.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	mine.add_child(_tool_head)
+	_tool_rows = GridContainer.new()
+	_tool_rows.columns = 5
+	_tool_rows.add_theme_constant_override("h_separation", 10)
+	_tool_rows.add_theme_constant_override("v_separation", 6)
+	mine.add_child(_tool_rows)
+	mine.add_child(HSeparator.new())
 	var lead_row := HBoxContainer.new()
 	lead_row.add_theme_constant_override("separation", 10)
+	lead_row.add_child(Icons.rect("commanders", 26))
 	lead_row.add_child(MenuStyle.label("Commander", 16, MenuStyle.GOLD))
 	_commander = OptionButton.new()
 	_commander.focus_mode = Control.FOCUS_NONE
@@ -103,32 +137,61 @@ func _ready() -> void:
 	_commander.item_selected.connect(func(_i: int) -> void: _update())
 	lead_row.add_child(_commander)
 	_commander_fx = MenuStyle.label("", 14, MenuStyle.MUTED)
+	_commander_fx.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_commander_fx.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	lead_row.add_child(_commander_fx)
 	mine.add_child(lead_row)
-	_tool_head = MenuStyle.label("", 16, MenuStyle.GOLD)
-	mine.add_child(_tool_head)
-	_tool_rows = GridContainer.new()
-	_tool_rows.columns = 5
-	_tool_rows.add_theme_constant_override("h_separation", 10)
-	_tool_rows.add_theme_constant_override("v_separation", 6)
-	mine.add_child(_tool_rows)
-	columns.add_child(mine)
+
+	# Right: who defends it, and the battle forecast.
+	var right := VBoxContainer.new()
+	right.custom_minimum_size = Vector2(340, 0)
+	right.add_theme_constant_override("separation", 12)
+	columns.add_child(right)
 	var theirs := VBoxContainer.new()
-	theirs.custom_minimum_size = Vector2(250, 0)
-	_enemy_title = MenuStyle.label("The camp", 18, MenuStyle.GOLD)
-	theirs.add_child(_enemy_title)
-	_enemy = MenuStyle.label("", 15, MenuStyle.TEXT)
-	theirs.add_child(_enemy)
-	columns.add_child(theirs)
-	box.add_child(HSeparator.new())
-	_summary = MenuStyle.label("", 16, MenuStyle.TEXT)
-	box.add_child(_summary)
+	theirs.add_theme_constant_override("separation", 8)
+	right.add_child(_card(theirs))
+	_enemy_title = _card_head(theirs, "shield", "Enemy defences")
+	var enemy_row := HBoxContainer.new()
+	enemy_row.add_theme_constant_override("separation", 10)
+	theirs.add_child(enemy_row)
+	_enemy_picture = InfoPicture.new()
+	enemy_row.add_child(_enemy_picture)
+	_enemy = MenuStyle.label("", 14, MenuStyle.TEXT)
+	_enemy.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_enemy.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	enemy_row.add_child(_enemy)
+	var forecast := VBoxContainer.new()
+	forecast.add_theme_constant_override("separation", 8)
+	right.add_child(_card(forecast))
+	_card_head(forecast, "battle", "Battle forecast")
+	var stats := HBoxContainer.new()
+	stats.add_theme_constant_override("separation", 14)
+	forecast.add_child(stats)
+	_my_losses = _stat(stats, "Your losses")
+	_their_losses = _stat(stats, "Enemy losses")
+	var ring_box := VBoxContainer.new()
+	ring_box.add_child(MenuStyle.label("Victory chance", 13, MenuStyle.MUTED))
+	_ring = ChanceRing.new()
+	_ring.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	ring_box.add_child(_ring)
+	stats.add_child(ring_box)
+	forecast.add_child(HSeparator.new())
+	forecast.add_child(MenuStyle.label("Key factors", 15, MenuStyle.GOLD))
+	_summary = MenuStyle.label("", 14, MenuStyle.TEXT)
+	_summary.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_summary.custom_minimum_size = Vector2(300, 0)
+	forecast.add_child(_summary)
+
 	var buttons := HBoxContainer.new()
 	buttons.alignment = BoxContainer.ALIGNMENT_CENTER
 	buttons.add_theme_constant_override("separation", 12)
-	_send = GameTheme.primary(MenuStyle.button("Send army", _send_army, 220.0))
+	_send = GameTheme.primary(MenuStyle.button("Send army", _send_army, 360.0))
+	_send.custom_minimum_size.y = 46
+	_send.add_theme_font_size_override("font_size", 18)
 	buttons.add_child(_send)
-	buttons.add_child(MenuStyle.button("Cancel", close_panel, 220.0))
+	var cancel := MenuStyle.button("Cancel", close_panel, 160.0)
+	cancel.custom_minimum_size.y = 46
+	buttons.add_child(cancel)
 	box.add_child(buttons)
 	_note = MenuStyle.label("", 15, MenuStyle.GOLD)
 	_note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -138,6 +201,44 @@ func _ready() -> void:
 		if visible and who == _player:
 			_describe_player()
 			_update())
+
+
+func _card(content: Control) -> PanelContainer:
+	var card := PanelContainer.new()
+	card.add_theme_stylebox_override("panel", GameTheme.panel_box(0.45, 14))
+	card.add_child(content)
+	return card
+
+
+func _card_head(box: VBoxContainer, icon: String, text: String) -> Label:
+	## An icon and a gold title, with a muted line under it; returns the title.
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	row.add_child(Icons.rect(icon, 30))
+	var lines := VBoxContainer.new()
+	lines.add_theme_constant_override("separation", -2)
+	var title := MenuStyle.label(text, 18, MenuStyle.GOLD)
+	lines.add_child(title)
+	var sub := MenuStyle.label("", 14, MenuStyle.MUTED)
+	sub.name = "Sub"
+	lines.add_child(sub)
+	row.add_child(lines)
+	box.add_child(row)
+	return title
+
+
+func _sub(title: Label) -> Label:
+	return title.get_parent().get_node("Sub") as Label
+
+
+func _stat(row: HBoxContainer, text: String) -> Label:
+	var col := VBoxContainer.new()
+	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	col.add_child(MenuStyle.label(text, 13, MenuStyle.MUTED))
+	var value := MenuStyle.label("", 22, MenuStyle.TEXT)
+	col.add_child(value)
+	row.add_child(col)
+	return value
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -156,21 +257,24 @@ func open_for(id: String) -> void:
 		_player = ""
 		_village = String(info.id)
 		_title.text = "Attack %s (level %d)" % [info.name, int(info.level)]
-		_enemy_title.text = "The capital" if info.get("capital", false) else "The village"
+		_sub(_enemy_title).text = "The capital" if info.get("capital", false) else "The village"
+		_enemy_picture.show_place(InfoPicture.faction_place("capital", String(info.get("faction", ""))) if info.get("capital", false) else "village")
 	elif id.begins_with("player:"):
 		var other := Economy.get_other(id.trim_prefix("player:"))
 		if other.is_empty():
 			return
 		_player = String(other.name)
 		_title.text = "Attack %s (level %d)" % [_player, int(other.get("level", 1))]
-		_enemy_title.text = "Their castle"
+		_sub(_enemy_title).text = "Their castle"
+		_enemy_picture.show_place(InfoPicture.faction_place("castle", _player))
 	else:
 		var camp := Economy.get_baron(id)
 		if camp == null:
 			return
 		_player = ""
 		_title.text = "Attack %s (level %d)" % [camp.camp_name, camp.level]
-		_enemy_title.text = "The fortress" if camp.fortress else "The camp"
+		_sub(_enemy_title).text = "The fortress" if camp.fortress else "The camp"
+		_enemy_picture.show_place(InfoPicture.faction_place("castle", camp.id) if camp.fortress else "camp")
 	camp_id = id
 	_note.text = ""
 	_note.visible = false
@@ -242,14 +346,13 @@ func _build_tabs() -> void:
 		var b := Button.new()
 		b.focus_mode = Control.FOCUS_NONE
 		b.toggle_mode = true
-		b.custom_minimum_size = Vector2(120, 32)
+		b.custom_minimum_size = Vector2(112, 48)
 		b.add_theme_font_size_override("font_size", 15)
 		var wave := k
 		b.pressed.connect(func() -> void: _show_wave(wave))
 		if k >= allowed:
 			b.disabled = true
-			b.text = "Wave %d (keep %d)" % [k + 1, _keep_for_wave(k + 1)]
-			b.custom_minimum_size.x = 160
+			b.text = "Wave %d\nkeep %d" % [k + 1, _keep_for_wave(k + 1)]
 			b.tooltip_text = "Upgrade your keep to level %d to send a wave %d." % [_keep_for_wave(k + 1), k + 1]
 		_tabs.add_child(b)
 		_tab_buttons.append(b)
@@ -284,7 +387,11 @@ func _show_wave(k: int) -> void:
 	for w: String in Battle.WALLS:
 		_spins[w] = {}
 	for unit: String in units:
-		_rows.add_child(MenuStyle.label(Economy.rules.unit_plural(unit), 16, MenuStyle.TEXT))
+		var name_cell := HBoxContainer.new()
+		name_cell.add_theme_constant_override("separation", 8)
+		name_cell.add_child(Icons.rect(unit, 26))
+		name_cell.add_child(MenuStyle.label(Economy.rules.unit_plural(unit), 16, MenuStyle.TEXT))
+		_rows.add_child(name_cell)
 		for w: String in Battle.WALLS:
 			var spin := SpinBox.new()
 			spin.min_value = 0
@@ -322,14 +429,13 @@ func _refresh_spins() -> void:
 	for k in _tab_buttons.size():
 		var b := _tab_buttons[k]
 		b.button_pressed = k == _wave
-		for state in ["font_color", "font_pressed_color", "font_hover_color", "font_hover_pressed_color"]:
-			b.add_theme_color_override(state, MenuStyle.GOLD if k == _wave else MenuStyle.TEXT)
+		_tab_style(b, k == _wave)
 		if k < _plan.size():
 			var n := 0
 			for w: String in Battle.WALLS:
 				for unit: String in _plan[k][w]:
 					n += int(_plan[k][w][unit])
-			b.text = "Wave %d: %d" % [k + 1, n]
+			b.text = "Wave %d\n%d" % [k + 1, n]
 
 
 func _clear_wave() -> void:
@@ -399,13 +505,15 @@ func _score(waves: Array, foe: Dictionary) -> float:
 func _simulate(waves: Array, foe: Dictionary) -> Dictionary:
 	var wins := 0
 	var lost := 0
+	var lost_b := 0
 	var kit := {"a": plan_tools(), "b": foe.get("tools", {}), "lead_a": _lead_fx(), "lead_b": foe.get("castellan", {})}
 	for k in SAMPLES:
 		var result := Battle.siege(Economy.rules, waves, foe.troops, foe.layout, 1000 + k, foe.wall, kit)
 		if result.winner == "a":
 			wins += 1
 		lost += Battle.lost_count(result.a)
-	return {"chance": float(wins) / SAMPLES, "lost": float(lost) / SAMPLES}
+		lost_b += Battle.lost_count(result.b)
+	return {"chance": float(wins) / SAMPLES, "lost": float(lost) / SAMPLES, "lost_b": float(lost_b) / SAMPLES}
 
 
 func _defence() -> Dictionary:
@@ -688,16 +796,34 @@ func _update() -> void:
 	var foe := _defence()
 	var br := Economy.baron_rules
 	var lines: PackedStringArray = []
-	_summary.add_theme_color_override("font_color", MenuStyle.TEXT)
+	var home := 0
+	for unit: String in Economy.rules.units:
+		home += _have(unit)
+	_sub(_army_total).text = "%d soldiers at home, %d sent in %s" % [home, total, _waves_text(waves.size())] if total > 0 \
+			else "%d soldiers at home" % home
+	var defenders := 0
+	for unit: String in foe.get("troops", {}):
+		defenders += int(foe.troops[unit])
+	_send.text = "Send army  ·  %d soldiers" % total if total > 0 else "Send army"
+	var chance := -1.0
 	if total == 0:
 		lines.append("Put some soldiers on the walls to attack.")
+		_set_losses(_my_losses, -1, 0)
+		_set_losses(_their_losses, -1, 0)
 	elif foe.is_empty():
-		lines.append("Sending %d soldiers in %s. Without a spy's report the odds are unknown." % [total, _waves_text(waves.size())])
+		lines.append("Without a spy's report the odds are unknown.")
+		_set_losses(_my_losses, -1, 0)
+		_set_losses(_their_losses, -1, 0)
 	else:
 		var r := _simulate(waves, foe)
-		lines.append("Sending %d soldiers in %s: %s (%d%%), losing about %d" % [total, _waves_text(waves.size()),
-				Battle.odds_text(r.chance), roundi(r.chance * 100.0), roundi(r.lost)])
-		_summary.add_theme_color_override("font_color", LOSS.lerp(WIN, r.chance))
+		chance = r.chance
+		lines.append("%s: %d%% of the battles we tried were won" % [Battle.odds_text(r.chance), roundi(r.chance * 100.0)])
+		_set_losses(_my_losses, roundi(r.lost), total)
+		_set_losses(_their_losses, roundi(r.lost_b), defenders)
+	_ring.chance = chance
+	_show_verdict(chance)
+	if not foe.is_empty():
+		lines.append("Defenders: %d on the walls and in the courtyard, walls +%d%%" % [defenders, roundi((float(foe.wall) - 1.0) * 100.0)])
 	var fx := _lead_fx()
 	_commander_fx.text = Economy.gear_rules.effects_text(fx) if commander_id() != 0 else ""
 	var tools := plan_tools()
@@ -745,6 +871,50 @@ func _update() -> void:
 		lines.append(why)
 	_summary.text = "\n".join(lines)
 	_send.disabled = why != ""
+
+
+func _set_losses(label: Label, n: int, of: int) -> void:
+	if n < 0:
+		label.text = "?"
+		label.add_theme_color_override("font_color", MenuStyle.MUTED)
+		return
+	label.text = "~%d  (%d%%)" % [n, roundi(100.0 * n / maxf(1.0, of))]
+	label.add_theme_color_override("font_color", LOSS if n > 0 else WIN)
+
+
+func _show_verdict(chance: float) -> void:
+	## The pill by the title: how the battle looks, in its colour.
+	var text := "Odds unknown"
+	var colour := MenuStyle.MUTED
+	if chance >= 0.0:
+		colour = ChanceRing.colour_for(chance)
+		text = "Certain" if chance >= 0.85 else "Favourable" if chance >= 0.6 else "Even" if chance > 0.4 \
+				else "Risky" if chance > 0.15 else "Hopeless"
+	_verdict_label.text = text
+	_verdict_label.add_theme_color_override("font_color", colour)
+	var pill := StyleBoxFlat.new()
+	pill.bg_color = Color(colour.darkened(0.75), 0.85)
+	pill.border_color = Color(colour, 0.7)
+	pill.set_border_width_all(1)
+	pill.set_corner_radius_all(14)
+	pill.content_margin_left = 14
+	pill.content_margin_right = 16
+	pill.content_margin_top = 4
+	pill.content_margin_bottom = 4
+	_verdict.add_theme_stylebox_override("panel", pill)
+
+
+func _tab_style(b: Button, on: bool) -> void:
+	## The wave on show is a gold tab; the others dark.
+	if on:
+		GameTheme.primary(b)
+		b.remove_theme_font_override("font")
+		return
+	for style in ["normal", "hover", "pressed", "hover_pressed"]:
+		b.remove_theme_stylebox_override(style)
+	for state in ["font_color", "font_hover_color", "font_pressed_color", "font_hover_pressed_color", "font_focus_color"]:
+		b.remove_theme_color_override(state)
+	b.remove_theme_constant_override("outline_size")
 
 
 static func _waves_text(n: int) -> String:

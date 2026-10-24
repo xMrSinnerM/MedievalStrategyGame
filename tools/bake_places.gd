@@ -1,7 +1,8 @@
 extends Node
 ## Renders the pictures on the world map's info cards: every faction's capital
 ## and castle, your castle, a village, a robber baron camp and a warband, each
-## on a patch of meadow with trees under a warm sky. Saved as
+## on a patch of meadow with trees under a warm sky, and the battle report's
+## wide banner (your army before your castle). Saved as
 ## assets/ui/places/<name>.png. Run after changing the map models:
 ##   godot --path . res://tools/bake_places.tscn
 ## (a scene so the autoloads are there; it needs a renderer, so run it with a
@@ -52,6 +53,18 @@ func _ready() -> void:
 	await _shoot("village", _settlement("village", "", false), 20.0)
 	await _shoot("camp", _camp(), 11.0)
 	await _shoot("warband", _warband(), 11.0)
+	# The battle report's banner: your army before your castle, wide.
+	_viewport.size = Vector2i(720, 220)
+	_settlement("castle", home, true)
+	var toward := Vector3(sin(YAW), 0, cos(YAW))
+	var side := Vector3(cos(YAW), 0, -sin(YAW))
+	var army := _warband(true)
+	army.position = AT + toward * 22.0 - side * 22.0
+	army.scale = Vector3.ONE * 0.8
+	_dress(22.0, 110)
+	var centre := AT + Vector3(0, 9, 0) + toward * 6.0 - side * 4.0
+	_camera.look_at_from_position(centre + (toward * cos(0.12) + Vector3.UP * sin(0.12)) * 78.0, centre)
+	await _save("report_banner")
 	get_tree().quit()
 
 
@@ -105,7 +118,7 @@ func _camp() -> Node3D:
 	return root
 
 
-func _warband() -> Node3D:
+func _warband(beside := false) -> Node3D:
 	var root := Node3D.new()
 	var model := MeshInstance3D.new()
 	model.mesh = Soldiers.troop([
@@ -119,7 +132,10 @@ func _warband() -> Node3D:
 	root.add_child(model)
 	root.position = AT
 	root.rotation.y = PI + 0.5
-	_stage_add(root)
+	if beside:
+		_stage.add_child(root)
+	else:
+		_stage_add(root)
 	return root
 
 
@@ -132,7 +148,7 @@ func _stage_add(subject: Node3D) -> void:
 	_stage.add_child(subject)
 
 
-func _dress(radius: float) -> void:
+func _dress(radius: float, count := 46) -> void:
 	var ground := MeshKit.new()
 	ground.cylinder(GRASS, Transform3D(Basis(), AT + Vector3(0, -0.5, 0)), 900.0, 0.4, 40)
 	var meadow := MeshInstance3D.new()
@@ -142,7 +158,7 @@ func _dress(radius: float) -> void:
 	rng.seed = int(radius * 100.0)
 	var kit := KitModels.new()
 	var front := atan2(cos(YAW), sin(YAW))   # towards the camera: kept clear
-	for k in 46:
+	for k in count:
 		var angle := rng.randf() * TAU
 		if absf(angle_difference(angle, front)) < 1.3:
 			continue
@@ -161,6 +177,10 @@ func _shoot(file: String, subject: Node3D, radius: float) -> void:
 	var dir := Vector3(sin(YAW) * cos(PITCH), sin(PITCH), cos(YAW) * cos(PITCH))
 	var dist := radius / sin(deg_to_rad(_camera.fov * 0.5)) * 1.15
 	_camera.look_at_from_position(centre + dir * dist, centre)
+	await _save(file)
+
+
+func _save(file: String) -> void:
 	for k in 4:
 		await RenderingServer.frame_post_draw
 	var image := _viewport.get_texture().get_image()

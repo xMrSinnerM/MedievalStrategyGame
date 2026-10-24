@@ -152,6 +152,44 @@ const SVG := {
 	"banner": """
 		<path d="M18 6 V60" stroke="#8a5a2e" stroke-width="4" stroke-linecap="round"/>
 		<path d="M20 8 H50 L42 20 L50 32 H20 Z" fill="#b5281e" stroke="%s" stroke-width="3" stroke-linejoin="round"/>""",
+	# A spear, for spearmen.
+	"spearman": """
+		<path d="M14 58 L46 14" stroke="#8a5a2e" stroke-width="5" stroke-linecap="round"/>
+		<path d="M44 6 L56 8 L54 20 L44 18 Z" fill="#c9ced6" stroke="%s" stroke-width="3" stroke-linejoin="round"/>
+		<path d="M18 46 L26 52" stroke="#b5281e" stroke-width="4" stroke-linecap="round"/>""",
+	# A drawn bow, for archers.
+	"archer": """
+		<path d="M18 6 C46 14 46 50 18 58" fill="none" stroke="#8a5a2e" stroke-width="5" stroke-linecap="round"/>
+		<path d="M18 6 L18 58" stroke="#ead8ae" stroke-width="2"/>
+		<path d="M10 32 L52 32" stroke="#c9a96e" stroke-width="3"/>
+		<path d="M52 32 L44 27 L44 37 Z" fill="#c9ced6" stroke="%s" stroke-width="2"/>""",
+	# A sword with a gold guard, for swordsmen.
+	"swordsman": """
+		<path d="M32 4 L37 12 L37 40 L27 40 L27 12 Z" fill="#d8dce2" stroke="%s" stroke-width="3" stroke-linejoin="round"/>
+		<rect x="18" y="40" width="28" height="6" rx="2" fill="#e0b048" stroke="%s" stroke-width="2.5"/>
+		<rect x="29" y="46" width="6" height="10" fill="#7a4a24" stroke="%s" stroke-width="2"/>
+		<circle cx="32" cy="59" r="3.5" fill="#e0b048" stroke="%s" stroke-width="2"/>""",
+	# A horse's head, for horsemen.
+	"horseman": """
+		<path d="M20 58 L22 38 C16 34 12 26 18 20 L28 10 L30 4 L36 10 C46 12 54 22 52 34 L50 58 Z" fill="#9a6232" stroke="%s" stroke-width="3" stroke-linejoin="round"/>
+		<path d="M30 8 C38 12 42 20 42 30" fill="none" stroke="#3a2412" stroke-width="5"/>
+		<circle cx="26" cy="22" r="2.5" fill="#1c140c"/>""",
+	# Crossed swords, for battles.
+	"battle": """
+		<path d="M10 10 L46 46 M54 10 L18 46" stroke="#d8dce2" stroke-width="6" stroke-linecap="round"/>
+		<path d="M40 52 L52 40 M12 40 L24 52" stroke="#e0b048" stroke-width="5" stroke-linecap="round"/>
+		<path d="M48 48 L56 56 M16 48 L8 56" stroke="#7a4a24" stroke-width="5" stroke-linecap="round"/>""",
+	# A round shield, for the enemy.
+	"shield": """
+		<circle cx="32" cy="32" r="24" fill="#5a3a1e" stroke="#e0b048" stroke-width="4"/>
+		<circle cx="32" cy="32" r="7" fill="#c9ced6" stroke="%s" stroke-width="2.5"/>
+		<path d="M32 10 V54 M10 32 H54" stroke="#3a2412" stroke-width="2"/>""",
+	# A chest of gold, for rewards.
+	"rewards": """
+		<rect x="8" y="26" width="48" height="30" rx="3" fill="#8a5a2e" stroke="%s" stroke-width="3"/>
+		<path d="M8 30 C8 14 56 14 56 30 Z" fill="#a8743e" stroke="%s" stroke-width="3" stroke-linejoin="round"/>
+		<rect x="27" y="30" width="10" height="10" fill="#e0b048" stroke="%s" stroke-width="2"/>
+		<circle cx="20" cy="22" r="4" fill="#f2c443"/><circle cx="44" cy="22" r="4" fill="#f2c443"/>""",
 	# Check boxes: an empty bronze-rimmed box, and one with a gold tick.
 	"box": """
 		<rect x="8" y="8" width="48" height="48" rx="8" fill="#140d06" stroke="#c79a52" stroke-width="5"/>""",
