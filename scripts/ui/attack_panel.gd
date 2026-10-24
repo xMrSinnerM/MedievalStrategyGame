@@ -126,7 +126,7 @@ func _ready() -> void:
 	var buttons := HBoxContainer.new()
 	buttons.alignment = BoxContainer.ALIGNMENT_CENTER
 	buttons.add_theme_constant_override("separation", 12)
-	_send = MenuStyle.button("Send army", _send_army, 220.0)
+	_send = GameTheme.primary(MenuStyle.button("Send army", _send_army, 220.0))
 	buttons.add_child(_send)
 	buttons.add_child(MenuStyle.button("Cancel", close_panel, 220.0))
 	box.add_child(buttons)

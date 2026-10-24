@@ -5,7 +5,7 @@ extends RefCounted
 
 const TEXT := Color(0.95, 0.9, 0.8)
 const MUTED := Color(0.78, 0.72, 0.62)
-const GOLD := Color(1.0, 0.86, 0.55)
+const GOLD := Color(0.95, 0.78, 0.47)
 
 
 static func panel(alpha := 0.92, margin := 24) -> StyleBox:
@@ -24,8 +24,8 @@ static func title(text: String, size := 34) -> Label:
 	var l := label(text, size, GOLD)
 	l.add_theme_font_override("font", GameTheme.TITLE_FONT)
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	l.add_theme_color_override("font_outline_color", Color(0.1, 0.06, 0.03))
-	l.add_theme_constant_override("outline_size", 8)
+	l.add_theme_color_override("font_outline_color", Color(0.05, 0.03, 0.015))
+	l.add_theme_constant_override("outline_size", 4)
 	return l
 
 
@@ -48,15 +48,15 @@ static func ornate_panel() -> StyleBox:
 
 
 static func menu_button(text: String, action: Callable, width := 300.0, primary := false) -> Button:
-	## A big title-screen button: dark crimson with a gold rim (or all gold for
-	## the main choice), glowing and growing a little under the mouse.
+	## A big title-screen button: near black with a gold rim (or polished gold
+	## for the main choice), glowing and growing a little under the mouse.
 	var b := button(text, action, width)
 	b.custom_minimum_size.y = 52
 	b.add_theme_font_size_override("font_size", 20)
-	b.add_theme_stylebox_override("normal", _menu_box(Color(0.24, 0.1, 0.07), Color(0.72, 0.53, 0.24)))
-	b.add_theme_stylebox_override("hover", _menu_box(Color(0.42, 0.13, 0.09), Color(1.0, 0.82, 0.45), true))
-	b.add_theme_stylebox_override("pressed", _menu_box(Color(0.3, 0.08, 0.06), Color(1.0, 0.82, 0.45)))
-	b.add_theme_stylebox_override("disabled", _menu_box(Color(0.17, 0.11, 0.08), Color(0.42, 0.33, 0.2)))
+	b.add_theme_stylebox_override("normal", _menu_box(Color(0.07, 0.055, 0.045, 0.95), Color(0.72, 0.55, 0.28)))
+	b.add_theme_stylebox_override("hover", _menu_box(Color(0.14, 0.1, 0.07, 0.95), Color(1.0, 0.82, 0.45), true))
+	b.add_theme_stylebox_override("pressed", _menu_box(Color(0.04, 0.03, 0.025, 0.95), Color(1.0, 0.82, 0.45)))
+	b.add_theme_stylebox_override("disabled", _menu_box(Color(0.08, 0.07, 0.06, 0.8), Color(0.35, 0.28, 0.18)))
 	b.add_theme_color_override("font_color", Color(0.96, 0.9, 0.76))
 	b.add_theme_color_override("font_hover_color", GOLD)
 	b.add_theme_color_override("font_pressed_color", GOLD)
@@ -64,12 +64,7 @@ static func menu_button(text: String, action: Callable, width := 300.0, primary 
 	b.add_theme_color_override("font_outline_color", Color(0.08, 0.03, 0.02))
 	b.add_theme_constant_override("outline_size", 6)
 	if primary:
-		b.add_theme_stylebox_override("normal", _menu_box(Color(0.84, 0.62, 0.27), Color(1.0, 0.88, 0.58)))
-		b.add_theme_stylebox_override("hover", _menu_box(Color(0.95, 0.74, 0.36), Color(1.0, 0.93, 0.7), true))
-		b.add_theme_stylebox_override("pressed", _menu_box(Color(0.74, 0.53, 0.22), Color(1.0, 0.88, 0.58)))
-		for state in ["font_color", "font_hover_color", "font_pressed_color"]:
-			b.add_theme_color_override(state, Color(0.22, 0.08, 0.04))
-		b.add_theme_constant_override("outline_size", 0)
+		GameTheme.primary(b)
 	b.resized.connect(func() -> void: b.pivot_offset = b.size * 0.5)
 	b.mouse_entered.connect(func() -> void: _grow(b, 1.04))
 	b.mouse_exited.connect(func() -> void: _grow(b, 1.0))
@@ -86,9 +81,8 @@ static func _menu_box(bg: Color, rim: Color, glow := false) -> StyleBoxFlat:
 	var s := StyleBoxFlat.new()
 	s.bg_color = bg
 	s.border_color = rim
-	s.set_border_width_all(2)
-	s.border_width_bottom = 4
-	s.set_corner_radius_all(4)
+	s.set_border_width_all(1)
+	s.set_corner_radius_all(3)
 	s.content_margin_left = 18
 	s.content_margin_right = 18
 	s.content_margin_top = 6

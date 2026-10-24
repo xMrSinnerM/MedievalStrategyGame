@@ -86,10 +86,10 @@ func show_castle(castle: CastleState, away := 0) -> void:
 func _chip(icon: String) -> PanelContainer:
 	var chip := PanelContainer.new()
 	var box := StyleBoxFlat.new()
-	box.bg_color = Color(0.05, 0.035, 0.02, 0.55)
-	box.border_color = Color(GameTheme.BRONZE_DARK, 0.8)
+	box.bg_color = Color(0.03, 0.025, 0.02, 0.8)
+	box.border_color = Color(GameTheme.RIM, 0.55)
 	box.set_border_width_all(1)
-	box.set_corner_radius_all(6)
+	box.set_corner_radius_all(3)
 	box.content_margin_left = 6
 	box.content_margin_right = 10
 	box.content_margin_top = 3

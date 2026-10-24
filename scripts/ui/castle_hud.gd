@@ -127,6 +127,9 @@ func _build_top_bar() -> void:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 6)
 	bar.add_child(row)
+	var crest := Icons.rect("crest", 40)
+	crest.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(crest)
 	_title = MenuStyle.title("", 22)
 	_title.custom_minimum_size = Vector2(150, 0)
 	_title.add_theme_constant_override("outline_size", 6)
@@ -140,12 +143,14 @@ func _build_top_bar() -> void:
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(spacer)
 	_warband_button = _button("Warband")
+	_warband_button.icon = Icons.get_icon("soldiers", 22)
 	_warband_button.pressed.connect(func() -> void:
 		_warband.visible = not _warband.visible
 		_defence.visible = false
 		_warband.refresh())
 	row.add_child(_warband_button)
 	_defence_button = _button("Defence")
+	_defence_button.icon = Icons.get_icon("defence", 22)
 	_defence_button.tooltip_text = "Choose how your soldiers man the walls"
 	_defence_button.pressed.connect(func() -> void:
 		_defence.visible = not _defence.visible
@@ -154,6 +159,7 @@ func _build_top_bar() -> void:
 			_defence.refresh())
 	row.add_child(_defence_button)
 	var back := _button("Map (C)")
+	back.icon = Icons.get_icon("diplomacy", 22)
 	back.pressed.connect(func() -> void: EventBus.world_map_requested.emit())
 	row.add_child(back)
 
@@ -213,6 +219,7 @@ func _build_side_panel() -> void:
 	head.add_child(_side_title)
 	var close := _button("×")
 	close.custom_minimum_size = Vector2(30, 0)
+	close.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	close.pressed.connect(func() -> void: view.select(-1))
 	head.add_child(close)
 	_side_level = _label("", 15, MUTED)
@@ -233,7 +240,7 @@ func _build_side_panel() -> void:
 	var buttons := HBoxContainer.new()
 	buttons.add_theme_constant_override("separation", 8)
 	box.add_child(buttons)
-	_upgrade_button = _button("Upgrade")
+	_upgrade_button = GameTheme.primary(_button("Upgrade"))
 	_upgrade_button.pressed.connect(func() -> void: view.upgrade_selected())
 	buttons.add_child(_upgrade_button)
 	_move_button = _button("Move")
@@ -486,7 +493,7 @@ func _button(text: String) -> Button:
 
 
 func _build_button(type: String) -> Button:
-	## A parchment card with the building's picture beside its name and cost.
+	## A dark card with the building's picture beside its name and cost.
 	var b := _button("")
 	b.custom_minimum_size = Vector2(160, 74)
 	b.icon = _picture(type)
@@ -494,13 +501,13 @@ func _build_button(type: String) -> Button:
 	b.add_theme_constant_override("icon_max_width", 54)
 	b.add_theme_constant_override("h_separation", 4)
 	b.add_theme_font_size_override("font_size", 14)
-	b.add_theme_stylebox_override("normal", GameTheme.parchment_box(GameTheme.PARCHMENT, GameTheme.BRONZE_DARK))
-	b.add_theme_stylebox_override("hover", GameTheme.parchment_box(GameTheme.PARCHMENT.lightened(0.35), GameTheme.BRONZE))
-	b.add_theme_stylebox_override("pressed", GameTheme.parchment_box(GameTheme.PARCHMENT.darkened(0.08), GameTheme.BRONZE, true))
-	b.add_theme_stylebox_override("disabled", GameTheme.parchment_box(GameTheme.PARCHMENT.darkened(0.3), GameTheme.BRONZE_DARK))
+	b.add_theme_stylebox_override("normal", GameTheme.card_box(GameTheme.DARK, GameTheme.RIM_DIM))
+	b.add_theme_stylebox_override("hover", GameTheme.card_box(GameTheme.DARK_LIGHT, GameTheme.RIM_BRIGHT))
+	b.add_theme_stylebox_override("pressed", GameTheme.card_box(GameTheme.DARK_PRESSED, GameTheme.RIM_BRIGHT, true))
+	b.add_theme_stylebox_override("disabled", GameTheme.card_box(Color(0.06, 0.05, 0.04, 0.9), Color(0.3, 0.25, 0.17)))
 	for state in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
-		b.add_theme_color_override(state, GameTheme.INK)
-	b.add_theme_color_override("font_disabled_color", Color(GameTheme.INK, 0.55))
+		b.add_theme_color_override(state, GameTheme.TEXT)
+	b.add_theme_color_override("font_disabled_color", Color(0.55, 0.5, 0.42))
 	b.add_theme_color_override("icon_disabled_color", Color(1, 1, 1, 0.55))
 	b.add_theme_constant_override("outline_size", 0)
 	return b

@@ -67,6 +67,60 @@ const SVG := {
 		<rect x="14" y="52" width="36" height="6" rx="2" fill="#8a5a2e" stroke="%s" stroke-width="3"/>
 		<path d="M19 12 L45 12 C45 24 36 28 34 32 C36 36 45 40 45 52 L19 52 C19 40 28 36 30 32 C28 28 19 24 19 12 Z" fill="#e8e2d0" stroke="%s" stroke-width="3" stroke-linejoin="round"/>
 		<path d="M24 48 L40 48 C38 42 34 40 32 38 C30 40 26 42 24 48 Z" fill="#e0b048"/>""",
+	# A rolled scroll with a red seal, for quests.
+	"quests": """
+		<rect x="14" y="10" width="36" height="44" rx="3" fill="#ead8ae" stroke="%s" stroke-width="3"/>
+		<rect x="10" y="6" width="44" height="9" rx="4.5" fill="#c9a96e" stroke="%s" stroke-width="3"/>
+		<rect x="10" y="49" width="44" height="9" rx="4.5" fill="#c9a96e" stroke="%s" stroke-width="3"/>
+		<path d="M20 24 H44 M20 31 H44 M20 38 H36" stroke="#8a6a3a" stroke-width="2.5" stroke-linecap="round"/>
+		<circle cx="42" cy="42" r="6" fill="#b5281e" stroke="%s" stroke-width="2.5"/>""",
+	# A plumed great helm, for commanders.
+	"commanders": """
+		<path d="M16 26 C16 12 48 12 48 26 L48 52 L16 52 Z" fill="#b8bcc4" stroke="%s" stroke-width="3" stroke-linejoin="round"/>
+		<rect x="20" y="30" width="24" height="5" rx="2" fill="#2b2b30"/>
+		<path d="M32 36 V50" stroke="#2b2b30" stroke-width="3"/>
+		<path d="M32 14 C36 4 48 4 54 10 C46 10 40 14 36 18 Z" fill="#c0392b" stroke="%s" stroke-width="2.5" stroke-linejoin="round"/>""",
+	# A wooden watchtower with a pennant, for the outpost.
+	"outpost": """
+		<path d="M18 58 L24 22 L40 22 L46 58" fill="none" stroke="#8a5a2e" stroke-width="5" stroke-linejoin="round"/>
+		<path d="M21 44 L43 44 M22 34 L42 34" stroke="#8a5a2e" stroke-width="4"/>
+		<path d="M14 24 L32 10 L50 24 Z" fill="#b5281e" stroke="%s" stroke-width="3" stroke-linejoin="round"/>
+		<path d="M32 10 V2 L42 5 L32 8" fill="#e8c45a" stroke="%s" stroke-width="1.5"/>""",
+	# A cottage with a red roof, for villages.
+	"villages": """
+		<rect x="14" y="30" width="36" height="26" fill="#ead8ae" stroke="%s" stroke-width="3"/>
+		<path d="M8 32 L32 10 L56 32 Z" fill="#b5281e" stroke="%s" stroke-width="3" stroke-linejoin="round"/>
+		<rect x="27" y="40" width="10" height="16" fill="#7a4a24" stroke="%s" stroke-width="2"/>
+		<rect x="40" y="14" width="6" height="12" fill="#8d9199" stroke="%s" stroke-width="2"/>""",
+	# Two crossed banners, for the alliance.
+	"alliance": """
+		<path d="M14 58 L30 8 M50 58 L34 8" stroke="#8a5a2e" stroke-width="4" stroke-linecap="round"/>
+		<path d="M30 8 L12 14 L16 26 L27 20 Z" fill="#3f5f9a" stroke="%s" stroke-width="2.5" stroke-linejoin="round"/>
+		<path d="M34 8 L52 14 L48 26 L37 20 Z" fill="#b5281e" stroke="%s" stroke-width="2.5" stroke-linejoin="round"/>""",
+	# A gold star, for events.
+	"events": """
+		<path d="M32 6 L39 24 L58 25 L43 37 L48 56 L32 45 L16 56 L21 37 L6 25 L25 24 Z" fill="#f2c443" stroke="%s" stroke-width="3" stroke-linejoin="round"/>""",
+	# A key, for the owner's tools.
+	"owner": """
+		<circle cx="20" cy="22" r="11" fill="none" stroke="#e0b048" stroke-width="6"/>
+		<path d="M28 30 L54 56 M44 46 L50 40 M50 52 L56 46" stroke="#e0b048" stroke-width="6" stroke-linecap="round"/>""",
+	# A trophy cup, for the leaderboard.
+	"leaderboard": """
+		<path d="M18 8 H46 V22 C46 34 40 40 32 40 C24 40 18 34 18 22 Z" fill="#f2c443" stroke="%s" stroke-width="3" stroke-linejoin="round"/>
+		<path d="M18 14 H8 C8 26 14 30 20 30 M46 14 H56 C56 26 50 30 44 30" fill="none" stroke="%s" stroke-width="3"/>
+		<rect x="28" y="40" width="8" height="10" fill="#d19d22" stroke="%s" stroke-width="2.5"/>
+		<rect x="18" y="50" width="28" height="8" rx="2" fill="#8a5a2e" stroke="%s" stroke-width="2.5"/>""",
+	# A sealed treaty, for diplomacy.
+	"diplomacy": """
+		<rect x="10" y="10" width="44" height="40" rx="3" fill="#ead8ae" stroke="%s" stroke-width="3"/>
+		<path d="M17 20 H47 M17 27 H47 M17 34 H38" stroke="#8a6a3a" stroke-width="2.5" stroke-linecap="round"/>
+		<path d="M40 44 L36 60 L42 56 L46 60 L46 44" fill="#b5281e" stroke="%s" stroke-width="2"/>
+		<circle cx="43" cy="44" r="7" fill="#b5281e" stroke="%s" stroke-width="2.5"/>""",
+	# The realm's crest: a gold-rimmed red shield with a white castle.
+	"crest": """
+		<path d="M32 3 L58 9 C58 36 48 52 32 61 C16 52 6 36 6 9 Z" fill="#9e1d16" stroke="#e6bf6a" stroke-width="4" stroke-linejoin="round"/>
+		<path d="M18 44 V26 H22 V30 H26 V22 H30 V26 H34 V22 H38 V30 H42 V26 H46 V44 Z" fill="#f2ead8"/>
+		<rect x="29" y="35" width="6" height="9" fill="#9e1d16"/>""",
 	# Check boxes: an empty bronze-rimmed box, and one with a gold tick.
 	"box": """
 		<rect x="8" y="8" width="48" height="48" rx="8" fill="#140d06" stroke="#c79a52" stroke-width="5"/>""",

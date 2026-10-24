@@ -55,7 +55,7 @@ func _ready() -> void:
 	_spy.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_spy.pressed.connect(_send_spy)
 	buttons.add_child(_spy)
-	_attack = Button.new()
+	_attack = GameTheme.primary(Button.new())
 	_attack.text = "Prepare attack"
 	_attack.focus_mode = Control.FOCUS_NONE
 	_attack.size_flags_horizontal = Control.SIZE_EXPAND_FILL
