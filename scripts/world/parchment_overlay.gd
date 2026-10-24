@@ -24,6 +24,7 @@ var _forced := false
 
 
 func build() -> void:
+	add_to_group("parchment")
 	var terrain: TerrainData = GameData.terrain
 	material = ShaderMaterial.new()
 	material.shader = PARCHMENT_SHADER
@@ -76,6 +77,16 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo and event.physical_keycode == KEY_M:
 		_forced = not _forced
 		_update()
+
+
+func is_forced() -> bool:
+	return _forced
+
+
+func set_forced(on: bool) -> void:
+	## Shows the parchment at any zoom (the map controls' switch, same as M).
+	_forced = on
+	_update()
 
 
 func _on_zoom_changed(zoom_t: float) -> void:

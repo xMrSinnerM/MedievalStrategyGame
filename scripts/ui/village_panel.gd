@@ -31,14 +31,15 @@ var _abandon: Button
 var _abandon_armed := false
 var _timer := 0.0
 
+var _picture: InfoPicture
 
 func _ready() -> void:
 	add_theme_stylebox_override("panel", MenuStyle.panel(0.85, 12))
-	custom_minimum_size = Vector2(340, 0)
+	custom_minimum_size = Vector2(460, 0)
 	visible = false
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 6)
-	add_child(box)
+	_picture = InfoPicture.wrap(self, box)
 	var head := HBoxContainer.new()
 	box.add_child(head)
 	_title = _label(20, Color(1.0, 0.86, 0.55))
@@ -120,6 +121,7 @@ func _refresh() -> void:
 	var bonus := "+%d%%" % roundi(Economy.capital_rules.bonus(level) * 100.0)
 	var now := Economy.now()
 	_title.text = String(info.name)
+	_picture.show_place(InfoPicture.faction_place("capital", String(info.get("faction", ""))) if capital else "village")
 	if capital:
 		var faction := String(GameData.get_faction(String(info.get("faction", ""))).get("name", ""))
 		_kind.text = ("Royal capital, level %d" if level >= 2 else "Town, level %d") % level + (", %s" % faction if faction != "" else "")

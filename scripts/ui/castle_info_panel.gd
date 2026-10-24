@@ -17,14 +17,15 @@ var _carts: Button
 var _siege_info: Label
 var _besiege: Button
 
+var _picture: InfoPicture
 
 func _ready() -> void:
 	add_theme_stylebox_override("panel", MenuStyle.panel(0.85, 12))
-	custom_minimum_size = Vector2(290, 0)
+	custom_minimum_size = Vector2(410, 0)
 	visible = false
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 6)
-	add_child(box)
+	_picture = InfoPicture.wrap(self, box)
 	var head := HBoxContainer.new()
 	box.add_child(head)
 	_title = _label(20, Color(1.0, 0.9, 0.65))
@@ -92,6 +93,8 @@ func _refresh() -> void:
 		visible = false
 		return
 	_title.text = castle.castle_name
+	_picture.show_place(InfoPicture.faction_place("capital" if GameData.get_settlement(settlement_id).get("type", "") == "town" else "castle", castle.owner)
+			if castle.is_npc() else "castle_player")
 	if castle.is_npc():
 		var faction := GameData.get_faction(castle.owner)
 		_owner.text = "Held by the %s" % faction.get("name", castle.owner)

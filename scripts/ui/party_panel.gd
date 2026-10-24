@@ -13,14 +13,15 @@ var _details: Label
 var _odds: Label
 var _attack: Button
 
+var _picture: InfoPicture
 
 func _ready() -> void:
 	add_theme_stylebox_override("panel", MenuStyle.panel(0.85, 12))
-	custom_minimum_size = Vector2(290, 0)
+	custom_minimum_size = Vector2(410, 0)
 	visible = false
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 6)
-	add_child(box)
+	_picture = InfoPicture.wrap(self, box)
 	var head := HBoxContainer.new()
 	box.add_child(head)
 	_title = _label(20, Color(1.0, 0.9, 0.65))
@@ -86,6 +87,7 @@ func _refresh() -> void:
 	var faction := GameData.get_faction(data.faction)
 	var player_faction := _player_faction()
 	_title.text = data.name
+	_picture.show_place("warband")
 	var relation := ""
 	if data.faction == player_faction:
 		relation = ", your ally"
