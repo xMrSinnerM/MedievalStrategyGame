@@ -4,6 +4,8 @@ extends CanvasLayer
 
 const TEXT := Color(0.95, 0.9, 0.8)
 const MUTED := Color(0.78, 0.72, 0.62)
+## Pictures of each building, rendered from its model by tools/bake_portraits.tscn.
+const PICTURES := "res://assets/ui/buildings/%s.png"
 
 var view: Node3D   ## the castle view this HUD belongs to; set by the view
 
@@ -21,6 +23,7 @@ var _side_panel: PanelContainer
 var _side_scroll: ScrollContainer
 var _side_box: VBoxContainer
 var _side_title: Label
+var _side_picture: TextureRect
 var _side_level: Label
 var _side_text: RichTextLabel
 var _upgrade_button: Button
@@ -171,8 +174,7 @@ func _build_build_menu() -> void:
 	for type: String in Economy.rules.types:
 		if Economy.rules.is_perimeter(type) or type == "keep":
 			continue
-		var b := _button("")
-		b.custom_minimum_size = Vector2(138, 64)
+		var b := _build_button(type)
 		b.pressed.connect(func() -> void: view.start_placing(type))
 		row.add_child(b)
 		_build_buttons[type] = b
@@ -199,7 +201,13 @@ func _build_side_panel() -> void:
 	_side_scroll.add_child(box)
 	_side_box = box
 	var head := HBoxContainer.new()
+	head.add_theme_constant_override("separation", 10)
 	box.add_child(head)
+	_side_picture = TextureRect.new()
+	_side_picture.custom_minimum_size = Vector2(88, 88)
+	_side_picture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_side_picture.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	head.add_child(_side_picture)
 	_side_title = _label("", 20, Color(1.0, 0.9, 0.65))
 	_side_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(_side_title)
@@ -349,6 +357,7 @@ func _refresh_side_panel() -> void:
 	var type: String = b.type
 	var building: bool = b.target > 0
 	_side_title.text = rules.display_name(type)
+	_side_picture.texture = _picture(type)
 	var max_level := int(rules.types[type].get("max_level", 10))
 	_side_level.text = "Level %d of %d" % [b.level, max_level] if not building else ""
 	_progress.visible = building
@@ -474,6 +483,32 @@ func _button(text: String) -> Button:
 	b.focus_mode = Control.FOCUS_NONE
 	b.add_theme_font_size_override("font_size", 15)
 	return b
+
+
+func _build_button(type: String) -> Button:
+	## A parchment card with the building's picture beside its name and cost.
+	var b := _button("")
+	b.custom_minimum_size = Vector2(160, 74)
+	b.icon = _picture(type)
+	b.expand_icon = true
+	b.add_theme_constant_override("icon_max_width", 54)
+	b.add_theme_constant_override("h_separation", 4)
+	b.add_theme_font_size_override("font_size", 14)
+	b.add_theme_stylebox_override("normal", GameTheme.parchment_box(GameTheme.PARCHMENT, GameTheme.BRONZE_DARK))
+	b.add_theme_stylebox_override("hover", GameTheme.parchment_box(GameTheme.PARCHMENT.lightened(0.35), GameTheme.BRONZE))
+	b.add_theme_stylebox_override("pressed", GameTheme.parchment_box(GameTheme.PARCHMENT.darkened(0.08), GameTheme.BRONZE, true))
+	b.add_theme_stylebox_override("disabled", GameTheme.parchment_box(GameTheme.PARCHMENT.darkened(0.3), GameTheme.BRONZE_DARK))
+	for state in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
+		b.add_theme_color_override(state, GameTheme.INK)
+	b.add_theme_color_override("font_disabled_color", Color(GameTheme.INK, 0.55))
+	b.add_theme_color_override("icon_disabled_color", Color(1, 1, 1, 0.55))
+	b.add_theme_constant_override("outline_size", 0)
+	return b
+
+
+func _picture(type: String) -> Texture2D:
+	var path := PICTURES % type
+	return load(path) if ResourceLoader.exists(path) else null
 
 
 func _panel_style(alpha: float, radius: int) -> StyleBoxFlat:

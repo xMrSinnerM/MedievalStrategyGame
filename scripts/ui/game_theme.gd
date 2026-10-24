@@ -13,6 +13,7 @@ const BRONZE_DARK := Color(0.45, 0.32, 0.16)
 const INK := Color(0.07, 0.045, 0.025)
 const TEXT := Color(0.95, 0.9, 0.8)
 const GOLD := Color(1.0, 0.86, 0.55)
+const PARCHMENT := Color(0.93, 0.86, 0.69)
 
 const TITLE_FONT := preload("res://assets/fonts/Cinzel-Bold.ttf")
 
@@ -183,6 +184,17 @@ static func button_box(bg: Color, rim: Color, pressed := false) -> StyleBoxFlat:
 	s.shadow_color = Color(0, 0, 0, 0.35)
 	s.shadow_size = 0 if pressed else 2
 	s.shadow_offset = Vector2(0, 1)
+	return s
+
+
+static func parchment_box(bg: Color, rim: Color, pressed := false) -> StyleBoxFlat:
+	## A parchment card with a bronze rim, for the castle's build bar.
+	var s := button_box(bg, rim, pressed)
+	s.set_border_width_all(2)
+	s.border_width_bottom = 2 if pressed else 4
+	s.set_corner_radius_all(6)
+	s.content_margin_left = 6
+	s.content_margin_right = 10
 	return s
 
 

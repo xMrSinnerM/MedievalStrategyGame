@@ -717,7 +717,8 @@ from the game: owners are added by hand in the database (see
 ```
 data/        JSON: terrain config, factions, settlements, roads, parties, buildings, units, player
 world/       heightmap, biome mask, rivers
-assets/      fonts (SIL OFL), kaykit (KayKit Medieval Hexagon and Adventurers packs, CC0)
+assets/      fonts (SIL OFL), kaykit (KayKit Medieval Hexagon and Adventurers packs, CC0),
+             ui/buildings (building pictures rendered from the kit models)
 scenes/      main.tscn -> world_map/world_map.tscn and castle/castle_view.tscn
 scripts/
   core/      main (switches map and castle), GameData, EventBus and Economy autoloads, map style
@@ -834,7 +835,12 @@ The originals are rigged and animated (3.6 MB each), so
 small static meshes in `assets/kaykit/characters/`; `Soldiers` merges a few
 into a troop and the map swaps the two frames while it marches.
 `shaders/unit.gdshader` repaints each character's cape, tabard and shield in
-the owner's colour. Other CC0 packs that would fit:
+the owner's colour.
+
+The pictures on the castle's build bar and building panel are rendered from
+the same models by `tools/bake_portraits.tscn` (run it again after changing
+`CastleModels`). The main menu's Credits screen lists every pack used.
+Other CC0 packs that would fit:
 
 - Castles and walls: Kenney Castle Kit
 - Village and town buildings: Quaternius Medieval Village, KayKit medieval packs
