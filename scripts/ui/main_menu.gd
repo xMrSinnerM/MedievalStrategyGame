@@ -8,6 +8,12 @@ signal game_requested(slot: int, new_game: bool)
 signal online_requested(answer: Dictionary)
 
 const BACKGROUND := "res://ui/menu_background.jpg"
+const CREDITS := [
+	"Castles, buildings, trees and props: KayKit Medieval Hexagon Pack by Kay Lousberg (CC0), kaylousberg.com",
+	"Soldiers: KayKit Adventurers Character Pack by Kay Lousberg (CC0)",
+	"Fonts: Cinzel by Natanael Gama and Alegreya Sans by Huerta Tipográfica (SIL Open Font License)",
+	"Made with the Godot Engine (MIT licence), godotengine.org",
+]
 
 var _buttons: VBoxContainer
 var _continue: Button
@@ -21,6 +27,7 @@ var _confirm_text: Label
 var _confirm_action := Callable()
 var _settings: PanelContainer
 var _online: PanelContainer
+var _credits: PanelContainer
 var _loading: Label
 
 
@@ -65,6 +72,7 @@ func _ready() -> void:
 		_show(_online)
 		_online.open()))
 	_buttons.add_child(MenuStyle.button("Settings", func() -> void: _show(_settings)))
+	_buttons.add_child(MenuStyle.button("Credits", func() -> void: _show(_credits)))
 	_buttons.add_child(MenuStyle.button("Quit", func() -> void: get_tree().quit()))
 	_loading = MenuStyle.label("Loading the realm...", 20, MenuStyle.GOLD)
 	_loading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -117,6 +125,10 @@ func _ready() -> void:
 	_online.closed.connect(func() -> void: _show(null))
 	_online.started.connect(_start_online)
 	column.add_child(_online)
+
+	_credits = _build_credits()
+	_credits.visible = false
+	column.add_child(_credits)
 	refresh()
 
 
@@ -137,6 +149,7 @@ func _show(sub_panel: Control) -> void:
 	_slots.visible = sub_panel == _slots
 	_settings.visible = sub_panel == _settings
 	_online.visible = sub_panel == _online
+	_credits.visible = sub_panel == _credits
 
 
 func _show_slots(for_new_game: bool) -> void:
@@ -206,3 +219,22 @@ func _start_online(answer: Dictionary) -> void:
 	await get_tree().process_frame
 	await get_tree().process_frame
 	online_requested.emit(answer)
+
+
+func _build_credits() -> PanelContainer:
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", MenuStyle.panel())
+	panel.custom_minimum_size = Vector2(620, 0)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 12)
+	panel.add_child(box)
+	box.add_child(MenuStyle.title("Credits", 28))
+	for line in CREDITS:
+		var label := MenuStyle.label(line, 18, MenuStyle.TEXT)
+		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		box.add_child(label)
+	var back := MenuStyle.button("Back", func() -> void: _show(null), 200.0)
+	back.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	box.add_child(back)
+	return panel
