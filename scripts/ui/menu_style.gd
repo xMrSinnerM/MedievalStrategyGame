@@ -8,7 +8,7 @@ const MUTED := Color(0.78, 0.72, 0.62)
 const GOLD := Color(1.0, 0.86, 0.55)
 
 
-static func panel(alpha := 0.92, margin := 24) -> StyleBoxFlat:
+static func panel(alpha := 0.92, margin := 24) -> StyleBox:
 	return GameTheme.panel_box(alpha, margin)
 
 
@@ -40,14 +40,10 @@ static func button(text: String, action: Callable, width := 260.0) -> Button:
 	return b
 
 
-static func ornate_panel() -> StyleBoxFlat:
-	## The title screen's dialogs: dark oak with a bright gold rim and a deep shadow.
-	var s := GameTheme.panel_box(0.95, 28, 4)
-	s.border_color = Color(0.9, 0.7, 0.34)
-	s.set_border_width_all(2)
-	s.shadow_color = Color(0, 0, 0, 0.55)
-	s.shadow_size = 18
-	s.shadow_offset = Vector2(0, 6)
+static func ornate_panel() -> StyleBox:
+	## The title screen's dialogs: a window with a deeper shadow.
+	var s: OrnateBox = GameTheme.panel_box(0.95, 28)
+	s.shadow = 16.0
 	return s
 
 

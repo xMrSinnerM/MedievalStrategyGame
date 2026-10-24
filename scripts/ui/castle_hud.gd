@@ -511,5 +511,5 @@ func _picture(type: String) -> Texture2D:
 	return load(path) if ResourceLoader.exists(path) else null
 
 
-func _panel_style(alpha: float, radius: int) -> StyleBoxFlat:
+func _panel_style(alpha: float, radius: int) -> StyleBox:
 	return GameTheme.panel_box(alpha, 10, radius)
