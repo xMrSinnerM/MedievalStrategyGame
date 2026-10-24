@@ -42,7 +42,7 @@ void fragment() {
 	// A soft rim keeps silhouettes readable against the ground.
 	RIM = 0.25;
 	RIM_TINT = 0.6;
-	if (map_fog_on) {
-		FOG = map_fog(v_world, CAMERA_POSITION_WORLD);
-	}
+	// FOG is always written: on Vulkan (Forward+) a FOG left unwritten on
+	// some paths comes out as garbage and the model renders black.
+	FOG = map_fog_on ? map_fog(v_world, CAMERA_POSITION_WORLD) : vec4(0.0);
 }
