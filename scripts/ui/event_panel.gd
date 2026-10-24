@@ -150,7 +150,7 @@ func _fill_rewards() -> void:
 		if i < claimed:
 			_rewards.add_child(MenuStyle.label("Claimed", 15, DONE))
 		elif i == claimed and points >= need:
-			var claim := Button.new()
+			var claim := GameTheme.primary(Button.new())
 			claim.text = "Claim"
 			claim.focus_mode = Control.FOCUS_NONE
 			claim.custom_minimum_size = Vector2(110, 30)

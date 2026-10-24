@@ -57,7 +57,7 @@ func _ready() -> void:
 	_odds = _label(15, TEXT)
 	_odds.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	box.add_child(_odds)
-	_attack = _button("Prepare attack", func() -> void: EventBus.attack_screen_requested.emit("village:" + village_id))
+	_attack = GameTheme.primary(_button("Prepare attack", func() -> void: EventBus.attack_screen_requested.emit("village:" + village_id)))
 	box.add_child(_attack)
 	_travel = _button("Travel here", func() -> void:
 		EventBus.travel_requested.emit(village_id)

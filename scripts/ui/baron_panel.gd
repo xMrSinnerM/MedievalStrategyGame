@@ -39,7 +39,7 @@ func _ready() -> void:
 	_odds = _label(15, TEXT)
 	_odds.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	box.add_child(_odds)
-	_attack = Button.new()
+	_attack = GameTheme.primary(Button.new())
 	_attack.focus_mode = Control.FOCUS_NONE
 	_attack.pressed.connect(_send)
 	box.add_child(_attack)

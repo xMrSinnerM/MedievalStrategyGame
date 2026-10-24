@@ -29,6 +29,9 @@ func _ready() -> void:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
 	bar.add_child(row)
+	var crest := Icons.rect("crest", 40)
+	crest.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(crest)
 	_resources = ResourceBar.new()
 	_resources.show_builders = false
 	row.add_child(_resources)
@@ -40,27 +43,27 @@ func _ready() -> void:
 	var alliance := preload("res://scripts/ui/alliance_panel.gd").new()
 	var events := preload("res://scripts/ui/event_panel.gd").new()
 	var quests := preload("res://scripts/ui/quest_panel.gd").new()
-	row.add_child(_bar_button("Quests (J)", quests.toggle))
+	row.add_child(_bar_button("Quests (J)", "quests", quests.toggle))
 	var commanders := preload("res://scripts/ui/commanders_panel.gd").new()
-	row.add_child(_bar_button("Commanders (H)", commanders.toggle))
+	row.add_child(_bar_button("Commanders (H)", "commanders", commanders.toggle))
 	var outpost := preload("res://scripts/ui/outpost_panel.gd").new()
-	row.add_child(_bar_button("Outpost (P)", outpost.toggle))
+	row.add_child(_bar_button("Outpost (P)", "outpost", outpost.toggle))
 	var villages := preload("res://scripts/ui/villages_panel.gd").new()
-	row.add_child(_bar_button("Villages (B)", villages.toggle))
+	row.add_child(_bar_button("Villages (B)", "villages", villages.toggle))
 	if Economy.online:
-		_alliance_button = _bar_button("Alliance (G)", alliance.toggle)
+		_alliance_button = _bar_button("Alliance (G)", "alliance", alliance.toggle)
 		row.add_child(_alliance_button)
-		row.add_child(_bar_button("Events (V)", events.toggle))
+		row.add_child(_bar_button("Events (V)", "events", events.toggle))
 		var owner := preload("res://scripts/ui/admin_panel.gd").new()
 		_owner_panel = owner
-		var owner_button := _bar_button("Owner (O)", owner.toggle)
+		var owner_button := _bar_button("Owner (O)", "owner", owner.toggle)
 		owner_button.visible = Economy.is_admin
 		Economy.admin_changed.connect(func(_e: String) -> void: owner_button.visible = Economy.is_admin)
 		row.add_child(owner_button)
-		row.add_child(_bar_button("Leaderboard (L)", leaderboard.toggle))
+		row.add_child(_bar_button("Leaderboard (L)", "leaderboard", leaderboard.toggle))
 	else:
-		row.add_child(_bar_button("Diplomacy (K)", diplomacy.toggle))
-	row.add_child(_bar_button("Your castle (C)", func() -> void:
+		row.add_child(_bar_button("Diplomacy (K)", "diplomacy", diplomacy.toggle))
+	row.add_child(_bar_button("Your castle (C)", "might", func() -> void:
 		EventBus.castle_requested.emit(Economy.player_castle.id)))
 	var left := VBoxContainer.new()
 	left.position = Vector2(12, TOP + 2)
@@ -305,9 +308,10 @@ func _update_alliance_button() -> void:
 	_alliance_button.text = "Alliance (G)" if waiting == 0 else "Alliance (G)  %d new" % waiting
 
 
-func _bar_button(text: String, action: Callable) -> Button:
+func _bar_button(text: String, icon: String, action: Callable) -> Button:
 	var b := Button.new()
 	b.text = text
+	b.icon = Icons.get_icon(icon, 22)
 	b.focus_mode = Control.FOCUS_NONE
 	b.add_theme_font_size_override("font_size", 15)
 	b.size_flags_vertical = Control.SIZE_SHRINK_CENTER

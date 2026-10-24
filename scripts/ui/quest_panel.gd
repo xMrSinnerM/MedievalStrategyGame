@@ -280,7 +280,7 @@ func _claim_button(text: String, action: Callable) -> Button:
 	b.custom_minimum_size = Vector2(110, 30)
 	b.add_theme_font_size_override("font_size", 15)
 	b.pressed.connect(action)
-	return b
+	return GameTheme.primary(b)
 
 
 static func _wrapped(text: String, size: int, color: Color) -> Label:

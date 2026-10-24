@@ -37,7 +37,7 @@ func _ready() -> void:
 	box.add_child(_details)
 	_odds = _label(15, TEXT)
 	box.add_child(_odds)
-	_attack = Button.new()
+	_attack = GameTheme.primary(Button.new())
 	_attack.text = "Attack"
 	_attack.focus_mode = Control.FOCUS_NONE
 	_attack.pressed.connect(func() -> void:
