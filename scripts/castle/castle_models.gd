@@ -52,6 +52,12 @@ static func build(type: String, level: int, size: Vector2i, constructing: bool, 
 			_put(kit, "building_blacksmith_blue", Vector3(0, 0, -0.5), 3.9 + 0.05 * level)
 			_put(kit, "wheelbarrow", Vector3(-2.0, 0, 2.0), 1.6)
 			_put(kit, "ladder", Vector3(2.2, 0, 1.8), 1.6)
+		"academy":
+			_put(kit, "building_church_blue", Vector3(0, 0, -0.4), 3.6 + 0.06 * level)
+			_put(kit, "building_well_blue", Vector3(-2.1, 0, 2.0), 1.4)
+			_put(kit, "crate_open", Vector3(2.0, 0, 2.1), 1.4)
+			if level >= 5:
+				_put(kit, "building_tower_A_blue", Vector3(2.2, 0, -1.9), 1.3 + 0.05 * level)
 		_:
 			_put(kit, "crate_A_big", Vector3.ZERO, 2.0)
 	if constructing:

@@ -175,6 +175,25 @@ func cancel_crafting(index: int) -> void:
 		Economy.changed.emit()
 
 
+func research(study: String) -> void:
+	if not editable:
+		return
+	var reason := castle.check_research(study)
+	if reason != "" or not castle.start_research(study, Economy.now()):
+		message.emit(reason if reason != "" else "Can't research that now")
+		return
+	_tell_server({"action": "research", "study": study})
+	message.emit("The scholars begin on %s" % castle.rules.study_name(study))
+	Economy.changed.emit()
+
+
+func cancel_research() -> void:
+	if editable and castle.cancel_research(Economy.now()):
+		_tell_server({"action": "cancel_research"})
+		message.emit("Research cancelled, %d%% of the cost refunded" % int(CastleState.CANCEL_REFUND * 100.0))
+		Economy.changed.emit()
+
+
 func move_troops(unit: String, amount: int, to_field: bool) -> void:
 	## Moves soldiers between the garrison and your warband, which must be at the castle.
 	if not editable:
