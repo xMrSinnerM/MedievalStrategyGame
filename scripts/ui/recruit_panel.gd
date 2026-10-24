@@ -48,8 +48,8 @@ func refresh() -> void:
 			row.info.text = "%s: unlocks at barracks level %d" % [rules.unit_name(unit), rules.unit_barracks_level(unit)]
 		else:
 			row.info.text = "%s   attack %d, defence %d, eats %s food/h" % [rules.unit_name(unit),
-				int(rules.unit_stat(unit, "attack")), int(rules.unit_stat(unit, "defense")), String.num(rules.unit_upkeep(unit))]
-			row.cost.text = "%s, %s each" % [hud._cost_text(rules.unit_cost(unit)), view.format_time(rules.unit_time(unit, castle.barracks_level()))]
+				int(rules.unit_stat(unit, "attack")), int(rules.unit_stat(unit, "defense")), String.num(castle.unit_upkeep(unit), 2)]
+			row.cost.text = "%s, %s each" % [hud._cost_text(rules.unit_cost(unit)), view.format_time(castle.unit_time(unit))]
 		row.info.modulate.a = 0.5 if locked else 1.0
 		row.line.visible = not locked
 		var can := castle.affordable(unit)

@@ -17,6 +17,9 @@ var _defence_button: Button
 var _defence: PanelContainer
 var _recruit: VBoxContainer
 var _workshop: VBoxContainer
+var _research: PanelContainer
+var _research_button: Button
+var _research_bar: ProgressBar
 var _build_menu: PanelContainer
 var _build_buttons := {}       ## type -> Button
 var _side_panel: PanelContainer
@@ -95,6 +98,9 @@ func _ready() -> void:
 	tracker.offset_top = 40
 	add_child(tracker)
 	add_child(quests)
+	_research = preload("res://scripts/ui/research_panel.gd").new()
+	_research.hud = self
+	add_child(_research)
 	Economy.changed.connect(_refresh)
 
 
@@ -110,6 +116,7 @@ func show_castle() -> void:
 	# An outpost can't be attacked, so it has no defence to plan, and builds only what it may.
 	_defence_button.visible = view.editable and view.castle.limits.is_empty()
 	_defence.visible = false
+	_research.close_panel()
 	for type: String in _build_buttons:
 		_build_buttons[type].visible = view.castle.limits.is_empty() or view.castle.limits.types.has(type)
 	_queue_signature = "?"
@@ -173,7 +180,7 @@ func _build_build_menu() -> void:
 	_build_menu.offset_bottom = -34
 	add_child(_build_menu)
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 8)
+	row.add_theme_constant_override("separation", 5)
 	_build_menu.add_child(row)
 	var title := _label("Build", 16, Color(1.0, 0.9, 0.65))
 	row.add_child(title)
@@ -257,6 +264,10 @@ func _build_side_panel() -> void:
 	_workshop.hud = self
 	_workshop.visible = false
 	box.add_child(_workshop)
+	_research_button = GameTheme.primary(_button("Open the research tree"))
+	_research_button.icon = Icons.get_icon("research", 22)
+	_research_button.pressed.connect(open_research)
+	box.add_child(_research_button)
 
 
 func _build_queue_panel() -> void:
@@ -298,6 +309,12 @@ func _process(delta: float) -> void:
 		_recruit.update_progress(t)
 	if _workshop.visible:
 		_workshop.update_progress(t)
+	if _research_bar != null and not castle.studying.is_empty():
+		var study := String(castle.studying.study)
+		var total := castle.rules.study_time(study, int(castle.studying.target), castle.academy_level())
+		_research_bar.value = 100.0 * (1.0 - castle.research_left(t) / maxf(total, 1.0))
+		var link: Button = _research_bar.get_meta("label")
+		link.text = "%s (level %d)   %s" % [castle.rules.study_name(study), int(castle.studying.target), view.format_time(castle.research_left(t))]
 	if _toast_time > 0.0:
 		_toast_time -= delta
 		_toast.modulate.a = clampf(_toast_time, 0.0, 1.0)
@@ -332,6 +349,8 @@ func _refresh_queue(castle: CastleState) -> void:
 	var parts: PackedStringArray = []
 	for b in list:
 		parts.append("%d:%d" % [b.id, b.target])
+	if not castle.studying.is_empty():
+		parts.append("study:%s:%d" % [castle.studying.study, int(castle.studying.target)])
 	var signature := "|".join(parts)
 	if signature == _queue_signature:
 		return
@@ -340,8 +359,10 @@ func _refresh_queue(castle: CastleState) -> void:
 		_queue_list.remove_child(child)
 		child.queue_free()
 	_queue_rows.clear()
-	_queue_panel.visible = not list.is_empty()
-	_queue_list.add_child(_label("Under construction", 15, Color(1.0, 0.9, 0.65)))
+	_research_bar = null
+	_queue_panel.visible = not list.is_empty() or not castle.studying.is_empty()
+	if not list.is_empty():
+		_queue_list.add_child(_label("Under construction", 15, Color(1.0, 0.9, 0.65)))
 	for b in list:
 		var label := _label("", 13, TEXT)
 		_queue_list.add_child(label)
@@ -351,6 +372,23 @@ func _refresh_queue(castle: CastleState) -> void:
 		bar.set_meta("label", label)
 		_queue_list.add_child(bar)
 		_queue_rows[b.id] = bar
+	if not castle.studying.is_empty():
+		_queue_list.add_child(_label("In the academy", 15, Color(1.0, 0.9, 0.65)))
+		var link := Button.new()
+		link.flat = true
+		link.focus_mode = Control.FOCUS_NONE
+		link.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		link.icon = Icons.get_icon("research", 18)
+		link.add_theme_font_size_override("font_size", 13)
+		link.add_theme_constant_override("outline_size", 0)
+		link.tooltip_text = "Open the research tree"
+		link.pressed.connect(open_research)
+		_queue_list.add_child(link)
+		_research_bar = ProgressBar.new()
+		_research_bar.show_percentage = false
+		_research_bar.custom_minimum_size = Vector2(226, 10)
+		_research_bar.set_meta("label", link)
+		_queue_list.add_child(_research_bar)
 	_queue_panel.reset_size()
 
 
@@ -382,6 +420,17 @@ func _refresh_side_panel() -> void:
 	if type == "keep":
 		lines.append("[b]Builders:[/b] %d, at level %d: %d" % [rules.builders(b.level), mini(b.level + 1, max_level), rules.builders(mini(b.level + 1, max_level))])
 		lines.append("Other buildings can reach level %d" % rules.max_level("woodcutter", b.level))
+	if type == "academy" and b.level > 0:
+		var study := "Researching [b]%s[/b], level %d." % [rules.study_name(castle.studying.study), int(castle.studying.target)] \
+			if not castle.studying.is_empty() else "The scholars are idle."
+		var known := 0
+		for s: String in castle.research:
+			known += int(castle.research[s])
+		lines.append("")
+		lines.append("%s %d study levels learned so far." % [study, known])
+		if next <= max_level:
+			lines.append("Level %d researches %d%% faster and opens more studies." % [next,
+				roundi(100.0 * (1.0 - pow(rules.time_per_academy_level, next - 1)))])
 	if type == "wall" and view.editable:
 		lines.append("Choose how your soldiers man the walls with [b]Defence[/b] at the top.")
 	var reason := castle.check_upgrade(b.id) if view.editable else ""
@@ -411,7 +460,16 @@ func _refresh_side_panel() -> void:
 	_workshop.visible = type == "workshop" and b.level > 0
 	if _workshop.visible:
 		_workshop.refresh()
+	_research_button.visible = type == "academy" and b.level > 0
+	if _research.visible:
+		_research.refresh()
 	_fit_side_panel.call_deferred()
+
+
+func open_research() -> void:
+	_warband.visible = false
+	_defence.visible = false
+	_research.open_panel()
 
 
 func _fit_side_panel() -> void:
@@ -494,13 +552,14 @@ func _button(text: String) -> Button:
 
 func _build_button(type: String) -> Button:
 	## A dark card with the building's picture beside its name and cost.
+	# Narrow enough for all eight buildings at 1280 wide.
 	var b := _button("")
-	b.custom_minimum_size = Vector2(160, 74)
+	b.custom_minimum_size = Vector2(132, 74)
 	b.icon = _picture(type)
 	b.expand_icon = true
-	b.add_theme_constant_override("icon_max_width", 54)
-	b.add_theme_constant_override("h_separation", 4)
-	b.add_theme_font_size_override("font_size", 14)
+	b.add_theme_constant_override("icon_max_width", 42)
+	b.add_theme_constant_override("h_separation", 2)
+	b.add_theme_font_size_override("font_size", 13)
 	b.add_theme_stylebox_override("normal", GameTheme.card_box(GameTheme.DARK, GameTheme.RIM_DIM))
 	b.add_theme_stylebox_override("hover", GameTheme.card_box(GameTheme.DARK_LIGHT, GameTheme.RIM_BRIGHT))
 	b.add_theme_stylebox_override("pressed", GameTheme.card_box(GameTheme.DARK_PRESSED, GameTheme.RIM_BRIGHT, true))

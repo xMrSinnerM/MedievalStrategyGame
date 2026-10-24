@@ -482,6 +482,43 @@ workshop in `data/buildings.json`. The rules are `Battle.wall_mods()` and
 `Battle.check_tools()` (`scripts/economy/battle.gd`), the same as
 `server/rules/battle.ts` (checked by the server fixtures).
 
+## Academy and research
+
+Once your keep reaches level 3 you can build an **Academy** (3x3, wood 300,
+stone 250, gold 120). Click it and choose **Open the research tree**: three
+branches of five studies, each up to level 5 (Murder Holes up to 3). The
+academy researches one study at a time; a study costs resources and time
+only, and nothing bought can hurry it. Each academy level researches 6%
+faster and opens more studies, and every study needs the one above it in its
+branch at level 2. Cancelling refunds 75% of the cost, like buildings.
+
+| Branch | Study | Academy | Each level |
+|---|---|---|---|
+| Economy | Forestry | 1 | +4% wood |
+| Economy | Stonecutting | 2 | +4% stone |
+| Economy | Crop Rotation | 3 | +4% food |
+| Economy | Royal Ledgers | 5 | +4% gold |
+| Economy | Great Granaries | 7 | +5% storage |
+| Military | Drill Yards | 1 | Soldiers train 5% faster |
+| Military | Field Rations | 2 | Soldiers eat 4% less |
+| Military | Siegecraft | 3 | Siege tools are built 6% faster |
+| Military | Weaponsmiths | 5 | +2% attack at the walls and in the courtyard |
+| Military | Forced March | 7 | Armies march 4% faster |
+| Defence | Masonry | 1 | +3% wall strength |
+| Defence | Militia Drill | 2 | +2% defence on the walls and in the courtyard |
+| Defence | Hidden Cellars | 3 | 4% of your storage, of each resource, can't be plundered |
+| Defence | Infirmary | 5 | 5% of the defenders who fall come back after the battle |
+| Defence | Murder Holes | 7 | One more defence tool on each wall |
+
+Attack research rides with every army you send, with or without a
+commander, and adds to the commander's gear; defence research adds to your
+castellan's. Research belongs to your main castle (an outpost has none). The
+numbers live in `research` in `data/buildings.json`; the rules are in
+`CastleState` (`scripts/economy/castle_state.gd`), the same as
+`server/rules/castle_state.ts`, and the window is
+`scripts/ui/research_panel.gd`. Online, the orders are `research` and
+`cancel_research`.
+
 ## Commanders and gear
 
 Press **H** (or the **Commanders** button on the map) for the commanders
@@ -809,6 +846,7 @@ How the parts work:
 - [x] Quests and daily tasks
 - [x] Siege workshop: attack and defence tools
 - [x] Commanders and gear
+- [x] Academy and research tree
 
 ## Known limitations
 

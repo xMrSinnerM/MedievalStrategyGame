@@ -464,7 +464,7 @@ func home_position() -> Vector2:
 
 
 func march_time_to(camp: BaronCamp) -> float:
-	return baron_rules.march_time(home_position().distance_to(camp.position))
+	return baron_rules.march_time(home_position().distance_to(camp.position)) * player_castle.march_factor()
 
 
 func check_attack(camp_id: String, army: Dictionary, waves: Array = [], tools := {}, commander := 0) -> String:
@@ -526,10 +526,12 @@ func send_attack(camp_id: String, army: Dictionary, waves: Array = [], tools := 
 		march["tools"] = kit
 		order["tools"] = kit
 	var lead: Variant = gear_rules.check_lead(player_castle, commander, t)
+	# A lead with id 0 is research alone, without a commander.
 	if lead is Dictionary:
-		gear_rules.commander(player_castle, lead.id).away_until = float(march.back)
 		march["lead"] = lead
-		order["commander"] = int(lead.id)
+		if int(lead.id) > 0:
+			gear_rules.commander(player_castle, lead.id).away_until = float(march.back)
+			order["commander"] = int(lead.id)
 	marches.append(march)
 	_next_march += 1
 	if online:
@@ -599,7 +601,7 @@ func _fight_camp(m: Dictionary) -> void:
 	if result.winner == "a":
 		player_castle.stats.barons = int(player_castle.stats.barons) + 1
 	var led := {}
-	if not lead.is_empty():
+	if int(lead.get("id", 0)) > 0:
 		var xp: int = gear_rules.xp_win_per_level * int(result.level) if result.winner == "a" else gear_rules.xp_loss
 		led = gear_rules.add_xp(player_castle, int(lead.id), xp)
 	var item := gear_rules.roll_drop(int(result.level), seed_value + DROP_SEED) if result.winner == "a" else {}
@@ -1094,7 +1096,7 @@ func other_position(player_name: String) -> Vector2:
 
 
 func march_time_to_player(player_name: String) -> float:
-	return baron_rules.march_time(home_position().distance_to(other_position(player_name)))
+	return baron_rules.march_time(home_position().distance_to(other_position(player_name))) * player_castle.march_factor()
 
 
 func is_protected() -> bool:
@@ -1645,7 +1647,7 @@ func village_peace_until(id: String) -> float:
 
 
 func village_march_time(id: String) -> float:
-	return baron_rules.march_time(home_position().distance_to(village_position(id)))
+	return baron_rules.march_time(home_position().distance_to(village_position(id))) * player_castle.march_factor()
 
 
 func check_village_attack(id: String, army: Dictionary, waves: Array = [], tools := {}, commander := 0) -> String:
@@ -1717,7 +1719,7 @@ func send_village_attack(id: String, army: Dictionary, waves: Array = [], tools 
 	if not kit.is_empty():
 		player_castle.use_tools(kit)
 	var lead: Variant = gear_rules.check_lead(player_castle, commander, t)
-	if lead is Dictionary:
+	if lead is Dictionary and int(lead.id) > 0:
 		gear_rules.commander(player_castle, lead.id).away_until = t + 2.0 * travel
 	if online:
 		var order := {"action": "attack_village", "village": id, "army": sent}
@@ -1725,7 +1727,7 @@ func send_village_attack(id: String, army: Dictionary, waves: Array = [], tools 
 			order["waves"] = waves
 		if not kit.is_empty():
 			order["tools"] = kit
-		if lead is Dictionary:
+		if lead is Dictionary and int(lead.id) > 0:
 			order["commander"] = int(lead.id)
 		if String(village_state(id).get("owner", "")) != "":
 			protected_until = 0.0
@@ -1770,7 +1772,7 @@ func _fight_village(m: Dictionary) -> void:
 		_apply_capital_boost()
 		villages_changed.emit()
 	var led := {}
-	if not lead.is_empty():
+	if int(lead.get("id", 0)) > 0:
 		led = gear_rules.add_xp(player_castle, int(lead.id), gear_rules.xp_win_per_level * int(info.level) if won else gear_rules.xp_loss)
 	attack_resolved.emit({
 		"player": "a", "village": true, "name": info.name, "other": "", "place": info.name,

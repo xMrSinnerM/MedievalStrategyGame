@@ -147,7 +147,8 @@ export function resolveVillageRaid(rules: Rules, info: VillageInfo, state: Villa
     next = { ...state, guard: f.guardLeft, paid_at: won ? at : state.paid_at };
   }
   const gear = rules.gear;
-  const lead = raid.lead
+  // A lead with id 0 is research alone, without a commander: no xp to give.
+  const lead = raid.lead && raid.lead.id > 0
     ? { ...raid.lead, xp: won ? (held ? gear.xpPlayerWin : gear.xpWinPerLevel * info.level) : gear.xpLoss }
     : undefined;
   const fight = {

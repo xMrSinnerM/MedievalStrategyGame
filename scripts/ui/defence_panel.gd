@@ -198,7 +198,7 @@ func _show_tools(group: Dictionary) -> void:
 func _update_tools() -> void:
 	var castle: CastleState = hud.view.castle
 	var rules := castle.rules
-	var slots := rules.tool_slots(castle.wall_level())
+	var slots := castle.defence_slots()
 	var editable: bool = hud.view.editable
 	var plan := tool_plan()
 	for tool: String in _spins:

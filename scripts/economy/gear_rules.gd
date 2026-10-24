@@ -127,11 +127,19 @@ func effects(gear: Dictionary, level := 1) -> Dictionary:
 
 
 func castellan_effects(castle: CastleState) -> Dictionary:
-	return effects(castle.armoury.castellan)
+	## The castellan's gear plus the castle's defence research.
+	return with_research(effects(castle.armoury.castellan), castle.research_effects("defence"))
 
 
 func commander_effects(commander: Dictionary) -> Dictionary:
 	return effects(commander.gear, int(commander.level))
+
+
+static func with_research(fx: Dictionary, research: Dictionary) -> Dictionary:
+	## Gear effects with research's added on top.
+	for stat: String in research:
+		fx[stat] = float(fx.get(stat, 0.0)) + float(research[stat])
+	return fx
 
 
 func commander(castle: CastleState, id: Variant) -> Dictionary:
@@ -145,16 +153,18 @@ func commander(castle: CastleState, id: Variant) -> Dictionary:
 
 
 func check_lead(castle: CastleState, id: Variant, now: float) -> Variant:
-	## The lead for an army ({id, name, fx}), null for no commander (`id` 0
-	## or null), or why not (a String).
+	## The lead for an army ({id, name, fx}): its commander's gear and level
+	## plus the castle's attack research. Id 0 is no commander but research;
+	## null is neither (`id` 0 or null, nothing researched); a String is why not.
+	var research := castle.research_effects("attack")
 	if id == null or ((id is int or id is float) and id == 0):
-		return null
+		return null if research.is_empty() else {"id": 0, "name": "", "fx": research}
 	var c := commander(castle, id)
 	if c.is_empty():
 		return "No such commander."
 	if float(c.away_until) > now:
 		return "%s is still away with an army." % c.name
-	return {"id": int(c.id), "name": String(c.name), "fx": commander_effects(c)}
+	return {"id": int(c.id), "name": String(c.name), "fx": with_research(commander_effects(c), research)}
 
 
 func add_xp(castle: CastleState, id: int, xp: int) -> Dictionary:

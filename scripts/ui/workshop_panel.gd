@@ -51,7 +51,7 @@ func refresh() -> void:
 		else:
 			row.info.text = "%s (%s), %d in store\n%s" % [rules.tool_name(tool), side, int(castle.tools.get(tool, 0)),
 				String(rules.tools[tool].get("description", ""))]
-			row.cost.text = "%s, %s each" % [hud._cost_text(rules.tool_cost(tool)), view.format_time(rules.tool_time(tool, castle.workshop_level()))]
+			row.cost.text = "%s, %s each" % [hud._cost_text(rules.tool_cost(tool)), view.format_time(castle.tool_time(tool))]
 		row.info.modulate.a = 0.5 if locked else 1.0
 		row.line.visible = not locked
 		var can := castle.affordable_tools(tool)
@@ -68,7 +68,7 @@ func refresh() -> void:
 	_refresh_queue(castle)
 	var lines: PackedStringArray = []
 	lines.append("Attack tools: up to %d per wall in an attack (keep level %d)." % [rules.tool_slots(castle.keep_level()), castle.keep_level()])
-	lines.append("Defence tools: up to %d per wall (wall level %d), posted in the Defence screen." % [rules.tool_slots(castle.wall_level()), castle.wall_level()])
+	lines.append("Defence tools: up to %d per wall (wall level %d), posted in the Defence screen." % [castle.defence_slots(), castle.wall_level()])
 	_store.text = "\n".join(lines)
 
 

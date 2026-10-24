@@ -148,14 +148,20 @@ static func assault(attacker: CastleState, castle: CastleState, seed_value: int,
 	## Economy.capture) or "sacked" (SACK_SHARE of its stock is carried off
 	## here, up to the attacker's storage); otherwise "held". The castle's
 	## defence tools fight on its walls and are lost with any wall that falls,
-	## and `castellan` is what its castellan's gear adds (GearRules.effects()).
-	## "sacked" adds "spoils" (resource -> amount) to the result.
+	## and `castellan` is what its castellan's gear adds (GearRules.effects());
+	## the attacker's castle adds its attack research. "sacked" adds "spoils"
+	## (resource -> amount) to the result, and the castle's infirmary may send
+	## back some of its fallen ("healed", unit -> soldiers).
 	var result := siege(attacker.rules, auto_waves(attacker.field), castle.troops, castle.layout, seed_value, wall_bonus(castle),
-			{"b": castle.defence_tools, "lead_b": castellan})
+			{"b": castle.defence_tools, "lead_a": attacker.research_effects("attack"), "lead_b": castellan})
 	if result.has("tools"):
 		castle.lose_defence_tools(result.tools.lost)
 	attacker.field = survivors(result.a)
+	var before := castle.troops
 	castle.troops = survivors(result.b)
+	var healed := castle.heal(before)
+	if not healed.is_empty():
+		result["healed"] = healed
 	var won: bool = result.winner == "a"
 	var winner := attacker if won else castle
 	result["loot"] = _plunder(winner, lost_count(result.b if won else result.a) * LOOT_PER_KILL)
@@ -167,8 +173,9 @@ static func assault(attacker: CastleState, castle: CastleState, seed_value: int,
 		result["outcome"] = "sacked"
 		var spoils := {}
 		var room := attacker.storage_capacity()
+		var safe := castle.hidden()
 		for r: String in castle.resources:
-			var take := minf(castle.resources[r] * SACK_SHARE, maxf(room - attacker.resources.get(r, 0.0), 0.0))
+			var take := minf(maxf(castle.resources[r] - safe, 0.0) * SACK_SHARE, maxf(room - attacker.resources.get(r, 0.0), 0.0))
 			castle.resources[r] -= take
 			attacker.resources[r] = attacker.resources.get(r, 0.0) + take
 			spoils[r] = int(take)

@@ -17,6 +17,8 @@
 // POST { "action": "cancel_training", "index" }
 // POST { "action": "craft", "tool", "amount" }    siege tools from the workshop (data/units.json "tools")
 // POST { "action": "cancel_crafting", "index" }
+// POST { "action": "research", "study" }         the next level of a study in your academy (data/buildings.json "research")
+// POST { "action": "cancel_research" }
 // POST { "action": "set_tools", "tools": { "left" | "front" | "right": { tool: count } } }   defence tools on your walls
 // POST { "action": "attack", "camp", "army": { unit: count } }
 // POST { "action": "attack_player", "target": "name", "army": { unit: count } }

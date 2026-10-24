@@ -190,6 +190,13 @@ const SVG := {
 		<path d="M8 30 C8 14 56 14 56 30 Z" fill="#a8743e" stroke="%s" stroke-width="3" stroke-linejoin="round"/>
 		<rect x="27" y="30" width="10" height="10" fill="#e0b048" stroke="%s" stroke-width="2"/>
 		<circle cx="20" cy="22" r="4" fill="#f2c443"/><circle cx="44" cy="22" r="4" fill="#f2c443"/>""",
+	# An open book with a quill, for the academy's research.
+	"research": """
+		<path d="M32 16 C24 10 14 10 6 13 L6 52 C14 49 24 49 32 55 Z" fill="#ead8ae" stroke="%s" stroke-width="3" stroke-linejoin="round"/>
+		<path d="M32 16 C40 10 50 10 58 13 L58 52 C50 49 40 49 32 55 Z" fill="#f4e6c2" stroke="%s" stroke-width="3" stroke-linejoin="round"/>
+		<path d="M12 22 C18 20 23 20 27 23 M12 30 C18 28 23 28 27 31 M12 38 C18 36 23 36 27 39" stroke="#8a6a3a" stroke-width="2" fill="none" stroke-linecap="round"/>
+		<path d="M54 4 C46 12 41 22 38 34 L41 35 C45 24 50 15 58 8 Z" fill="#b5281e" stroke="%s" stroke-width="2.5" stroke-linejoin="round"/>
+		<path d="M38 34 L36 41" stroke="#2a1a0c" stroke-width="2.5" stroke-linecap="round"/>""",
 	# Check boxes: an empty bronze-rimmed box, and one with a gold tick.
 	"box": """
 		<rect x="8" y="8" width="48" height="48" rx="8" fill="#140d06" stroke="#c79a52" stroke-width="5"/>""",

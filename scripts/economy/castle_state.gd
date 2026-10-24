@@ -2,8 +2,9 @@ class_name CastleState
 extends RefCounted
 ## One castle's economy: its stock of resources, its buildings on the castle
 ## grid, the constructions under way, its garrison of soldiers, the
-## barracks' training queue and the warband its lord leads in the field
-## (which the castle still has to feed). The same class runs the player's castle and NPC
+## barracks' training queue, the warband its lord leads in the field
+## (which the castle still has to feed) and what its academy has researched.
+## The same class runs the player's castle and NPC
 ## castles; only who gives the orders differs.
 ##
 ## Time is passed in explicitly (Unix seconds) so the castle can catch up on
@@ -46,6 +47,10 @@ var boost := {}
 ## An outpost's building limits ({"types": [allowed types], "keep": highest
 ## keep level}); empty for a normal castle (OutpostRules).
 var limits := {}
+## Studies researched in the academy (study -> level) and the one under way
+## ({study, target, finish}, or empty), see "research" in buildings.json.
+var research := {}
+var studying := {}
 
 var _next_id := 1
 
@@ -131,6 +136,10 @@ func production_per_hour() -> Dictionary:
 	for r: String in boost:
 		if out.has(r):
 			out[r] *= 1.0 + float(boost[r])
+	for r: String in out:
+		var more := research_bonus(r)
+		if more != 0.0:
+			out[r] *= 1.0 + more
 	return out
 
 
@@ -138,10 +147,15 @@ func upkeep_per_hour() -> float:
 	## Food the garrison eats per hour.
 	var total := 0.0
 	for unit: String in troops:
-		total += troops[unit] * rules.unit_upkeep(unit)
+		total += troops[unit] * unit_upkeep(unit)
 	for unit: String in field:
-		total += field[unit] * rules.unit_upkeep(unit)
+		total += field[unit] * unit_upkeep(unit)
 	return total
+
+
+func unit_upkeep(unit: String) -> float:
+	## Food one soldier eats per hour here, after Field Rations.
+	return rules.unit_upkeep(unit) * (1.0 + research_bonus("upkeep"))
 
 
 func net_per_hour() -> Dictionary:
@@ -263,7 +277,13 @@ func affordable_tools(tool: String) -> int:
 
 func check_defence_tools(group: Variant) -> String:
 	## Why these defence tools can't stand on the walls ("" if they can).
-	return Battle.check_tools(rules, group, "defence", rules.tool_slots(wall_level()), tools)
+	return Battle.check_tools(rules, group, "defence", defence_slots(), tools)
+
+
+func defence_slots() -> int:
+	## Defence tools that fit on each wall: by wall level, plus Murder Holes.
+	var n := rules.tool_slots(wall_level())
+	return n + int(research_bonus("defence_slots")) if n > 0 else 0
 
 
 func storage_capacity() -> float:
@@ -271,7 +291,7 @@ func storage_capacity() -> float:
 	var total := 0.0
 	for b in buildings:
 		total += rules.storage(b.type, b.level)
-	return total
+	return total * (1.0 + research_bonus("storage"))
 
 
 func defense() -> float:
@@ -298,6 +318,8 @@ func check_build(type: String) -> String:
 		return "An outpost can't have one of these"
 	if count(type) >= rules.max_count(type, keep_level()):
 		return "The castle already has one" if rules.is_unique(type) else "Upgrade the keep to build more of these"
+	if keep_level() < rules.required_keep(type):
+		return "Needs keep level %d" % rules.required_keep(type)
 	return _check_start_work(rules.cost(type, 1))
 
 
@@ -346,6 +368,130 @@ func time_left(building_id: int, now: float) -> float:
 	return maxf(b.finish - now, 0.0) if not b.is_empty() and b.target > 0 else 0.0
 
 
+func unit_time(unit: String) -> float:
+	## Seconds to train one soldier here: by barracks level, then Drill Yards.
+	return _shorter(rules.unit_time(unit, barracks_level()), research_bonus("recruit_time"))
+
+
+func tool_time(tool: String) -> float:
+	## Seconds to build one siege tool here: by workshop level, then Siegecraft.
+	return _shorter(rules.tool_time(tool, workshop_level()), research_bonus("craft_time"))
+
+
+# --- Research ------------------------------------------------------------------
+
+func academy_level() -> int:
+	for b in buildings:
+		if b.type == "academy":
+			return b.level
+	return 0
+
+
+func study_level(study: String) -> int:
+	return int(research.get(study, 0))
+
+
+func research_bonus(effect: String) -> float:
+	## What every study researched adds up to for one effect (see "research"
+	## in buildings.json): 0.12 for 12% more, -0.1 for 10% less.
+	if research.is_empty():
+		return 0.0
+	var total := 0.0
+	for study: String in research:
+		var per: Variant = rules.study_effects(study).get(effect)
+		if per != null:
+			total += float(per) * int(research[study])
+	return total
+
+
+func research_effects(side: String) -> Dictionary:
+	## The battle effects research gives (stat -> share, like GearRules.effects()):
+	## "attack" for your armies, "defence" for your castle.
+	var out := {}
+	for stat: String in (["wall_attack", "yard_attack"] if side == "attack" else ["wall_defence", "yard_defence", "wall_bonus"]):
+		var n := research_bonus(stat)
+		if n > 0.0:
+			out[stat] = n
+	return out
+
+
+func march_factor() -> float:
+	## Multiplier on how long your armies march (Forced March).
+	return maxf(1.0 + research_bonus("march_time"), 0.1)
+
+
+func hidden() -> float:
+	## How much of each resource Hidden Cellars keep safe from plunder.
+	return storage_capacity() * research_bonus("hidden")
+
+
+func heal(before: Dictionary) -> Dictionary:
+	## After a battle at the castle: the Infirmary sends back a share of the
+	## garrison that fell (`before` is the garrison before it). Returns unit -> healed.
+	var share := research_bonus("heal")
+	var out := {}
+	if share <= 0.0:
+		return out
+	for unit: String in before:
+		var n := int(floor((int(before[unit]) - int(troops.get(unit, 0))) * share))
+		if n > 0:
+			troops[unit] = int(troops.get(unit, 0)) + n
+			out[unit] = n
+	return out
+
+
+func check_research(study: String) -> String:
+	## Why the academy can't start on this study's next level, or "" if it can.
+	if not rules.has_study(study):
+		return "Unknown study"
+	if academy_level() <= 0:
+		return "Build an academy first"
+	var level := study_level(study)
+	if level >= rules.study_max_level(study):
+		return "Fully researched"
+	if academy_level() < rules.study_academy_level(study):
+		return "Needs academy level %d" % rules.study_academy_level(study)
+	var needs := rules.study_requires(study)
+	for other: String in needs:
+		if study_level(other) < int(needs[other]):
+			return "Needs %s level %d" % [rules.study_name(other), int(needs[other])]
+	if not studying.is_empty():
+		return "The academy is already researching"
+	if not can_afford(rules.study_cost(study, level + 1)):
+		return "Not enough resources"
+	return ""
+
+
+func research_time(study: String) -> float:
+	## Seconds the next level of this study takes in this academy.
+	return rules.study_time(study, study_level(study) + 1, academy_level())
+
+
+func research_left(now: float) -> float:
+	return maxf(float(studying.finish) - now, 0.0) if not studying.is_empty() else 0.0
+
+
+func start_research(study: String, now: float) -> bool:
+	## Pays for the next level of a study and starts it.
+	advance_to(now)
+	if check_research(study) != "":
+		return false
+	var target := study_level(study) + 1
+	_pay(rules.study_cost(study, target))
+	studying = {"study": study, "target": target, "finish": now + research_time(study)}
+	return true
+
+
+func cancel_research(now: float) -> bool:
+	## Stops the study under way and refunds part of its cost.
+	advance_to(now)
+	if studying.is_empty():
+		return false
+	_refund(rules.study_cost(studying.study, int(studying.target)))
+	studying = {}
+	return true
+
+
 # --- Orders ------------------------------------------------------------------
 
 func place(type: String, cell: Vector2i, now: float) -> int:
@@ -392,9 +538,9 @@ func recruit(unit: String, amount: int, now: float) -> bool:
 	if check_recruit(unit, amount) != "":
 		return false
 	_pay(rules.unit_cost(unit, amount))
-	var unit_time := rules.unit_time(unit, barracks_level())
-	training.append({"unit": unit, "remaining": amount, "unit_time": unit_time,
-		"next": now + unit_time if training.is_empty() else 0.0})
+	var each := unit_time(unit)
+	training.append({"unit": unit, "remaining": amount, "unit_time": each,
+		"next": now + each if training.is_empty() else 0.0})
 	return true
 
 
@@ -417,9 +563,9 @@ func craft(tool: String, amount: int, now: float) -> bool:
 	if check_craft(tool, amount) != "":
 		return false
 	_pay(rules.tool_cost(tool, amount))
-	var unit_time := rules.tool_time(tool, workshop_level())
-	crafting.append({"tool": tool, "remaining": amount, "unit_time": unit_time,
-		"next": now + unit_time if crafting.is_empty() else 0.0})
+	var each := tool_time(tool)
+	crafting.append({"tool": tool, "remaining": amount, "unit_time": each,
+		"next": now + each if crafting.is_empty() else 0.0})
 	return true
 
 
@@ -514,14 +660,22 @@ func advance_to(now: float) -> void:
 				next = b
 		var soldier_due: bool = not training.is_empty() and training[0].next <= now \
 			and (next.is_empty() or training[0].next < next.finish)
+		# A study finishes first if it is done before the soldier or building.
+		var study_due: bool = not studying.is_empty() and float(studying.finish) <= now \
+			and (float(studying.finish) < training[0].next if soldier_due else (next.is_empty() or float(studying.finish) < next.finish))
 		var until: float = now
-		if soldier_due:
+		if study_due:
+			until = float(studying.finish)
+		elif soldier_due:
 			until = training[0].next
 		elif not next.is_empty():
 			until = next.finish
 		_produce(until - last_update)
 		last_update = maxf(last_update, until)
-		if soldier_due:
+		if study_due:
+			research[studying.study] = int(studying.target)
+			studying = {}
+		elif soldier_due:
 			_finish_soldier()
 		elif not next.is_empty():
 			next.level = next.target
@@ -593,7 +747,7 @@ func _desert() -> void:
 		var most := 0.0
 		for group: Dictionary in [troops, field]:
 			for unit: String in group:
-				var eats: float = group[unit] * rules.unit_upkeep(unit)
+				var eats: float = group[unit] * unit_upkeep(unit)
 				if group[unit] > 0 and eats > most:
 					most = eats
 					worst = unit
@@ -601,7 +755,7 @@ func _desert() -> void:
 		if worst == "":
 			hunger = 0.0
 			return
-		var upkeep := rules.unit_upkeep(worst)
+		var upkeep := unit_upkeep(worst)
 		var leaving := mini(int(hunger / upkeep), pool[worst])
 		if leaving <= 0:
 			return
@@ -632,6 +786,8 @@ func copy_from(other: CastleState) -> void:
 	armoury = other.armoury
 	boost = other.boost
 	limits = other.limits
+	research = other.research
+	studying = other.studying
 	_next_id = other._next_id
 
 
@@ -654,6 +810,7 @@ func to_dict() -> Dictionary:
 		"tools": tools.duplicate(), "crafting": crafting.duplicate(true), "defence_tools": defence_tools.duplicate(true),
 		"armoury": armoury.duplicate(true),
 		"boost": boost.duplicate(), "limits": limits.duplicate(true) if not limits.is_empty() else null,
+		"research": research.duplicate(), "studying": studying.duplicate() if not studying.is_empty() else null,
 	}
 
 
@@ -741,10 +898,25 @@ static func from_dict(p_rules: BuildingRules, data: Dictionary) -> CastleState:
 		for t in lim.get("types", []):
 			types.append(String(t))
 		castle.limits = {"types": types, "keep": int(lim.get("keep", 1))}
+	# Castles saved before the academy have researched nothing.
+	var known: Variant = data.get("research", {})
+	if known is Dictionary:
+		for study: String in known:
+			if p_rules.has_study(study) and int(known[study]) > 0:
+				castle.research[study] = mini(int(known[study]), p_rules.study_max_level(study))
+	var st_now: Variant = data.get("studying")
+	if st_now is Dictionary and p_rules.has_study(String(st_now.get("study", ""))):
+		castle.studying = {"study": String(st_now.study), "target": int(st_now.get("target", 1)),
+			"finish": float(st_now.get("finish", 0.0))}
 	return castle
 
 
 # --- Internals ---------------------------------------------------------------
+
+func _shorter(time: float, change: float) -> float:
+	## A time after research (change -0.1 for 10% faster), whole seconds, at least one.
+	return time if change == 0.0 else maxf(roundf(time * (1.0 + change)), 1.0)
+
 
 func _check_start_work(cost: Dictionary) -> String:
 	if free_builders() <= 0:

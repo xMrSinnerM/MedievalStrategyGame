@@ -76,6 +76,9 @@ func _initialize() -> void:
 		})
 	for s in ["baron_0", "baron_7", "baron_29", "", "Ölberg", "a long camp id", "village_0", "village_35"]:
 		data.hashes[s] = hash(s)
+	# Last, so the random numbers above stay as they were before the academy.
+	for run in 3:
+		data.castles.append(research_run(run))
 	var file := FileAccess.open(OUT, FileAccess.WRITE)
 	file.store_string(JSON.stringify(data, "", false, true))
 	file.close()
@@ -182,6 +185,92 @@ func castle_run(run: int) -> Dictionary:
 				step.daily.append(quest_book.daily_progress(castle, k))
 			step["coffer"] = quest_book.coffer_reward(int(castle.quests.keep), quest_book.coffer_streak(castle))
 			step["goals"] = quest_book.story.map(func(g: Dictionary) -> Array: return quest_book.progress(castle, g.goal))
+		step["state"] = castle.to_dict()
+		steps.append(step)
+	return {"id": castle.id, "name": castle.castle_name, "t0": T0, "steps": steps}
+
+
+func research_run(run: int) -> Dictionary:
+	## A grown castle with an academy researching at random, while it trains,
+	## builds tools and is stormed now and then, over a few weeks of game time.
+	var castle := CastleState.create_new(rules, "r%d" % run, "Scholars %d" % run, "player", T0)
+	castle.get_building(1).level = 3 + run
+	castle.get_building(2).level = 3
+	castle._add_building("academy", 0 if run == 0 else 2 + run, Vector2i(2, 14))
+	castle._add_building("barracks", 4, Vector2i(14, 14))
+	castle._add_building("workshop", 3, Vector2i(18, 18))
+	castle._add_building("storehouse", 6, Vector2i(6, 18))
+	for r: String in rules.resources:
+		castle.resources[r] = 20000.0
+	castle.troops = {"spearman": 300, "archer": 120}
+	if run > 0:
+		# Already well read, so every effect is tried.
+		for study: String in rules.studies:
+			if rng.randi() % 4 != 0:
+				castle.research[study] = rng.randi_range(1, rules.study_max_level(study))
+	var t := T0
+	var steps: Array = [{"op": "load", "data": castle.to_dict(), "state": castle.to_dict()}]
+	var study_ids := rules.studies.keys()
+	var units := rules.units.keys()
+	var tool_ids := rules.tools.keys()
+	for i in 260:
+		var step := {}
+		var roll := rng.randi() % 100
+		if roll < 25:
+			t += float(rng.randi_range(1, 30000))
+			castle.advance_to(t)
+			step = {"op": "advance", "t": t}
+		elif roll < 50:
+			var study: String = study_ids[rng.randi() % study_ids.size()] if rng.randi() % 20 != 0 else "nonsense"
+			step = {"op": "research", "t": t, "study": study, "result": castle.start_research(study, t)}
+		elif roll < 54:
+			step = {"op": "cancel_research", "t": t, "result": castle.cancel_research(t)}
+		elif roll < 60:
+			var id := rng.randi_range(1, castle._next_id)
+			step = {"op": "upgrade", "t": t, "id": id, "result": castle.upgrade(id, t)}
+		elif roll < 66:
+			var unit: String = units[rng.randi() % units.size()]
+			var amount := rng.randi_range(1, 30)
+			step = {"op": "recruit", "t": t, "unit": unit, "amount": amount, "result": castle.recruit(unit, amount, t)}
+		elif roll < 70:
+			var tool: String = tool_ids[rng.randi() % tool_ids.size()]
+			var amount := rng.randi_range(1, 8)
+			step = {"op": "craft", "t": t, "tool": tool, "amount": amount, "result": castle.craft(tool, amount, t)}
+		elif roll < 74:
+			var gift: String = tool_ids[rng.randi() % tool_ids.size()]
+			var n := rng.randi_range(0, 6)
+			castle.tools[gift] = int(castle.tools.get(gift, 0)) + n
+			var posted := random_tools(rng.randi_range(0, 4), "defence")
+			step = {"op": "set_tools", "gift": gift, "n": n, "tools": posted, "result": castle.set_defence_tools(posted)}
+		elif roll < 80:
+			var r: String = rules.resources[rng.randi() % rules.resources.size()]
+			var amount := float(rng.randi_range(1000, 40000))
+			castle.resources[r] += amount
+			step = {"op": "grant", "resource": r, "amount": amount}
+		elif roll < 85:
+			# The garrison loses soldiers in a battle; the infirmary sends some back.
+			var before := castle.troops.duplicate()
+			var lost := {}
+			for unit: String in castle.troops:
+				lost[unit] = rng.randi_range(0, int(castle.troops[unit]))
+				castle.troops[unit] = int(castle.troops[unit]) - int(lost[unit])
+			step = {"op": "heal", "lost": lost, "healed": castle.heal(before)}
+		else:
+			step = {"op": "research_checks", "t": t, "research": {}, "build": {}, "recruit": {}, "craft": {}}
+			for study: String in study_ids:
+				step.research[study] = castle.check_research(study)
+				step[study] = {"time": castle.research_time(study) if castle.study_level(study) < rules.study_max_level(study) else 0.0,
+					"cost": rules.study_cost(study, castle.study_level(study) + 1)}
+			for type: String in rules.types:
+				step.build[type] = castle.check_build(type)
+			for unit: String in units:
+				step.recruit[unit] = [castle.check_recruit(unit, 10), castle.unit_time(unit), castle.unit_upkeep(unit)]
+			for tool: String in tool_ids:
+				step.craft[tool] = [castle.check_craft(tool, 10), castle.tool_time(tool)]
+			step["numbers"] = {"slots": castle.defence_slots(), "hidden": castle.hidden(), "march": castle.march_factor(),
+				"storage": castle.storage_capacity(), "rates": castle.net_per_hour(), "left": castle.research_left(t),
+				"attack": castle.research_effects("attack"), "defence": castle.research_effects("defence"),
+				"castellan": gear.castellan_effects(castle), "lead": gear.check_lead(castle, 0, t)}
 		step["state"] = castle.to_dict()
 		steps.append(step)
 	return {"id": castle.id, "name": castle.castle_name, "t0": T0, "steps": steps}

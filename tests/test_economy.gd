@@ -43,6 +43,8 @@ func _initialize() -> void:
 	test_villages()
 	test_capitals()
 	test_fortresses()
+	test_research()
+	test_research_in_battle()
 	print("%d checks, %d failed" % [checks, failures])
 	quit(1 if failures > 0 else 0)
 
@@ -1215,6 +1217,122 @@ func test_villages() -> void:
 	eco.begin_load(1)
 	check(eco.is_my_village(info.id), "economy: villages are saved")
 	check(eco.abandon_village(info.id) == "" and not eco.is_my_village(info.id), "economy: given up")
+	eco.delete_slot(1)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://test_saves"))
+	eco.free()
+
+
+func scholar() -> CastleState:
+	## A castle with its keep at level 3, an academy and plenty in store.
+	var c := fresh()
+	c.get_building(1).level = 3
+	c._add_building("academy", 1, Vector2i(2, 14))
+	c._add_building("storehouse", 6, Vector2i(6, 18))
+	for r: String in rules.resources:
+		c.resources[r] = 9000.0
+	return c
+
+
+func test_research() -> void:
+	var c := fresh()
+	check(c.check_build("academy") == "Needs keep level 3", "the academy needs a keep at level 3")
+	c = scholar()
+	check(c.check_research("forestry") == "", "the first study can start")
+	check(c.check_research("stonecutting") == "Needs academy level 2", "later ones need a bigger academy")
+	check(c.check_research("magic") == "Unknown study", "unknown studies are refused")
+	var wood: float = c.production_per_hour().wood
+	var cost := rules.study_cost("forestry", 1)
+	check(c.start_research("forestry", T0), "forestry starts")
+	near(c.resources.stone, 9000.0 - cost.stone, "and is paid for")
+	check(c.check_research("masonry") == "The academy is already researching", "one study at a time")
+	var finish: float = c.studying.finish
+	near(finish - T0, rules.study_time("forestry", 1, 1), "it takes its time")
+	# Catching up over the moment it finishes: the old rate until then, the new one after.
+	var before: float = c.resources.wood
+	c.advance_to(finish + 3600.0)
+	check(c.study_level("forestry") == 1 and c.studying.is_empty(), "the study is done")
+	near(c.production_per_hour().wood, wood * 1.04, "woodcutters cut 4% more")
+	near(c.resources.wood, before + wood * (finish - T0) / 3600.0 + wood * 1.04, "and from the moment it finished", 0.1)
+	# Cancelling refunds part of the cost.
+	c.get_building(c.buildings.size()).level = 1
+	var academy := 0
+	for b in c.buildings:
+		if b.type == "academy":
+			academy = b.id
+	c.get_building(academy).level = 2
+	check(c.check_research("stonecutting") == "Needs Forestry level 2", "studies need the one before")
+	check(c.start_research("forestry", c.last_update), "forestry level 2 starts")
+	near(rules.study_time("forestry", 2, 2), roundf(rules.study_time("forestry", 2, 1) * 0.94), "a level 2 academy is quicker")
+	c.resources.stone = 1000.0
+	var stone: float = c.resources.stone
+	check(c.cancel_research(c.last_update), "and is cancelled")
+	near(c.resources.stone, stone + rules.study_cost("forestry", 2).stone * CastleState.CANCEL_REFUND, "75% back")
+	check(not c.cancel_research(c.last_update), "nothing left to cancel")
+	# Other effects.
+	var plain := scholar()
+	c = scholar()
+	c.research = {"drill_yards": 5, "field_rations": 5, "siegecraft": 5, "granaries": 5, "murder_holes": 2, "forced_march": 5}
+	c._add_building("barracks", 1, Vector2i(14, 14))
+	plain._add_building("barracks", 1, Vector2i(14, 14))
+	near(c.unit_time("spearman"), roundf(plain.unit_time("spearman") * 0.75), "Drill Yards: a quarter faster")
+	near(c.unit_upkeep("spearman"), plain.unit_upkeep("spearman") * 0.8, "Field Rations: a fifth less food")
+	near(c.storage_capacity(), plain.storage_capacity() * 1.25, "Great Granaries: a quarter more room")
+	check(c.defence_slots() == plain.defence_slots() + 2, "Murder Holes: two more tools per wall")
+	near(c.march_factor(), 0.8, "Forced March: a fifth quicker")
+	# Saved and loaded.
+	c.start_research("forestry", T0)
+	var back := CastleState.from_dict(rules, c.to_dict())
+	check(back.research == c.research and back.studying == c.studying, "research survives a save")
+	check(CastleState.from_dict(rules, fresh().to_dict()).research.is_empty(), "old saves have researched nothing")
+
+
+func test_research_in_battle() -> void:
+	var gear := GearRules.load_default()
+	var c := scholar()
+	check(gear.check_lead(c, 0, T0) == null, "nothing researched, no commander: no lead")
+	c.research = {"weaponsmiths": 2, "masonry": 1}
+	var lead: Variant = gear.check_lead(c, 0, T0)
+	check(lead is Dictionary and int(lead.id) == 0 and is_equal_approx(float(lead.fx.wall_attack), 0.04), "research alone leads an army")
+	check(is_equal_approx(float(gear.castellan_effects(c).wall_bonus), 0.03), "and joins the castellan")
+	# The infirmary and the cellars when the castle is sacked.
+	var lord := fresh()
+	lord.field = {"swordsman": 200}
+	lord.resources.stone = 0.0
+	lord._add_building("storehouse", 10, Vector2i(18, 18))
+	var home := scholar()
+	home.id = "player_castle"
+	home.troops = {"spearman": 40}
+	var read := scholar()
+	read.id = "player_castle"
+	read.troops = {"spearman": 40}
+	read.research = {"cellars": 5, "infirmary": 5}
+	var lord2 := fresh()
+	lord2.field = {"swordsman": 200}
+	lord2.resources.stone = 0.0
+	lord2._add_building("storehouse", 10, Vector2i(18, 18))
+	var a := Battle.assault(lord, home, 9)
+	var b := Battle.assault(lord2, read, 9)
+	check(a.outcome == "sacked" and b.outcome == "sacked", "both castles are sacked")
+	check(lord2.resources.stone < lord.resources.stone, "hidden cellars keep some stone safe")
+	near(read.resources.stone, 9000.0 - (9000.0 - read.hidden()) * Battle.SACK_SHARE, "only what isn't hidden is taken", 1.0)
+	check(not a.has("healed") and int(b.healed.get("spearman", 0)) > 0, "the infirmary sends some of the fallen back")
+	check(read.troops.get("spearman", 0) == home.troops.get("spearman", 0) + int(b.healed.spearman), "into the garrison")
+	# Offline: an army without a commander still carries the research.
+	var eco = load("res://scripts/core/economy.gd").new()
+	eco.save_dir = "user://test_saves"
+	eco.begin_new(1)
+	eco.castle_positions[eco.MAIN_CASTLE] = Vector2(0, 0)
+	eco.sync_barons([{"id": "far", "name": "Far", "position": [600, 0]}])
+	eco.player_castle.troops = {"spearman": 300}
+	eco.player_castle.research = {"weaponsmiths": 1, "forced_march": 5}
+	var reports: Array = []
+	eco.attack_resolved.connect(func(r: Dictionary) -> void: reports.append(r))
+	check(eco.send_attack("far", {"spearman": 300}) == "", "an army sets out")
+	var m: Dictionary = eco.marches[0]
+	near(m.arrive - m.depart, 80.0, "Forced March: 100 seconds become 80")
+	check(int(m.lead.id) == 0 and m.lead.fx.has("wall_attack"), "with the research")
+	eco.advance_marches(m.arrive + 1.0)
+	check(reports.size() == 1 and reports[0].lead.is_empty(), "and no commander earns xp")
 	eco.delete_slot(1)
 	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://test_saves"))
 	eco.free()
