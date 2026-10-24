@@ -76,7 +76,7 @@ export interface Army {
 export function marchTimeTo(world: Army, rules: BaronRules, camp: CampData): number {
   const dx = camp.position[0] - world.home[0];
   const dy = camp.position[1] - world.home[1];
-  return rules.marchTime(Math.sqrt(dx * dx + dy * dy));
+  return rules.marchTime(Math.sqrt(dx * dx + dy * dy)) * world.castle.marchFactor();
 }
 
 export function checkAttack(world: Army, campId: string, army: Dict, now: number): string {
@@ -118,7 +118,8 @@ export function sendAttack(world: Army, rules: BaronRules, campId: string, army:
     }
   }
   const travel = marchTimeTo(world, rules, world.camps.find((c) => c.id === campId)!);
-  if (lead) world.gear!.commander(castle, lead.id)!.away_until = now + 2 * travel;
+  // A lead with id 0 is research alone, without a commander.
+  if (lead && lead.id > 0) world.gear!.commander(castle, lead.id)!.away_until = now + 2 * travel;
   world.marches.push({ id: world.nextMarch, camp: campId, army: sent, depart: now, arrive: now + travel,
     back: now + 2 * travel, state: "out", survivors: {}, loot: {}, ...(waves ? { waves } : {}),
     ...(Object.keys(kit).length > 0 ? { tools: kit } : {}), ...(lead ? { lead } : {}) });
@@ -177,7 +178,7 @@ function fightCamp(world: Army, rules: BaronRules, m: March): Report {
     leveled: result.leveled, new_level: camp.level, defeats: camp.defeats, needed: rules.forCamp(camp).defeatsNeeded(camp.level) };
   const gear = world.gear;
   if (gear) {
-    if (m.lead) {
+    if (m.lead && m.lead.id > 0) {
       const xp = result.winner === "a" ? gear.xpWinPerLevel * result.level : gear.xpLoss;
       const lead = gear.addXp(world.castle, m.lead.id, xp);
       if (lead) out.lead = lead;

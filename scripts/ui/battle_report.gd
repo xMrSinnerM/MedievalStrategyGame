@@ -426,7 +426,7 @@ static func gear_line(report: Dictionary) -> String:
 	## The commander who led the army and what they earned, and gear the camp dropped.
 	var lines: PackedStringArray = []
 	var lead: Variant = report.get("lead")
-	if lead is Dictionary and not lead.is_empty():
+	if lead is Dictionary and String(lead.get("name", "")) != "":
 		var xp := int(lead.get("xp", 0))
 		if report.get("raid", false):
 			lines.append("%s led the army and earns %d xp when they are home." % [lead.name, xp])

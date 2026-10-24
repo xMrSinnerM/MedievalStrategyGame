@@ -124,6 +124,132 @@
 			"cost_growth": 1.7,
 			"time": 60,
 			"time_growth": 2.2
+		},
+		"academy": {
+			"name": "Academy",
+			"description": "Scholars research lasting improvements for your castle: more resources, stronger soldiers and tougher walls. One study at a time; higher levels unlock more and research faster.",
+			"size": [3, 3],
+			"unique": true,
+			"keep_level": 3,
+			"max_level": 10,
+			"cost": { "wood": 300, "stone": 250, "gold": 120 },
+			"cost_growth": 1.7,
+			"time": 300,
+			"time_growth": 2.2
+		}
+	},
+	"research": {
+		"comment": "Studies in the academy. Each level of a study adds its effects once more (negative ones shorten times or cut costs). A study needs the academy at academy_level and the studies in requires at those levels. Cost and time grow per level like buildings; each academy level above 1 researches faster.",
+		"cost_growth": 1.8,
+		"time_growth": 2.0,
+		"time_per_academy_level": 0.94,
+		"branches": { "economy": "Economy", "military": "Military", "defence": "Defence" },
+		"studies": {
+			"forestry": {
+				"branch": "economy", "name": "Forestry",
+				"description": "Woodsmen learn to fell and replant in turn.",
+				"max_level": 5, "academy_level": 1, "requires": {},
+				"cost": { "wood": 150, "stone": 200, "gold": 80 }, "time": 300,
+				"effects": { "wood": 0.04 }
+			},
+			"stonecutting": {
+				"branch": "economy", "name": "Stonecutting",
+				"description": "Iron wedges and better sledges for the quarrymen.",
+				"max_level": 5, "academy_level": 2, "requires": { "forestry": 2 },
+				"cost": { "wood": 400, "stone": 300, "gold": 160 }, "time": 900,
+				"effects": { "stone": 0.04 }
+			},
+			"crop_rotation": {
+				"branch": "economy", "name": "Crop Rotation",
+				"description": "Fields rest in turn and give more grain.",
+				"max_level": 5, "academy_level": 3, "requires": { "stonecutting": 2 },
+				"cost": { "wood": 800, "stone": 800, "gold": 320 }, "time": 1800,
+				"effects": { "food": 0.04 }
+			},
+			"ledgers": {
+				"branch": "economy", "name": "Royal Ledgers",
+				"description": "Clerks count every coin the markets owe you.",
+				"max_level": 5, "academy_level": 5, "requires": { "crop_rotation": 2 },
+				"cost": { "wood": 2000, "stone": 2000, "food": 1000 }, "time": 3600,
+				"effects": { "gold": 0.04 }
+			},
+			"granaries": {
+				"branch": "economy", "name": "Great Granaries",
+				"description": "Dry cellars and stout lofts hold more of everything.",
+				"max_level": 5, "academy_level": 7, "requires": { "ledgers": 2 },
+				"cost": { "wood": 4500, "stone": 4500, "gold": 1800 }, "time": 7200,
+				"effects": { "storage": 0.05 }
+			},
+			"drill_yards": {
+				"branch": "military", "name": "Drill Yards",
+				"description": "Sergeants turn recruits into soldiers sooner.",
+				"max_level": 5, "academy_level": 1, "requires": {},
+				"cost": { "wood": 200, "food": 200, "gold": 80 }, "time": 300,
+				"effects": { "recruit_time": -0.05 }
+			},
+			"field_rations": {
+				"branch": "military", "name": "Field Rations",
+				"description": "Salted meat and hard bread: your soldiers eat less.",
+				"max_level": 5, "academy_level": 2, "requires": { "drill_yards": 2 },
+				"cost": { "wood": 300, "food": 500, "gold": 160 }, "time": 900,
+				"effects": { "upkeep": -0.04 }
+			},
+			"siegecraft": {
+				"branch": "military", "name": "Siegecraft",
+				"description": "Carpenters learn to build siege tools quickly.",
+				"max_level": 5, "academy_level": 3, "requires": { "field_rations": 2 },
+				"cost": { "wood": 1000, "stone": 600, "gold": 320 }, "time": 1800,
+				"effects": { "craft_time": -0.06 }
+			},
+			"weaponsmiths": {
+				"branch": "military", "name": "Weaponsmiths",
+				"description": "Better steel: your attackers hit harder on the walls and in the courtyard.",
+				"max_level": 5, "academy_level": 5, "requires": { "siegecraft": 2 },
+				"cost": { "wood": 1500, "stone": 1500, "food": 1500, "gold": 800 }, "time": 3600,
+				"effects": { "wall_attack": 0.02, "yard_attack": 0.02 }
+			},
+			"forced_march": {
+				"branch": "military", "name": "Forced March",
+				"description": "Scouts find the shortest roads: your armies march faster.",
+				"max_level": 5, "academy_level": 7, "requires": { "weaponsmiths": 2 },
+				"cost": { "wood": 3000, "stone": 3000, "food": 4000, "gold": 1800 }, "time": 7200,
+				"effects": { "march_time": -0.04 }
+			},
+			"masonry": {
+				"branch": "defence", "name": "Masonry",
+				"description": "Thicker mortar and deeper footings make your walls stronger.",
+				"max_level": 5, "academy_level": 1, "requires": {},
+				"cost": { "wood": 150, "stone": 250, "gold": 60 }, "time": 300,
+				"effects": { "wall_bonus": 0.03 }
+			},
+			"militia": {
+				"branch": "defence", "name": "Militia Drill",
+				"description": "Your garrison drills daily and defends the walls and courtyard harder.",
+				"max_level": 5, "academy_level": 2, "requires": { "masonry": 2 },
+				"cost": { "wood": 300, "stone": 300, "food": 300, "gold": 120 }, "time": 900,
+				"effects": { "wall_defence": 0.02, "yard_defence": 0.02 }
+			},
+			"cellars": {
+				"branch": "defence", "name": "Hidden Cellars",
+				"description": "Secret stores raiders never find: part of every resource is safe from plunder.",
+				"max_level": 5, "academy_level": 3, "requires": { "militia": 2 },
+				"cost": { "wood": 900, "stone": 900, "gold": 300 }, "time": 1800,
+				"effects": { "hidden": 0.04 }
+			},
+			"infirmary": {
+				"branch": "defence", "name": "Infirmary",
+				"description": "Healers tend the wounded: some defenders who fall come back after a battle at your castle.",
+				"max_level": 5, "academy_level": 5, "requires": { "cellars": 2 },
+				"cost": { "wood": 1500, "stone": 1500, "food": 2000, "gold": 700 }, "time": 3600,
+				"effects": { "heal": 0.05 }
+			},
+			"murder_holes": {
+				"branch": "defence", "name": "Murder Holes",
+				"description": "Openings above the gates and wall walks: room for one more defence tool on every wall per level.",
+				"max_level": 3, "academy_level": 7, "requires": { "infirmary": 2 },
+				"cost": { "wood": 4000, "stone": 6000, "gold": 2000 }, "time": 7200,
+				"effects": { "defence_slots": 1 }
+			}
 		}
 	}
 }

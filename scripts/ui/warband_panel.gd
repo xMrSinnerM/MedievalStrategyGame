@@ -80,7 +80,7 @@ func refresh() -> void:
 			b.disabled = not home or (g == 0 if to_field else f == 0)
 	var eats := 0.0
 	for unit: String in castle.field:
-		eats += castle.field[unit] * castle.rules.unit_upkeep(unit)
+		eats += castle.field[unit] * castle.unit_upkeep(unit)
 	if castle.troop_count() + castle.field_count() == 0:
 		_summary.text = "No soldiers yet. Train some in the barracks."
 	else:

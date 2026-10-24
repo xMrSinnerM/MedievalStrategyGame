@@ -2,7 +2,8 @@ class_name BuildingRules
 extends RefCounted
 ## The castle economy's numbers, read from data/buildings.json: what each
 ## building costs, how long it takes, what it produces or stores, and the
-## limits the keep's level sets. Troop types come from data/units.json.
+## limits the keep's level sets, and the academy's studies ("research").
+## Troop types come from data/units.json.
 ##
 ## Values for level N grow from the level-1 value: base * growth^(N - 1).
 
@@ -19,6 +20,11 @@ var max_batch := 50              ## soldiers per batch
 var time_per_barracks_level := 0.92
 var tools: Dictionary = {}       ## siege tool id -> definition (data/units.json "tools")
 var tool_slot_table: Array = []  ## tools per wall by level
+var studies: Dictionary = {}     ## study id -> definition (buildings.json "research")
+var branches: Dictionary = {}    ## research branch id -> name
+var study_cost_growth := 1.8
+var study_time_growth := 2.0
+var time_per_academy_level := 0.94
 
 
 static func load_default() -> BuildingRules:
@@ -43,6 +49,12 @@ func load_from(data: Dictionary) -> void:
 	grid_size = int(data.get("grid_size", 24))
 	start = data.get("start", {})
 	types = data.get("buildings", {})
+	var research: Dictionary = data.get("research", {})
+	studies = research.get("studies", {})
+	branches = research.get("branches", {})
+	study_cost_growth = float(research.get("cost_growth", 1.8))
+	study_time_growth = float(research.get("time_growth", 2.0))
+	time_per_academy_level = float(research.get("time_per_academy_level", 0.94))
 
 
 func load_units(data: Dictionary) -> void:
@@ -131,6 +143,11 @@ func max_level(type: String, keep_level: int) -> int:
 	if type == "keep":
 		return cap
 	return mini(cap, keep_level * 2)
+
+
+func required_keep(type: String) -> int:
+	## The keep level a first building of this type needs.
+	return int(types[type].get("keep_level", 1))
 
 
 func max_count(type: String, keep_level: int) -> int:
@@ -235,3 +252,48 @@ func tool_slots(level: int) -> int:
 	if level < 1:
 		return 0
 	return int(tool_slot_table[clampi(level - 1, 0, tool_slot_table.size() - 1)])
+
+
+# --- Research -----------------------------------------------------------------
+
+func has_study(study: String) -> bool:
+	return studies.has(study)
+
+
+func study_name(study: String) -> String:
+	return studies[study].get("name", study)
+
+
+func study_max_level(study: String) -> int:
+	return int(studies[study].get("max_level", 5))
+
+
+func study_academy_level(study: String) -> int:
+	## The academy level that unlocks this study.
+	return int(studies[study].get("academy_level", 1))
+
+
+func study_requires(study: String) -> Dictionary:
+	## Other studies (id -> level) this one needs first.
+	return studies[study].get("requires", {})
+
+
+func study_effects(study: String) -> Dictionary:
+	## What each level adds: effect -> amount (see "research" in buildings.json).
+	return studies[study].get("effects", {})
+
+
+func study_cost(study: String, level: int) -> Dictionary:
+	## Resources to research `level`.
+	var def: Dictionary = studies[study]
+	var factor := pow(study_cost_growth, level - 1)
+	var out := {}
+	for r: String in def.get("cost", {}):
+		out[r] = roundf(float(def.cost[r]) * factor)
+	return out
+
+
+func study_time(study: String, level: int, academy_level: int) -> float:
+	## Seconds to research `level`; each academy level above 1 researches faster.
+	return roundf(float(studies[study].get("time", 300)) * pow(study_time_growth, level - 1)
+		* pow(time_per_academy_level, maxi(academy_level - 1, 0)))

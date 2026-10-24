@@ -154,8 +154,9 @@ export class GearRules {
     return out;
   }
 
+  /** The castellan's gear plus the castle's defence research. */
   castellanEffects(castle: CastleState): Dict {
-    return this.effects(castle.armoury.castellan);
+    return withResearch(this.effects(castle.armoury.castellan), castle.researchEffects("defence"));
   }
 
   commander(castle: CastleState, id: unknown): Commander | undefined {
@@ -163,15 +164,18 @@ export class GearRules {
   }
 
   /**
-   * The commander to lead an army, or why not. No commander (`id` undefined,
-   * null or 0) is fine: the result is then null.
+   * The lead for an army: its commander's gear and level plus the castle's
+   * attack research, or why not. No commander (`id` undefined, null or 0) is
+   * fine: the lead then has id 0 and research alone, or is null if nothing
+   * is researched.
    */
   checkLead(castle: CastleState, id: unknown, now: number): Lead | null | string {
-    if (id === undefined || id === null || id === 0) return null;
+    const research = castle.researchEffects("attack");
+    if (id === undefined || id === null || id === 0) return Object.keys(research).length > 0 ? { id: 0, name: "", fx: research } : null;
     const c = this.commander(castle, id);
     if (c === undefined) return "No such commander.";
     if (c.away_until > now) return `${c.name} is still away with an army.`;
-    return { id: c.id, name: c.name, fx: this.effects(c.gear, c.level) };
+    return { id: c.id, name: c.name, fx: withResearch(this.effects(c.gear, c.level), research) };
   }
 
   /** Gives a commander xp; returns the report line for it. */
@@ -327,4 +331,10 @@ export function readArmoury(data: any): Armoury {
   }
   a.next_item = Math.trunc(Number(data.next_item ?? 1));
   return a;
+}
+
+/** Gear effects with research's added on top. */
+export function withResearch(fx: Dict, research: Dict): Dict {
+  for (const stat of Object.keys(research)) fx[stat] = (fx[stat] ?? 0) + research[stat];
+  return fx;
 }

@@ -19,6 +19,12 @@ export class BuildingRules {
   /** Siege tools (data/units.json "tools"), and how many fit on each wall by level. */
   tools: Record<string, Json> = {};
   toolSlotTable: number[] = [];
+  /** The academy's studies (data/buildings.json "research"). */
+  studies: Record<string, Json> = {};
+  branches: Record<string, string> = {};
+  studyCostGrowth = 1.8;
+  studyTimeGrowth = 2.0;
+  timePerAcademyLevel = 0.94;
 
   constructor(buildings: Json, units: Json) {
     this.resources = (buildings.resources ?? []).map(String);
@@ -31,6 +37,12 @@ export class BuildingRules {
     this.timePerBarracksLevel = Number(units.time_per_barracks_level ?? 0.92);
     this.tools = units.tools ?? {};
     this.toolSlotTable = (units.tool_slots ?? [0]).map(Number);
+    const research = buildings.research ?? {};
+    this.studies = research.studies ?? {};
+    this.branches = research.branches ?? {};
+    this.studyCostGrowth = Number(research.cost_growth ?? 1.8);
+    this.studyTimeGrowth = Number(research.time_growth ?? 2.0);
+    this.timePerAcademyLevel = Number(research.time_per_academy_level ?? 0.94);
   }
 
   hasType(type: string): boolean {
@@ -92,6 +104,11 @@ export class BuildingRules {
   maxLevel(type: string, keepLevel: number): number {
     const cap = Number(this.types[type].max_level ?? 10);
     return type === "keep" ? cap : Math.min(cap, keepLevel * 2);
+  }
+
+  /** The keep level a first building of this type needs. */
+  requiredKeep(type: string): number {
+    return Number(this.types[type].keep_level ?? 1);
   }
 
   maxCount(type: string, keepLevel: number): number {
@@ -176,5 +193,48 @@ export class BuildingRules {
   toolSlots(level: number): number {
     if (level < 1) return 0;
     return this.toolSlotTable[clamp(level - 1, 0, this.toolSlotTable.length - 1)];
+  }
+
+  // --- Research -------------------------------------------------------------
+
+  hasStudy(study: string): boolean {
+    return Object.hasOwn(this.studies, study);
+  }
+
+  studyName(study: string): string {
+    return String(this.studies[study].name ?? study);
+  }
+
+  studyMaxLevel(study: string): number {
+    return Number(this.studies[study].max_level ?? 5);
+  }
+
+  /** The academy level that unlocks this study. */
+  studyAcademyLevel(study: string): number {
+    return Number(this.studies[study].academy_level ?? 1);
+  }
+
+  /** Other studies (id -> level) this one needs first. */
+  studyRequires(study: string): Dict {
+    return this.studies[study].requires ?? {};
+  }
+
+  /** What each level adds: effect -> amount. */
+  studyEffects(study: string): Dict {
+    return this.studies[study].effects ?? {};
+  }
+
+  studyCost(study: string, level: number): Dict {
+    const def = this.studies[study];
+    const factor = Math.pow(this.studyCostGrowth, level - 1);
+    const out: Dict = {};
+    for (const r of Object.keys(def.cost ?? {})) out[r] = round(Number(def.cost[r]) * factor);
+    return out;
+  }
+
+  /** Seconds to research `level`; each academy level above 1 researches faster. */
+  studyTime(study: string, level: number, academyLevel: number): number {
+    return round(Number(this.studies[study].time ?? 300) * Math.pow(this.studyTimeGrowth, level - 1) *
+      Math.pow(this.timePerAcademyLevel, Math.max(academyLevel - 1, 0)));
   }
 }

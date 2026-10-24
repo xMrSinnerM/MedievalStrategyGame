@@ -54,12 +54,44 @@ test("Godot's random numbers", () => {
 
 for (const run of fixtures.castles) {
   test(`castle orders: ${run.id}`, () => {
-    const castle = CastleState.createNew(rules.buildings, run.id, run.name, "player", run.t0);
+    let castle = CastleState.createNew(rules.buildings, run.id, run.name, "player", run.t0);
     run.steps.forEach((step: any, i: number) => {
       const where = `${run.id} step ${i} (${step.op})`;
       switch (step.op) {
         case "advance":
           castle.advanceTo(step.t);
+          break;
+        case "load":
+          castle = CastleState.fromDict(rules.buildings, step.data);
+          break;
+        case "research":
+          assert.equal(castle.startResearch(step.study, step.t), step.result, where);
+          break;
+        case "cancel_research":
+          assert.equal(castle.cancelResearch(step.t), step.result, where);
+          break;
+        case "heal": {
+          const before = { ...castle.troops };
+          for (const unit of Object.keys(step.lost)) castle.troops[unit] -= step.lost[unit];
+          same(castle.heal(before), step.healed, `${where} healed`);
+          break;
+        }
+        case "research_checks":
+          for (const study of Object.keys(step.research)) {
+            assert.equal(castle.checkResearch(study), step.research[study], `${where} research ${study}`);
+            const open = castle.studyLevel(study) < rules.buildings.studyMaxLevel(study);
+            same({ time: open ? castle.researchTime(study) : 0, cost: rules.buildings.studyCost(study, castle.studyLevel(study) + 1) },
+              step[study], `${where} study ${study}`);
+          }
+          for (const type of Object.keys(step.build)) assert.equal(castle.checkBuild(type), step.build[type], `${where} build ${type}`);
+          for (const unit of Object.keys(step.recruit)) {
+            same([castle.checkRecruit(unit, 10), castle.unitTime(unit), castle.unitUpkeep(unit)], step.recruit[unit], `${where} recruit ${unit}`);
+          }
+          for (const tool of Object.keys(step.craft)) same([castle.checkCraft(tool, 10), castle.toolTime(tool)], step.craft[tool], `${where} craft ${tool}`);
+          same({ slots: castle.defenceSlots(), hidden: castle.hidden(), march: castle.marchFactor(), storage: castle.storageCapacity(),
+            rates: castle.netPerHour(), left: castle.studying ? Math.max(castle.studying.finish - step.t, 0) : 0,
+            attack: castle.researchEffects("attack"), defence: castle.researchEffects("defence"),
+            castellan: rules.gear.castellanEffects(castle), lead: rules.gear.checkLead(castle, 0, step.t) }, step.numbers, `${where} numbers`);
           break;
         case "place":
           assert.equal(castle.place(step.type, step.cell, step.t), step.result, where);

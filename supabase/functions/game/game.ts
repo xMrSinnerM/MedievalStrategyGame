@@ -116,6 +116,8 @@ export interface RaidReport {
   wall: number;
   /** Defender's report: the allies whose soldiers fought beside the garrison. */
   helped_by?: string[];
+  /** Defender's report: fallen defenders the infirmary sent back (unit -> soldiers). */
+  healed?: Dict;
 }
 
 /** Soldiers walking back into the castle, with what they carry. */
@@ -422,8 +424,9 @@ export function act(rules: Rules, given: PlayerState, req: Request, now: number,
         }
       }
       const from: [number, number] = [stored.home_x, stored.home_y];
-      const travel = rules.barons.marchTime(Math.hypot(target.home[0] - from[0], target.home[1] - from[1]));
-      if (lead) rules.gear.commander(castle, lead.id)!.away_until = now + 2 * travel;
+      const travel = rules.barons.marchTime(Math.hypot(target.home[0] - from[0], target.home[1] - from[1])) * castle.marchFactor();
+      // A lead with id 0 is research alone, without a commander.
+      if (lead && lead.id > 0) rules.gear.commander(castle, lead.id)!.away_until = now + 2 * travel;
       raid = { attacker_name: stored.name, defender_name: target.name, army, from, to: target.home, depart: now,
         arrive: now + travel, back: now + 2 * travel, state: "out", survivors: {}, loot: {}, ...(waves ? { waves } : {}),
         ...(Object.keys(kit).length > 0 ? { tools: kit } : {}), ...(lead ? { lead } : {}) };
@@ -462,8 +465,8 @@ export function act(rules: Rules, given: PlayerState, req: Request, now: number,
       }
       const from: [number, number] = [stored.home_x, stored.home_y];
       const to = v.info.position;
-      const travel = rules.barons.marchTime(Math.hypot(to[0] - from[0], to[1] - from[1]));
-      if (lead) rules.gear.commander(castle, lead.id)!.away_until = now + 2 * travel;
+      const travel = rules.barons.marchTime(Math.hypot(to[0] - from[0], to[1] - from[1])) * castle.marchFactor();
+      if (lead && lead.id > 0) rules.gear.commander(castle, lead.id)!.away_until = now + 2 * travel;
       raid = { attacker_name: stored.name, defender_name: v.info.name, village: v.info.id,
         mission: attack ? "attack" : "station", army, from, to: [to[0], to[1]], depart: now, arrive: now + travel,
         back: now + 2 * travel, state: "out", survivors: {}, loot: {}, ...(waves ? { waves } : {}),
@@ -481,6 +484,13 @@ export function act(rules: Rules, given: PlayerState, req: Request, now: number,
       break;
     case "set_tools":
       error = castle.setDefenceTools(req.tools);
+      break;
+    case "research":
+      error = castle.checkResearch(String(req.study));
+      if (error === "") castle.startResearch(String(req.study), now);
+      break;
+    case "cancel_research":
+      if (!castle.cancelResearch(now)) error = "The academy isn't researching anything.";
       break;
     case "equip":
       error = rules.gear.equip(castle, req.who, req.item, now);
@@ -596,7 +606,7 @@ function checkArmy(castle: CastleState, army: Dict): string {
  */
 function comeHomeFromRaid(gear: GearRules, castle: CastleState, raid: Homecoming): void {
   castle.advanceTo(raid.back);
-  if (raid.lead?.xp) gear.addXp(castle, raid.lead.id, raid.lead.xp);
+  if (raid.lead?.xp && raid.lead.id > 0) gear.addXp(castle, raid.lead.id, raid.lead.xp);
   for (const unit of Object.keys(raid.survivors)) {
     if (castle.rules.hasUnit(unit)) castle.troops[unit] = (castle.troops[unit] ?? 0) + raid.survivors[unit];
   }
@@ -650,13 +660,16 @@ export function fightRaid(rules: Rules, pvp: PvpRules, stored: PlayerState, raid
   const result = siege(rules.buildings, raid.waves ?? autoWaves(raid.army), defenders, castle.layout, raid.id * 7919 + godotHash(raid.defender_name),
     wall, { a: raid.tools ?? {}, b: castle.defenceTools, lead_a: raid.lead?.fx ?? {}, lead_b: rules.gear.castellanEffects(castle) });
   if (result.tools) castle.loseDefenceTools(result.tools.lost);
+  const before = { ...castle.troops };
   for (const unit of Object.keys(result.b)) shareLosses(groups, unit, result.b[unit].lost);
+  const healed = castle.heal(before);
   const back = survivors(result.a);
   const loot: Dict = {};
   if (result.winner === "a") {
     let all = 0;
+    const safe = castle.hidden();
     for (const r of Object.keys(castle.resources)) {
-      loot[r] = Math.floor(castle.resources[r] * pvp.loot_share);
+      loot[r] = Math.floor(Math.max(castle.resources[r] - safe, 0) * pvp.loot_share);
       all += loot[r];
     }
     const capacity = rules.barons.carry(back) * (1 + (raid.lead?.fx.loot ?? 0));
@@ -666,10 +679,11 @@ export function fightRaid(rules: Rules, pvp: PvpRules, stored: PlayerState, raid
       castle.resources[r] -= loot[r];
     }
   }
-  const lead = raid.lead ? { ...raid.lead, xp: result.winner === "a" ? rules.gear.xpPlayerWin : rules.gear.xpLoss } : undefined;
+  const lead = raid.lead && raid.lead.id > 0 ? { ...raid.lead, xp: result.winner === "a" ? rules.gear.xpPlayerWin : rules.gear.xpLoss } : undefined;
   const report = (role: "attacker" | "defender", name: string): RaidReport => ({
     kind: "raid", role, raid: raid.id, name, at: raid.arrive, winner: result.winner, a: result.a, b: result.b,
     walls: result.walls, courtyard: result.courtyard, ...(result.tools ? { tools: result.tools } : {}), spoils: loot, wall,
+    ...(role === "defender" && Object.keys(healed).length > 0 ? { healed } : {}),
     ...(role === "attacker" && lead ? { lead: { id: lead.id, name: lead.name, xp: lead.xp } } : {}),
   });
   return {

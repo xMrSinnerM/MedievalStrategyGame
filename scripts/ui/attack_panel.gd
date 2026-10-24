@@ -694,7 +694,8 @@ func commander_id() -> int:
 func _lead_fx() -> Dictionary:
 	var g := Economy.gear_rules
 	var c := g.commander(Economy.player_castle, commander_id()) if g != null else {}
-	return g.commander_effects(c) if not c.is_empty() else {}
+	var fx := g.commander_effects(c) if not c.is_empty() else {}
+	return GearRules.with_research(fx, Economy.player_castle.research_effects("attack"))
 
 
 # --- The other side --------------------------------------------------------------

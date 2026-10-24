@@ -1,5 +1,5 @@
 // One castle's economy: resources, buildings, constructions, garrison,
-// training queue and warband. A port of scripts/economy/castle_state.gd.
+// training queue, warband and academy research. A port of scripts/economy/castle_state.gd.
 // The state is the same plain data the game saves (CastleState.to_dict()),
 // so it can be stored as JSON and read by either side.
 //
@@ -8,7 +8,7 @@
 import { checkLayout, checkTools, DEFAULT_LAYOUT, WALLS, type Layout, type Tools } from "./battle.ts";
 import { BuildingRules } from "./building_rules.ts";
 import { newArmoury, readArmoury, type Armoury } from "./gear.ts";
-import { get, type Dict } from "./util.ts";
+import { get, round, type Dict } from "./util.ts";
 
 /** Share of the cost given back when a construction is cancelled. */
 export const CANCEL_REFUND = 0.75;
@@ -35,6 +35,13 @@ export interface Craft {
   remaining: number;
   unit_time: number;
   next: number;
+}
+
+/** The study under way in the academy. */
+export interface Study {
+  study: string;
+  target: number;
+  finish: number;
 }
 
 /** Lifetime counts the quests check (server/rules/quests.ts). */
@@ -100,6 +107,8 @@ export interface CastleData {
   armoury: Armoury;
   boost: Dict;
   limits: Limits | null;
+  research: Dict;
+  studying: Study | null;
 }
 
 /** What an outpost may build (outposts.ts): only these types, its keep up to `keep`. */
@@ -135,6 +144,9 @@ export class CastleState {
   boost: Dict = {};
   /** An outpost's building limits; null for a normal castle. */
   limits: Limits | null = null;
+  /** Studies researched in the academy (study -> level) and the one under way. */
+  research: Dict = {};
+  studying: Study | null = null;
   private nextId = 1;
 
   constructor(rules: BuildingRules) {
@@ -186,14 +198,23 @@ export class CastleState {
       for (const r of Object.keys(p)) out[r] = get(out, r) + p[r];
     }
     for (const r of Object.keys(this.boost)) if (r in out) out[r] *= 1 + this.boost[r];
+    for (const r of Object.keys(out)) {
+      const more = this.researchBonus(r);
+      if (more !== 0) out[r] *= 1 + more;
+    }
     return out;
   }
 
   upkeepPerHour(): number {
     let total = 0;
-    for (const unit of Object.keys(this.troops)) total += this.troops[unit] * this.rules.unitUpkeep(unit);
-    for (const unit of Object.keys(this.field)) total += this.field[unit] * this.rules.unitUpkeep(unit);
+    for (const unit of Object.keys(this.troops)) total += this.troops[unit] * this.unitUpkeep(unit);
+    for (const unit of Object.keys(this.field)) total += this.field[unit] * this.unitUpkeep(unit);
     return total;
+  }
+
+  /** Food one soldier eats per hour here, after Field Rations. */
+  unitUpkeep(unit: string): number {
+    return this.rules.unitUpkeep(unit) * (1 + this.researchBonus("upkeep"));
   }
 
   netPerHour(): Dict {
@@ -245,14 +266,20 @@ export class CastleState {
 
   /** Why these defence tools can't stand on the walls ("" if they can). */
   checkDefenceTools(tools: unknown): string {
-    const checked = checkTools(this.rules, tools, "defence", this.rules.toolSlots(this.wallLevel()), this.tools);
+    const checked = checkTools(this.rules, tools, "defence", this.defenceSlots(), this.tools);
     return typeof checked === "string" ? checked : "";
+  }
+
+  /** Defence tools that fit on each wall: by wall level, plus Murder Holes. */
+  defenceSlots(): number {
+    const n = this.rules.toolSlots(this.wallLevel());
+    return n > 0 ? n + Math.trunc(this.researchBonus("defence_slots")) : 0;
   }
 
   storageCapacity(): number {
     let total = 0;
     for (const b of this.buildings) total += this.rules.storage(b.type, b.level);
-    return total;
+    return total * (1 + this.researchBonus("storage"));
   }
 
   defense(): number {
@@ -274,6 +301,7 @@ export class CastleState {
     if (this.count(type) >= r.maxCount(type, this.keepLevel())) {
       return r.isUnique(type) ? "The castle already has one" : "Upgrade the keep to build more of these";
     }
+    if (this.keepLevel() < r.requiredKeep(type)) return `Needs keep level ${r.requiredKeep(type)}`;
     return this.checkStartWork(r.cost(type, 1));
   }
 
@@ -307,6 +335,114 @@ export class CastleState {
       const [bw, bh] = this.rules.size(b.type);
       if (x < b.cell[0] + bw && b.cell[0] < x + w && y < b.cell[1] + bh && b.cell[1] < y + h) return false;
     }
+    return true;
+  }
+
+  /** Seconds to train one soldier here: by barracks level, then Drill Yards. */
+  unitTime(unit: string): number {
+    return shorter(this.rules.unitTime(unit, this.barracksLevel()), this.researchBonus("recruit_time"));
+  }
+
+  /** Seconds to build one siege tool here: by workshop level, then Siegecraft. */
+  toolTime(tool: string): number {
+    return shorter(this.rules.toolTime(tool, this.workshopLevel()), this.researchBonus("craft_time"));
+  }
+
+  // --- Research --------------------------------------------------------------
+
+  academyLevel(): number {
+    for (const b of this.buildings) if (b.type === "academy") return b.level;
+    return 0;
+  }
+
+  studyLevel(study: string): number {
+    return this.research[study] ?? 0;
+  }
+
+  /** What every study researched adds up to for one effect: 0.12 for 12% more, -0.1 for 10% less. */
+  researchBonus(effect: string): number {
+    let total = 0;
+    for (const study of Object.keys(this.research)) {
+      const per = this.rules.studyEffects(study)[effect];
+      if (per !== undefined) total += Number(per) * this.research[study];
+    }
+    return total;
+  }
+
+  /** The battle effects research gives (stat -> share): "attack" for your armies, "defence" for your castle. */
+  researchEffects(side: "attack" | "defence"): Dict {
+    const out: Dict = {};
+    for (const stat of side === "attack" ? ["wall_attack", "yard_attack"] : ["wall_defence", "yard_defence", "wall_bonus"]) {
+      const n = this.researchBonus(stat);
+      if (n > 0) out[stat] = n;
+    }
+    return out;
+  }
+
+  /** Multiplier on how long your armies march (Forced March). */
+  marchFactor(): number {
+    return Math.max(1 + this.researchBonus("march_time"), 0.1);
+  }
+
+  /** How much of each resource Hidden Cellars keep safe from plunder. */
+  hidden(): number {
+    return this.storageCapacity() * this.researchBonus("hidden");
+  }
+
+  /**
+   * After a battle at the castle: the Infirmary sends back a share of the
+   * garrison that fell (`before` is the garrison before it). Returns unit -> healed.
+   */
+  heal(before: Dict): Dict {
+    const share = this.researchBonus("heal");
+    const out: Dict = {};
+    if (share <= 0) return out;
+    for (const unit of Object.keys(before)) {
+      const n = Math.floor((before[unit] - (this.troops[unit] ?? 0)) * share);
+      if (n > 0) {
+        this.troops[unit] = (this.troops[unit] ?? 0) + n;
+        out[unit] = n;
+      }
+    }
+    return out;
+  }
+
+  /** Why the academy can't start on this study's next level, or "" if it can. */
+  checkResearch(study: string): string {
+    const r = this.rules;
+    if (!r.hasStudy(study)) return "Unknown study";
+    if (this.academyLevel() <= 0) return "Build an academy first";
+    const level = this.studyLevel(study);
+    if (level >= r.studyMaxLevel(study)) return "Fully researched";
+    if (this.academyLevel() < r.studyAcademyLevel(study)) return `Needs academy level ${r.studyAcademyLevel(study)}`;
+    const needs = r.studyRequires(study);
+    for (const other of Object.keys(needs)) {
+      if (this.studyLevel(other) < Number(needs[other])) return `Needs ${r.studyName(other)} level ${Number(needs[other])}`;
+    }
+    if (this.studying !== null) return "The academy is already researching";
+    if (!this.canAfford(r.studyCost(study, level + 1))) return "Not enough resources";
+    return "";
+  }
+
+  /** Seconds the next level of this study takes in this academy. */
+  researchTime(study: string): number {
+    return this.rules.studyTime(study, this.studyLevel(study) + 1, this.academyLevel());
+  }
+
+  startResearch(study: string, now: number): boolean {
+    this.advanceTo(now);
+    if (this.checkResearch(study) !== "") return false;
+    const target = this.studyLevel(study) + 1;
+    this.pay(this.rules.studyCost(study, target));
+    this.studying = { study, target, finish: now + this.researchTime(study) };
+    return true;
+  }
+
+  cancelResearch(now: number): boolean {
+    this.advanceTo(now);
+    if (this.studying === null) return false;
+    this.refund(this.rules.studyCost(this.studying.study, this.studying.target));
+    this.studying = null;
     return true;
   }
 
@@ -347,7 +483,7 @@ export class CastleState {
     this.advanceTo(now);
     if (this.checkRecruit(unit, amount) !== "") return false;
     this.pay(this.rules.unitCost(unit, amount));
-    const unitTime = this.rules.unitTime(unit, this.barracksLevel());
+    const unitTime = this.unitTime(unit);
     this.training.push({ unit, remaining: amount, unit_time: unitTime, next: this.training.length === 0 ? now + unitTime : 0 });
     return true;
   }
@@ -366,7 +502,7 @@ export class CastleState {
     this.advanceTo(now);
     if (this.checkCraft(tool, amount) !== "") return false;
     this.pay(this.rules.toolCost(tool, amount));
-    const unitTime = this.rules.toolTime(tool, this.workshopLevel());
+    const unitTime = this.toolTime(tool);
     this.crafting.push({ tool, remaining: amount, unit_time: unitTime, next: this.crafting.length === 0 ? now + unitTime : 0 });
     return true;
   }
@@ -382,7 +518,7 @@ export class CastleState {
   }
 
   setDefenceTools(tools: unknown): string {
-    const checked = checkTools(this.rules, tools, "defence", this.rules.toolSlots(this.wallLevel()), this.tools);
+    const checked = checkTools(this.rules, tools, "defence", this.defenceSlots(), this.tools);
     if (typeof checked === "string") return checked;
     this.defenceTools = checked;
     return "";
@@ -429,12 +565,20 @@ export class CastleState {
       }
       const soldierDue = this.training.length > 0 && this.training[0].next <= now &&
         (next === undefined || this.training[0].next < next.finish);
+      // A study finishes first if it is done before the soldier or building.
+      const study = this.studying;
+      const studyDue = study !== null && study.finish <= now &&
+        (soldierDue ? study.finish < this.training[0].next : (next === undefined || study.finish < next.finish));
       let until = now;
-      if (soldierDue) until = this.training[0].next;
+      if (studyDue) until = study!.finish;
+      else if (soldierDue) until = this.training[0].next;
       else if (next !== undefined) until = next.finish;
       this.produce(until - this.lastUpdate);
       this.lastUpdate = Math.max(this.lastUpdate, until);
-      if (soldierDue) {
+      if (studyDue) {
+        this.research[study!.study] = study!.target;
+        this.studying = null;
+      } else if (soldierDue) {
         this.finishSoldier();
       } else if (next !== undefined) {
         next.level = next.target;
@@ -504,7 +648,7 @@ export class CastleState {
       let most = 0;
       for (const group of [this.troops, this.field]) {
         for (const unit of Object.keys(group)) {
-          const eats = group[unit] * this.rules.unitUpkeep(unit);
+          const eats = group[unit] * this.unitUpkeep(unit);
           if (group[unit] > 0 && eats > most) {
             most = eats;
             worst = unit;
@@ -516,7 +660,7 @@ export class CastleState {
         this.hunger = 0;
         return;
       }
-      const upkeep = this.rules.unitUpkeep(worst);
+      const upkeep = this.unitUpkeep(worst);
       const leaving = Math.min(Math.trunc(this.hunger / upkeep), pool[worst]);
       if (leaving <= 0) return;
       pool[worst] -= leaving;
@@ -549,6 +693,8 @@ export class CastleState {
       armoury: structuredClone(this.armoury),
       boost: { ...this.boost },
       limits: this.limits ? { types: [...this.limits.types], keep: this.limits.keep } : null,
+      research: { ...this.research },
+      studying: this.studying ? { ...this.studying } : null,
     };
   }
 
@@ -625,6 +771,15 @@ export class CastleState {
       if (rules.resources.includes(r)) castle.boost[r] = Number(data.boost[r]);
     }
     if (data.limits) castle.limits = { types: (data.limits.types ?? []).map(String), keep: Number(data.limits.keep ?? 1) };
+    // Castles saved before the academy have researched nothing.
+    for (const study of Object.keys(data.research ?? {})) {
+      const n = Math.trunc(Number(data.research[study]));
+      if (rules.hasStudy(study) && n > 0) castle.research[study] = Math.min(n, rules.studyMaxLevel(study));
+    }
+    const st = data.studying;
+    if (st && typeof st === "object" && rules.hasStudy(String(st.study ?? ""))) {
+      castle.studying = { study: String(st.study), target: Math.trunc(Number(st.target ?? 1)), finish: Number(st.finish ?? 0) };
+    }
     return castle;
   }
 
@@ -658,4 +813,9 @@ export class CastleState {
     this.buildings.push(b);
     return b;
   }
+}
+
+/** A time after research (change -0.1 for 10% faster), whole seconds, at least one. */
+function shorter(time: number, change: number): number {
+  return change === 0 ? time : Math.max(round(time * (1 + change)), 1);
 }
