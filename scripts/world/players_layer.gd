@@ -8,8 +8,8 @@ extends Node3D
 const LABEL_COLOR := Color(0.62, 0.84, 1.0)
 const ALLY_COLOR := Color(0.55, 0.95, 0.55)
 const LABEL_MAX_ZOOM := 0.9
-const MINE := Color(0.85, 0.7, 0.25)
-const ENEMY := Color(0.8, 0.22, 0.16)
+const MINE := KitModels.PLAYER_COLOR
+const ENEMY := Color(0.38, 0.4, 0.46)
 
 var castles: Array[Settlement] = []
 var _armies := {}          ## raid id -> {"node", "label"}
@@ -89,18 +89,20 @@ func _sync_armies() -> void:
 
 func _make_army(color: Color) -> Dictionary:
 	var root := Node3D.new()
-	var kit := MeshKit.new()
-	for k in 5:
-		var p := Vector3((k % 3 - 1) * 1.6, 0, (k / 3) * 1.6 - 0.8)
-		kit.cylinder(color.darkened(0.25), Transform3D(Basis(), p), 0.5, 1.6, 6)
-		kit.dome(Color(0.85, 0.75, 0.6), Transform3D(Basis(), p + Vector3(0, 1.7, 0)), 0.4)
+	var frames := Soldiers.troop([
+		Soldiers.figure("knight", Vector3(0, 0, -0.9), 0.85),
+		Soldiers.figure("knight", Vector3(-0.9, 0, 0.5), 0.75),
+		Soldiers.figure("knight", Vector3(0.9, 0, 0.5), 0.75),
+		Soldiers.figure("crossbowman", Vector3(-0.9, 0, 1.8), 0.75),
+		Soldiers.figure("crossbowman", Vector3(0.9, 0, 1.8), 0.75),
+	], color)
 	var model := MeshInstance3D.new()
-	model.mesh = kit.commit()
+	model.mesh = frames[0]
 	root.add_child(model)
 	var label := Label3D.new()
 	label.font_size = 26
 	label.outline_size = 8
-	label.modulate = color.lightened(0.45)
+	label.modulate = Color(1.0, 0.86, 0.5) if color == MINE else Color(0.9, 0.9, 0.92)
 	label.outline_modulate = Color(0.12, 0.08, 0.04, 0.9)
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	label.fixed_size = true
@@ -112,7 +114,7 @@ func _make_army(color: Color) -> Dictionary:
 	label.position = Vector3(0, 5.0, 0)
 	root.add_child(label)
 	add_child(root)
-	return {"node": root, "label": label}
+	return {"node": root, "label": label, "frames": frames}
 
 
 func _process(_delta: float) -> void:
@@ -133,8 +135,9 @@ func _process(_delta: float) -> void:
 		var node: Node3D = army.node
 		node.position = Vector3(p.x, Party.ground_height(p.x, p.y), p.y)
 		node.rotation.y = atan2(-(to - from).x, -(to - from).y)
-		var model: Node3D = node.get_child(0)
+		var model: MeshInstance3D = node.get_child(0)
 		model.scale = Vector3.ONE * lerpf(1.0, 4.0, _zoom_t)
+		model.mesh = army.frames[Time.get_ticks_msec() / 220 % 2]
 		var label: Label3D = army.label
 		if not r.get("mine", false):
 			label.text = "%s's army %s" % [r.attacker_name, _clock(t1 - now)]

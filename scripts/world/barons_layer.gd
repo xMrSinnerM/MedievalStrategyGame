@@ -17,7 +17,6 @@ const BARON_BANNER := {"id": "barons", "color": Color(0.1, 0.09, 0.09), "seconda
 const INVADER_BANNER := {"id": "invaders", "color": Color(0.62, 0.08, 0.06), "secondary_color": Color(0.1, 0.09, 0.09),
 		"banner": {"pattern": "chevron", "charge": ""}}
 const INVADER_LABEL := Color(1.0, 0.42, 0.32)
-const ARMY := Color(0.85, 0.7, 0.25)
 
 var _camps := {}          ## camp id -> {"node", "label"}
 var settlements: Node3D   ## the settlements layer, for the fortresses' labels
@@ -158,13 +157,15 @@ func _sync_armies() -> void:
 
 func _make_army() -> Dictionary:
 	var root := Node3D.new()
-	var kit := MeshKit.new()
-	for k in 5:
-		var p := Vector3((k % 3 - 1) * 1.6, 0, (k / 3) * 1.6 - 0.8)
-		kit.cylinder(ARMY.darkened(0.25), Transform3D(Basis(), p), 0.5, 1.6, 6)
-		kit.dome(Color(0.85, 0.75, 0.6), Transform3D(Basis(), p + Vector3(0, 1.7, 0)), 0.4)
+	var frames := Soldiers.troop([
+		Soldiers.figure("knight", Vector3(0, 0, -0.9), 0.85),
+		Soldiers.figure("knight", Vector3(-0.9, 0, 0.5), 0.75),
+		Soldiers.figure("knight", Vector3(0.9, 0, 0.5), 0.75),
+		Soldiers.figure("crossbowman", Vector3(-0.9, 0, 1.8), 0.75),
+		Soldiers.figure("crossbowman", Vector3(0.9, 0, 1.8), 0.75),
+	], KitModels.PLAYER_COLOR)
 	var model := MeshInstance3D.new()
-	model.mesh = kit.commit()
+	model.mesh = frames[0]
 	root.add_child(model)
 	var label := Label3D.new()
 	label.font_size = 26
@@ -181,7 +182,7 @@ func _make_army() -> Dictionary:
 	label.position = Vector3(0, 5.0, 0)
 	root.add_child(label)
 	add_child(root)
-	return {"node": root, "label": label}
+	return {"node": root, "label": label, "frames": frames}
 
 
 func _process(delta: float) -> void:
@@ -202,8 +203,9 @@ func _process(delta: float) -> void:
 		var node: Node3D = army.node
 		node.position = Vector3(p.x, Party.ground_height(p.x, p.y), p.y)
 		node.rotation.y = atan2(-(to - from).x, -(to - from).y)
-		var model: Node3D = node.get_child(0)
+		var model: MeshInstance3D = node.get_child(0)
 		model.scale = Vector3.ONE * lerpf(1.0, 4.0, _zoom_t)
+		model.mesh = army.frames[Time.get_ticks_msec() / 220 % 2]
 		var label: Label3D = army.label
 		label.text = "%s %s" % ["To " + String(target.name) if out else "Home", _clock(t1 - now)]
 		label.visible = _zoom_t <= LABEL_MAX_ZOOM

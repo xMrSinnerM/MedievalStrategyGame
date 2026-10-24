@@ -717,7 +717,7 @@ from the game: owners are added by hand in the database (see
 ```
 data/        JSON: terrain config, factions, settlements, roads, parties, buildings, units, player
 world/       heightmap, biome mask, rivers
-assets/      fonts (SIL OFL), kaykit (KayKit Medieval Hexagon Pack, CC0)
+assets/      fonts (SIL OFL), kaykit (KayKit Medieval Hexagon and Adventurers packs, CC0)
 scenes/      main.tscn -> world_map/world_map.tscn and castle/castle_view.tscn
 scripts/
   core/      main (switches map and castle), GameData, EventBus and Economy autoloads, map style
@@ -728,7 +728,7 @@ scripts/
   camera/    campaign camera
   ui/        world map HUD and panels (castle, party, battle report), castle HUD, theme, icons, resource bar
   tools/     command-line tools (world generator, settlements, roads)
-shaders/     terrain, water, river, tree, prop, flag, route, parchment, castle ground (+ shared fog include)
+shaders/     terrain, water, river, kit models, soldiers, prop, flag, route, parchment, castle ground (+ shared fog include)
 tests/       headless tests (economy), server fixture writer
 server/      multiplayer server: game rules in TypeScript, tests, world export (see server/README.md)
 supabase/    database migrations and the game server (Edge Function)
@@ -824,11 +824,18 @@ The castle screen uses the KayKit Medieval Hexagon Pack by Kay Lousberg
 share one gradient atlas; `shaders/kit.gdshader` repaints the atlas's team
 swatch (the bottom-left cell) in the owner's colour, and `KitModels` merges
 the pieces of a building into one mesh. On the world map, towns (capitals),
-castles, villages and robber baron camps are built from it too; trees,
-parties and armies are still placeholder primitives. Other CC0 packs that
-would fit:
+castles, villages, robber baron camps, trees and boulders are built from it
+too.
 
-- Trees and nature: Quaternius Ultimate/Stylized Nature, Kenney Nature Kit
+Parties and marching armies are characters from the KayKit Adventurers pack
+(Kay Lousberg, CC0, github.com/KayKit-Game-Assets/KayKit-Character-Pack-Adventures-1.0).
+The originals are rigged and animated (3.6 MB each), so
+`tools/bake_characters.gd` poses each one in two frames of its walk and saves
+small static meshes in `assets/kaykit/characters/`; `Soldiers` merges a few
+into a troop and the map swaps the two frames while it marches.
+`shaders/unit.gdshader` repaints each character's cape, tabard and shield in
+the owner's colour. Other CC0 packs that would fit:
+
 - Castles and walls: Kenney Castle Kit
 - Village and town buildings: Quaternius Medieval Village, KayKit medieval packs
 - Ground and parchment textures: ambientCG, Poly Haven
