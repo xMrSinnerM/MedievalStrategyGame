@@ -5,7 +5,7 @@ extends CanvasLayer
 
 signal main_menu_requested
 
-var _panel: PanelContainer
+var _panel: MenuBanner
 var _settings: PanelContainer
 var _note: Label
 
@@ -23,24 +23,24 @@ func _ready() -> void:
 	add_child(centre)
 	var column := VBoxContainer.new()
 	centre.add_child(column)
-	_panel = PanelContainer.new()
-	_panel.add_theme_stylebox_override("panel", MenuStyle.panel())
+	_panel = MenuBanner.new()
+	_panel.custom_minimum_size = Vector2(380, 0)
 	column.add_child(_panel)
 	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 12)
+	box.add_theme_constant_override("separation", 10)
 	_panel.add_child(box)
-	box.add_child(MenuStyle.title("Paused", 32))
-	box.add_child(MenuStyle.button("Resume", close))
-	box.add_child(MenuStyle.button("Save game", _save))
-	box.add_child(MenuStyle.button("Settings", func() -> void:
+	box.add_child(MenuStyle.title("Paused", 34))
+	box.add_child(MenuStyle.menu_button("Resume", close, 280.0, true))
+	box.add_child(MenuStyle.menu_button("Save game", _save, 280.0))
+	box.add_child(MenuStyle.menu_button("Settings", func() -> void:
 		_panel.visible = false
-		_settings.visible = true))
-	box.add_child(MenuStyle.button("Main menu", func() -> void:
+		_settings.visible = true, 280.0))
+	box.add_child(MenuStyle.menu_button("Main menu", func() -> void:
 		close()
-		main_menu_requested.emit()))
-	box.add_child(MenuStyle.button("Quit to desktop", func() -> void:
+		main_menu_requested.emit(), 280.0))
+	box.add_child(MenuStyle.menu_button("Quit to desktop", func() -> void:
 		Economy.save_game()
-		get_tree().quit()))
+		get_tree().quit(), 280.0))
 	_note = MenuStyle.label("", 15, MenuStyle.MUTED)
 	_note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(_note)
@@ -50,6 +50,7 @@ func _ready() -> void:
 		_settings.visible = false
 		_panel.visible = true)
 	column.add_child(_settings)
+	_settings.add_theme_stylebox_override("panel", MenuStyle.ornate_panel())
 
 
 func open() -> void:
