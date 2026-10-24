@@ -21,14 +21,15 @@ var _help_buttons: HBoxContainer
 var _recall: Button
 var _timer := 0.0
 
+var _picture: InfoPicture
 
 func _ready() -> void:
 	add_theme_stylebox_override("panel", MenuStyle.panel(0.85, 12))
-	custom_minimum_size = Vector2(320, 0)
+	custom_minimum_size = Vector2(440, 0)
 	visible = false
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 6)
-	add_child(box)
+	_picture = InfoPicture.wrap(self, box)
 	var head := HBoxContainer.new()
 	box.add_child(head)
 	_title = _label(20, NAME)
@@ -114,6 +115,7 @@ func _refresh() -> void:
 	var tag := String(p.get("tag", ""))
 	var ally: bool = p.get("ally", false)
 	_title.text = ("[%s] " % tag if tag != "" else "") + player_name
+	_picture.show_place(InfoPicture.faction_place("castle", player_name))
 	_level.text = "Player castle, level %d" % int(p.get("level", 1))
 	var lines: PackedStringArray = []
 	var shielded: bool = p.get("protected", false)

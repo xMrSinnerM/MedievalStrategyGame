@@ -14,14 +14,15 @@ var _details: Label
 var _odds: Label
 var _attack: Button
 
+var _picture: InfoPicture
 
 func _ready() -> void:
 	add_theme_stylebox_override("panel", MenuStyle.panel(0.85, 12))
-	custom_minimum_size = Vector2(320, 0)
+	custom_minimum_size = Vector2(440, 0)
 	visible = false
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 6)
-	add_child(box)
+	_picture = InfoPicture.wrap(self, box)
 	var head := HBoxContainer.new()
 	box.add_child(head)
 	_title = _label(20, Color(1.0, 0.7, 0.55))
@@ -72,6 +73,7 @@ func _refresh() -> void:
 	var br := Economy.baron_rules.for_camp(camp)
 	var now := Economy.now()
 	_title.text = camp.camp_name
+	_picture.show_place(InfoPicture.faction_place("castle", camp.id) if camp.fortress else "camp")
 	_level.text = ("Invader camp, level %d" if camp.is_invader() else "Fortress, level %d" if camp.fortress
 			else "Robber baron camp, level %d") % camp.level
 	var lines: PackedStringArray = []

@@ -121,6 +121,37 @@ const SVG := {
 		<path d="M32 3 L58 9 C58 36 48 52 32 61 C16 52 6 36 6 9 Z" fill="#9e1d16" stroke="#e6bf6a" stroke-width="4" stroke-linejoin="round"/>
 		<path d="M18 44 V26 H22 V30 H26 V22 H30 V26 H34 V22 H38 V30 H42 V26 H46 V44 Z" fill="#f2ead8"/>
 		<rect x="29" y="35" width="6" height="9" fill="#9e1d16"/>""",
+	# A gold compass rose, for the map controls.
+	"compass": """
+		<circle cx="32" cy="32" r="24" fill="#1c140c" stroke="#e0b048" stroke-width="3"/>
+		<path d="M32 8 L37 32 L32 56 L27 32 Z" fill="#e8c45a" stroke="%s" stroke-width="2" stroke-linejoin="round"/>
+		<path d="M8 32 L32 27 L56 32 L32 37 Z" fill="#c9a96e" stroke="%s" stroke-width="2" stroke-linejoin="round"/>
+		<path d="M32 8 L37 32 L27 32 Z" fill="#b5281e"/>
+		<circle cx="32" cy="32" r="3.5" fill="#f2ead8" stroke="%s" stroke-width="1.5"/>""",
+	# A magnifying glass, for zoom.
+	"zoom": """
+		<circle cx="26" cy="26" r="16" fill="#3b5f7a" stroke="#e0b048" stroke-width="5"/>
+		<path d="M38 38 L56 56" stroke="#8a5a2e" stroke-width="8" stroke-linecap="round"/>
+		<path d="M18 20 C20 16 24 14 28 14" fill="none" stroke="#cfe3ef" stroke-width="3" stroke-linecap="round"/>""",
+	# A target ring, for centring the map on your castle.
+	"target": """
+		<circle cx="32" cy="32" r="20" fill="none" stroke="#e0b048" stroke-width="4"/>
+		<circle cx="32" cy="32" r="9" fill="#b5281e" stroke="%s" stroke-width="2.5"/>
+		<path d="M32 4 V16 M32 48 V60 M4 32 H16 M48 32 H60" stroke="#e0b048" stroke-width="4" stroke-linecap="round"/>""",
+	# An unrolled parchment map, for the parchment view.
+	"parchment": """
+		<path d="M8 14 L22 8 L42 14 L56 8 V50 L42 56 L22 50 L8 56 Z" fill="#ead8ae" stroke="%s" stroke-width="3" stroke-linejoin="round"/>
+		<path d="M22 8 V50 M42 14 V56" stroke="#a88a55" stroke-width="2"/>
+		<path d="M12 40 C18 34 24 38 30 30 C36 22 44 28 52 20" fill="none" stroke="#b5281e" stroke-width="2.5" stroke-dasharray="4 3"/>""",
+	# A framed little map, for the minimap.
+	"minimap": """
+		<rect x="8" y="8" width="48" height="48" rx="4" fill="#5d8a3a" stroke="#e0b048" stroke-width="4"/>
+		<path d="M8 36 C20 30 28 44 40 34 C46 29 52 32 56 30" fill="none" stroke="#5aa0d0" stroke-width="4"/>
+		<rect x="22" y="18" width="18" height="13" fill="none" stroke="#f2ead8" stroke-width="2.5"/>""",
+	# A banner on a pole, for your warband.
+	"banner": """
+		<path d="M18 6 V60" stroke="#8a5a2e" stroke-width="4" stroke-linecap="round"/>
+		<path d="M20 8 H50 L42 20 L50 32 H20 Z" fill="#b5281e" stroke="%s" stroke-width="3" stroke-linejoin="round"/>""",
 	# Check boxes: an empty bronze-rimmed box, and one with a gold tick.
 	"box": """
 		<rect x="8" y="8" width="48" height="48" rx="8" fill="#140d06" stroke="#c79a52" stroke-width="5"/>""",

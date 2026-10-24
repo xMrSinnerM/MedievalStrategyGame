@@ -36,6 +36,7 @@ var _typing := false
 
 
 func _ready() -> void:
+	add_to_group("campaign_camera")
 	camera = Camera3D.new()
 	camera.fov = 40.0
 	camera.near = 1.0
@@ -63,6 +64,11 @@ func focus_on(point: Vector3, distance := -1.0) -> void:
 	_focus = point
 	if distance > 0.0:
 		_distance = clampf(distance, min_distance, max_distance)
+
+
+func zoom_by(steps: int) -> void:
+	## Zooms in (positive steps) or out, like the mouse wheel; for the map controls.
+	_distance = clampf(_distance / pow(zoom_step, steps), min_distance, max_distance)
 
 
 func _unhandled_input(event: InputEvent) -> void:
