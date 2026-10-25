@@ -643,6 +643,25 @@ changed hands is at peace for 6 hours. The numbers live in
 `CapitalRules` in `server/rules/villages.ts` follow the same rules (checked by
 the server fixtures).
 
+### Town buildings
+
+Whoever holds a capital can raise town buildings in it. Click **Town
+buildings** on the capital's card to open their window (anyone can look; only
+the holder builds). Each has 5 levels, is paid from your home castle and takes
+real time, one building at a time per town; nothing bought can hurry it.
+
+| Building | Each level | Level 1 costs |
+|---|---|---|
+| Town Walls | +60 to the town's walls, for whoever defends it | 1500 wood, 3000 stone, 2h |
+| Market | +20% gold an hour from the town | 2500 wood, 1500 stone, 400 gold, 2h |
+| Guardhouse | 60 townsfolk (in the town guard's mix) fight beside the holder's guards, back in full after every battle | 2000 wood, 2000 stone, 2500 food, 2h |
+| Guild Hall | +1% production for every castle of the holder's alliance, on top of the capitals' bonus (at most +10% from all guild halls) | 3000 wood, 2500 stone, 800 gold, 3h |
+
+Each level costs and takes 1.5 times the one before. The buildings belong to
+the town: they stay when it changes hands or is given up, so a well-built
+capital is worth fighting for, but one still going up when the town is lost
+is lost too. The numbers are under `buildings` in `data/capitals.json`.
+
 ## Fortresses (online)
 
 Online, the castles of the old kingdoms on the map (Ravenhold, Ulfhall,

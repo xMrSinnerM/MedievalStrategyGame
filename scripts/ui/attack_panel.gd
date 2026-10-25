@@ -521,8 +521,9 @@ func _defence() -> Dictionary:
 	if _village != "":
 		var vr := Economy.village_rules_for(_village)
 		var info := Economy.village_info(_village)
-		return {"troops": vr.defenders(info, Economy.village_state(_village)), "layout": Battle.DEFAULT_LAYOUT,
-				"wall": Battle.wall_from_defense(vr.palisade(int(info.level)))}
+		var state := Economy.village_state(_village)
+		return {"troops": vr.defenders(info, state, Economy.now()), "layout": Battle.DEFAULT_LAYOUT,
+				"wall": Battle.wall_from_defense(vr.wall_defense(info, state, Economy.now()))}
 	if _player != "":
 		var seen: Dictionary = Economy.spy_reports.get(_player, {})
 		if seen.is_empty():
@@ -735,7 +736,7 @@ func _describe_village() -> void:
 	if capital:
 		lines.append("Win it and your castles produce +%d%% more" % roundi(Economy.capital_rules.bonus(int(info.level)) * 100.0))
 	lines.append("Holds %d %s; win it and it sends you %d an hour" % [Economy.village_stock(_village), info.resource,
-			vr.yield_per_hour(info.resource, int(info.level))])
+			vr.rate(info, Economy.village_state(_village), Economy.now())])
 	_enemy.text = "\n".join(lines)
 
 

@@ -39,6 +39,8 @@
 //   or a capital, by its town id (data/capitals.json)
 // POST { "action": "station", "village": id, "army": { unit: count } }   soldiers to guard your village
 // POST { "action": "recall_guard" | "abandon_village", "village": id }   bring your guards home (and give the village up)
+// POST { "action": "build_capital", "village": id, "building": id }   the next level of a town building in your capital
+//   (data/capitals.json "buildings"), paid from your castle
 // POST { "action": "found_alliance", "name", "tag" }  costs gold (data/alliances.json)
 // POST { "action": "alliance" }                  your alliance, its members and requests, invitations, all alliances
 // POST { "action": "join_alliance" | "accept_invite" | "decline_invite" | "cancel_request", "id" }
@@ -73,7 +75,8 @@
 // castle lists who holds each village.
 // Capitals (the towns) are rows of the same table, with their own rules
 // (data/capitals.json); every request sets your castle's production boost
-// from the capitals your alliance holds (or you alone, outside one).
+// from the capitals your alliance holds (or you alone, outside one) and
+// their guild halls. A capital's town buildings are columns of its row.
 // Fortresses (the old kingdoms' castles) are every player's own camps, like
 // the robber barons' (data/fortresses.json); act() adds them to a player who
 // doesn't have them yet.
@@ -98,7 +101,7 @@ import { makeRules } from "../../../server/rules/load.ts";
 import { effectAt, eventsView, lastInvasion, withOverrides, type EventOverride, type EventRules } from "../../../server/rules/events.ts";
 import { CastleState } from "../../../server/rules/castle_state.ts";
 import { nearestSpot } from "../../../server/rules/outposts.ts";
-import { CapitalRules, rulesFor, type VillageInfo, type VillageState } from "../../../server/rules/villages.ts";
+import { CapitalRules, rulesFor, settled, type VillageInfo, type VillageState } from "../../../server/rules/villages.ts";
 import { capitalBoost, resolveVillageRaid, type VillageTarget } from "./villages.ts";
 import {
   act, castleLevel, castleView, checkName, fightRaid, isProtected, might, newPlayer, pickSpot, spyReport,
@@ -119,7 +122,7 @@ const rules = makeRules(buildings, units, barons, gearData, outpostsData, villag
 const CAPITALS: VillageInfo[] = (world as World).capitals ?? [];
 const VILLAGES: VillageInfo[] = [...((world as World).villages ?? []), ...CAPITALS];
 const CAPITAL_IDS = CAPITALS.map((c) => c.id);
-const VILLAGE_COLUMNS = "id, owner, owner_name, guard, taken_at, paid_at, version";
+const VILLAGE_COLUMNS = "id, owner, owner_name, guard, taken_at, paid_at, buildings, building, version";
 const pvp = pvpData as PvpRules;
 const allianceRules = alliancesData as AllianceRules;
 const aidRules = aidData as AidRules;
@@ -219,7 +222,7 @@ function villageInfo(id: unknown): VillageInfo | undefined {
 /** A villages row as the rules see it: a deleted owner leaves it to the militia. */
 function villageState(r: Row): VillageState {
   return { id: r.id, owner: r.owner ? String(r.owner_name ?? "") : "", guard: r.guard ?? {}, taken_at: Number(r.taken_at),
-    paid_at: Number(r.paid_at) };
+    paid_at: Number(r.paid_at), buildings: r.buildings ?? {}, building: r.building ?? null };
 }
 
 /** Who holds each village, for the map: owner, alliance tag, guard, peace and what it holds now. */
@@ -238,6 +241,7 @@ async function villagesView(userId: string) {
       ally: r.owner !== null && r.owner !== userId && me !== null && me.alliance_id !== null && Number(r.holder?.alliance_id) === me.alliance_id,
       guard: state.guard, taken_at: state.taken_at, peace_until: rulesFor(rules, info).peaceUntil(state),
       stock: rulesFor(rules, info).stock(info, state, t),
+      ...(info.capital ? { buildings: state.buildings, building: state.building } : {}),
     }];
   });
 }
@@ -249,16 +253,23 @@ async function holdings(userId: string): Promise<{ villages: number; capitals: n
   return { villages: (data ?? []).length - capitals, capitals };
 }
 
-/** The levels of the capitals held by this player's alliance (by the player alone outside one). */
-async function allianceCapitals(userId: string): Promise<number[]> {
+/** The capitals held by this player's alliance (by the player alone outside one): their levels and their guild halls' levels. */
+async function allianceCapitals(userId: string): Promise<{ levels: number[]; guilds: number[] }> {
   const me = await store.player(userId);
-  const { data } = await admin.from("villages").select("id, owner, holder:players!villages_owner_fkey(alliance_id)")
+  const { data } = await admin.from("villages")
+    .select("id, owner, owner_name, guard, taken_at, paid_at, buildings, building, holder:players!villages_owner_fkey(alliance_id)")
     .in("id", CAPITAL_IDS).not("owner", "is", null);
-  return (data ?? []).flatMap((r: Row) => {
+  const out = { levels: [] as number[], guilds: [] as number[] };
+  const t = now();
+  for (const r of (data ?? []) as Row[]) {
     const ours = r.owner === userId || (me !== null && me.alliance_id !== null && Number(r.holder?.alliance_id) === me.alliance_id);
     const info = villageInfo(r.id);
-    return ours && info ? [info.level] : [];
-  });
+    if (!ours || !info) continue;
+    out.levels.push(info.level);
+    const guild = rules.capitals.buildingLevel(villageState(r), "guildhall", t);
+    if (guild > 0) out.guilds.push(guild);
+  }
+  return out;
 }
 
 /** Whether this player's keep (and, for a capital, alliance) has room for one more of these. */
@@ -268,7 +279,7 @@ async function hasRoom(userId: string, info: VillageInfo): Promise<boolean> {
   const held = await holdings(userId);
   const vr = rulesFor(rules, info);
   if (vr.checkRoom(Number(p.level), info.capital ? held.capitals : held.villages) !== "") return false;
-  return !(vr instanceof CapitalRules) || vr.checkAlliance((await allianceCapitals(userId)).length) === "";
+  return !(vr instanceof CapitalRules) || vr.checkAlliance((await allianceCapitals(userId)).levels.length) === "";
 }
 
 /** The village an order names, as act() needs it, with its row. */
@@ -284,7 +295,7 @@ async function findVillage(id: unknown, userId: string): Promise<{ target: Villa
   const ally = row.owner !== null && row.owner !== userId && me !== null && me.alliance_id !== null &&
     Number((row as Row).holder?.alliance_id) === me.alliance_id;
   const target: VillageTarget = { info, state: villageState(row), ally, held: info.capital ? held.capitals : held.villages };
-  if (info.capital) target.allianceHeld = (await allianceCapitals(userId)).length;
+  if (info.capital) target.allianceHeld = (await allianceCapitals(userId)).levels.length;
   return { target, row };
 }
 
@@ -346,7 +357,8 @@ async function resolveVillageRaids() {
       const captured = out.state.owner !== before.owner;
       const { data: saved } = await admin.from("villages").update({
         owner: captured ? row.attacker : v.owner, owner_name: captured ? out.state.owner : v.owner_name, guard: out.state.guard,
-        taken_at: out.state.taken_at, paid_at: out.state.paid_at, version: v.version + 1,
+        taken_at: out.state.taken_at, paid_at: out.state.paid_at, buildings: out.state.buildings ?? {},
+        building: out.state.building ?? null, version: v.version + 1,
       }).eq("id", info.id).eq("version", v.version).select("id");
       if (!saved || saved.length === 0) continue;
       if (out.attackerReport) await saveReports(row.attacker, [out.attackerReport]);
@@ -370,8 +382,10 @@ async function villageOrder(userId: string, body: Record<string, unknown>): Prom
     const guard = v.guard ?? {};
     const abandon = body.action === "abandon_village";
     if (!abandon && Object.keys(guard).length === 0) return "No soldiers guard that village.";
+    // A capital's town buildings stay in the town; one still going up is lost.
     const { data: saved } = await admin.from("villages")
-      .update(abandon ? { owner: null, owner_name: null, guard: {}, taken_at: 0, paid_at: 0, version: v.version + 1 }
+      .update(abandon ? { owner: null, owner_name: null, guard: {}, taken_at: 0, paid_at: 0,
+        buildings: settled(villageState(v), now()).buildings ?? {}, building: null, version: v.version + 1 }
         : { guard: {}, version: v.version + 1 })
       .eq("id", info.id).eq("version", v.version).select("id");
     if (!saved || saved.length === 0) continue;
@@ -379,6 +393,33 @@ async function villageOrder(userId: string, body: Record<string, unknown>): Prom
     return "";
   }
   return "The server is busy, try again.";
+}
+
+/**
+ * Saves a capital's town building under way, if its row is still as act()
+ * saw it (`version`): nobody took the capital or collected from it meanwhile.
+ */
+async function startTownBuilding(userId: string, info: VillageInfo, state: VillageState, version: number): Promise<boolean> {
+  const { data: saved } = await admin.from("villages")
+    .update({ buildings: state.buildings ?? {}, building: state.building ?? null, version: version + 1 })
+    .eq("id", info.id).eq("owner", userId).eq("version", version).select("id");
+  return (saved ?? []).length > 0;
+}
+
+/** Gives a player's castle back what an order paid for that couldn't go through; the player as saved then. */
+async function refund(userId: string, cost: Record<string, number>): Promise<PlayerState | null> {
+  for (let attempt = 0; attempt < RETRIES; attempt++) {
+    const { data: row } = await admin.from("players").select(COLUMNS).eq("user_id", userId).maybeSingle();
+    if (!row) return null;
+    const { version, ...stored } = row as PlayerState & { version: number };
+    const castle = structuredClone(stored.castle);
+    castle.resources = { ...castle.resources };
+    for (const r of Object.keys(cost)) castle.resources[r] = Number(castle.resources[r] ?? 0) + cost[r];
+    const { data: saved } = await admin.from("players").update({ castle, version: version + 1 })
+      .eq("user_id", userId).eq("version", version).select("version");
+    if (saved && saved.length > 0) return { ...stored, castle };
+  }
+  return null;
 }
 
 /** The columns other players can see, worked out from a player's state. */
@@ -770,9 +811,10 @@ Deno.serve(async (req: Request) => {
     body = { action: "state" };
   }
   // Your castle's boost from the capitals your alliance holds.
-  const boost = capitalBoost(rules, await allianceCapitals(userId));
+  const held = await allianceCapitals(userId);
+  const boost = capitalBoost(rules, held.levels, held.guilds);
   let village: { target: VillageTarget; row: Row } | null = null;
-  if (body.action === "attack_village" || body.action === "station") village = await findVillage(body.village, userId);
+  if (["attack_village", "station", "build_capital"].includes(String(body.action))) village = await findVillage(body.village, userId);
 
   let target: { target: Target; row: Row } | null = null;
   if (["attack_player", "spy", "send_resources", "send_defenders"].includes(String(body.action))) {
@@ -847,6 +889,14 @@ Deno.serve(async (req: Request) => {
         resources: a.resources, army: a.army, from_x: a.from[0], from_y: a.from[1], to_x: a.to[0], to_y: a.to[1],
         depart: a.depart, arrive: a.arrive, leave: a.leave, back: a.back,
       });
+    }
+    // A town building paid for: put it up in the capital, unless the capital changed hands meanwhile.
+    if (outcome.capitalBuild && village) {
+      const built = await startTownBuilding(userId, village.target.info, outcome.capitalBuild.state, village.row.version);
+      if (!built) {
+        const refunded = await refund(userId, outcome.capitalBuild.cost);
+        return reply(await view(userId, refunded ?? outcome.state, { error: "That capital changed hands meanwhile, try again.", result }));
+      }
     }
     if (body.action === "spy" && outcome.error === "" && target) {
       const helpers = await helpersAt(target.row.user_id, t);

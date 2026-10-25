@@ -791,7 +791,8 @@ export class CastleState {
     return "";
   }
 
-  private pay(cost: Dict): void {
+  /** Takes what this costs (also what something outside the castle costs, such as a capital's town building). */
+  pay(cost: Dict): void {
     for (const r of Object.keys(cost)) {
       this.resources[r] = get(this.resources, r) - cost[r];
       this.stats.spent += cost[r];

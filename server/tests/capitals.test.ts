@@ -94,3 +94,61 @@ test("capitals your alliance holds make your castle produce more", () => {
     "the boost goes when the capitals do");
   assert.ok(Math.abs(c.totalBonus([2, 2, 2, 2, 2, 2]) - c.maxBonus) < 1e-9, "it has a ceiling");
 });
+
+test("the holder of a capital raises town buildings there, paid from their castle, one at a time", () => {
+  const p = player("Builder", c.minKeep);
+  const held: VillageState = { ...untouched(town.id), owner: "Builder", taken_at: T0 - 9 * HOUR, paid_at: T0 };
+  const order = (s: PlayerState, state: VillageState, building: string, t = T0) =>
+    act(rules, s, { action: "build_capital", village: town.id, building }, t, { village: target(town, state, 1) });
+  const cost = c.buildingCost("walls", 1);
+  p.castle.resources = { ...p.castle.resources, wood: cost.wood - 1, stone: cost.stone };
+  assert.equal(order(p, held, "walls").error, "Not enough resources");
+  p.castle.resources.wood = cost.wood + 100;
+  assert.equal(order(p, held, "palace").error, "There's no such town building.");
+  assert.equal(order(p, { ...held, owner: "Other" }, "walls").error, "That capital isn't yours.");
+  assert.equal(act(rules, p, { action: "build_capital", village: world.villages![0].id, building: "walls" }, T0,
+    { village: target(world.villages![0], held) }).error, "There's no such capital.");
+  const out = order(p, held, "walls");
+  assert.equal(out.error, "");
+  assert.ok(Math.abs(out.state.castle.resources.wood - 100) < 1, "the castle pays");
+  const going = out.capitalBuild!.state;
+  assert.deepEqual(going.building, { id: "walls", level: 1, finish: T0 + c.buildingTime("walls", 1) });
+  assert.equal(c.buildingLevel(going, "walls", T0), 0, "not up yet");
+  out.state.castle.resources = { wood: 99999, stone: 99999, food: 99999, gold: 99999 };
+  assert.equal(order(out.state, going, "market").error, "The town is already building something.");
+  const later = T0 + c.buildingTime("walls", 1);
+  assert.equal(c.buildingLevel(going, "walls", later), 1, "done when its time is up");
+  assert.ok(c.wallDefense(town, going, later) > c.wallDefense(town, going, T0), "town walls make its walls stronger");
+  const next = order(out.state, going, "walls", later);
+  assert.equal(next.error, "");
+  assert.deepEqual(next.capitalBuild!.state.buildings, { walls: 1 });
+  assert.equal(next.capitalBuild!.state.building!.level, 2);
+  const top: VillageState = { ...held, buildings: { walls: Number(c.buildings.walls.max_level) } };
+  assert.equal(order(out.state, top, "walls").error, "Town Walls is at its highest level.");
+});
+
+test("town buildings: more gold, a watch beside the guards, more production for the alliance, and they stay with the town", () => {
+  const plain: VillageState = { ...untouched(town.id), owner: "Holder", taken_at: 0, paid_at: T0 };
+  const market: VillageState = { ...plain, buildings: { market: 2 } };
+  assert.equal(c.rate(town, market, T0), Math.round(c.yieldPerHour("gold", town.level) * (1 + 2 * c.buildings.market.yield_bonus)));
+  assert.ok(c.collect(town, market, T0 + HOUR).amount > c.collect(town, plain, T0 + HOUR).amount, "the market sends more gold");
+
+  const guarded: VillageState = { ...plain, guard: { archer: 40 }, buildings: { guardhouse: 3 } };
+  const watch = c.watch(town, guarded, T0);
+  assert.equal(Object.values(watch).reduce((a, b) => a + b, 0), 3 * c.buildings.guardhouse.guards);
+  assert.equal(c.defenders(town, guarded, T0).archer, 40 + (watch.archer ?? 0));
+  assert.deepEqual(c.watch(town, { ...guarded, owner: "" }, T0), {}, "no watch for the town guard");
+  // A big army takes it: the holder's guards that are left walk home, not the watch.
+  const raid = { ...act(rules, player("Taker", c.minKeep, { swordsman: 2000, horseman: 800 }),
+    { action: "attack_village", army: { swordsman: 2000, horseman: 800 } }, T0, { village: target(town, guarded) }).raid!, id: 3 };
+  const taken = resolveVillageRaid(rules, town, { ...guarded, building: { id: "market", level: 1, finish: raid.arrive + 1 } }, raid, true);
+  assert.equal(taken.state.owner, "Taker");
+  assert.deepEqual(taken.state.buildings, { guardhouse: 3 }, "the buildings stay with the town");
+  assert.equal(taken.state.building, undefined, "one still going up is lost");
+  assert.ok((taken.guardHome.archer ?? 0) <= 40, "only the holder's own guards go home");
+
+  assert.deepEqual(capitalBoost(rules, [1], [0]), capitalBoost(rules, [1]));
+  const guild = capitalBoost(rules, [1], [3]).wood - capitalBoost(rules, [1]).wood;
+  assert.ok(Math.abs(guild - 3 * c.buildings.guildhall.production) < 1e-9, "a guild hall adds production");
+  assert.ok(Math.abs(c.totalBonus([2, 2, 2, 2, 2, 2], [5, 5, 5]) - (c.maxBonus + c.guildMax)) < 1e-9, "on top of the ceiling, with its own");
+});

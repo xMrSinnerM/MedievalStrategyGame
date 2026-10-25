@@ -17,5 +17,33 @@
 	"per_alliance": 3,
 	"bonus_base": 0.05,
 	"bonus_per_level": 0.03,
-	"max_bonus": 0.2
+	"max_bonus": 0.2,
+	"_buildings": "Town buildings: whoever holds a capital builds them there, paid from their home castle, one at a time; level n costs cost * cost_growth^(n - 1) and takes time * time_growth^(n - 1) seconds, and nothing can hurry it. They belong to the town: they stay when it changes hands or is given up, but one still being built is lost. walls: + defense to its walls per level, for whoever defends it. market: it sends yield_bonus more gold per level. guardhouse: `guards` soldiers per level (the town guard's mix) fight beside its holder's guards, back in full after every battle. guildhall: every castle of the holder's alliance produces `production` more per level, on top of the capitals' bonus, at most guild_max from all guild halls together.",
+	"buildings": {
+		"walls": {
+			"name": "Town Walls",
+			"description": "Stone walls and towers around the town. Its defenders fight harder behind them, whoever holds it.",
+			"max_level": 5, "cost": { "wood": 1500, "stone": 3000 }, "cost_growth": 1.5, "time": 7200, "time_growth": 1.5,
+			"defense": 60
+		},
+		"market": {
+			"name": "Market",
+			"description": "Merchants and stalls on the square. The town sends its holder more gold every hour.",
+			"max_level": 5, "cost": { "wood": 2500, "stone": 1500, "gold": 400 }, "cost_growth": 1.5, "time": 7200, "time_growth": 1.5,
+			"yield_bonus": 0.2
+		},
+		"guardhouse": {
+			"name": "Guardhouse",
+			"description": "The townsfolk keep a watch of their own. It fights beside the guards its holder stations there and is back in full after every battle.",
+			"max_level": 5, "cost": { "wood": 2000, "stone": 2000, "food": 2500 }, "cost_growth": 1.5, "time": 7200, "time_growth": 1.5,
+			"guards": 60
+		},
+		"guildhall": {
+			"name": "Guild Hall",
+			"description": "The town's guilds work for the whole alliance. Every castle of the holder's alliance produces more, on top of what the capitals give.",
+			"max_level": 5, "cost": { "wood": 3000, "stone": 2500, "gold": 800 }, "cost_growth": 1.5, "time": 10800, "time_growth": 1.5,
+			"production": 0.01
+		}
+	},
+	"guild_max": 0.1
 }

@@ -134,6 +134,11 @@ func _ready() -> void:
 	villages.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	villages.grow_vertical = Control.GROW_DIRECTION_BOTH
 	add_child(villages)
+	var town := preload("res://scripts/ui/town_panel.gd").new()
+	town.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	town.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	town.grow_vertical = Control.GROW_DIRECTION_BOTH
+	add_child(town)
 	if _owner_panel != null:
 		_owner_panel.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 		_owner_panel.grow_horizontal = Control.GROW_DIRECTION_BOTH

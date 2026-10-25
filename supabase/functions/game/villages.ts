@@ -6,7 +6,8 @@
 // request also collects what your villages made since the last one.
 // Capitals (the towns) are villages too, in the same table, with their own
 // rules (rulesFor()); they also raise the production of every castle in the
-// holder's alliance (capitalBoost()).
+// holder's alliance (capitalBoost()), and their holder can raise town
+// buildings in them ("build_capital" in act()).
 
 import { godotHash, type Dict } from "../../../server/rules/util.ts";
 import type { Side, SiegeResult } from "../../../server/rules/battle.ts";
@@ -93,10 +94,10 @@ export function checkVillageAttack(rules: VillageRules, castle: CastleState, me:
 
 /**
  * The castle boost for a player whose alliance (or who alone, outside one)
- * holds capitals of these levels.
+ * holds capitals of these levels, with guild halls of these levels.
  */
-export function capitalBoost(rules: Rules, levels: number[]): Dict {
-  return rules.capitals.boost(levels, rules.buildings.resources);
+export function capitalBoost(rules: Rules, levels: number[], guilds: number[] = []): Dict {
+  return rules.capitals.boost(levels, rules.buildings.resources, guilds);
 }
 
 function add(to: Dict, more: Dict): Dict {

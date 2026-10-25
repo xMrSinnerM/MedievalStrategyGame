@@ -49,3 +49,5 @@ signal help_screen_requested(player_name: String, kind: String)
 signal village_selected(village_id: String)
 ## Asks the world map's camera to look at this map position.
 signal map_focus_requested(map_pos: Vector2)
+## Opens the town buildings window of a capital (its village id).
+signal town_buildings_requested(village_id: String)

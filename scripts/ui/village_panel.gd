@@ -7,7 +7,8 @@ extends PanelContainer
 ## it or bring them home; and give the village up.
 ## Capitals (the towns) use the same panel: they send gold, and whoever holds
 ## one makes every castle of their alliance produce more. Offline you can
-## also send your party there.
+## also send your party there. A capital also shows its town buildings, and
+## whoever holds it can raise them here, one at a time.
 
 const TEXT := Color(0.95, 0.9, 0.8)
 const MUTED := Color(0.78, 0.72, 0.62)
@@ -30,6 +31,9 @@ var _recall: Button
 var _abandon: Button
 var _abandon_armed := false
 var _timer := 0.0
+var _town_box: VBoxContainer
+var _town_toggle: Button
+var _town_now: Label
 
 var _picture: InfoPicture
 
@@ -55,6 +59,14 @@ func _ready() -> void:
 	_details = _label(14, TEXT)
 	_details.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	box.add_child(_details)
+	_town_box = VBoxContainer.new()
+	_town_box.add_theme_constant_override("separation", 2)
+	box.add_child(_town_box)
+	_town_toggle = _button("", func() -> void: EventBus.town_buildings_requested.emit(village_id))
+	_town_toggle.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	_town_box.add_child(_town_toggle)
+	_town_now = _label(14, GOOD)
+	_town_box.add_child(_town_now)
 	_odds = _label(15, TEXT)
 	_odds.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	box.add_child(_odds)
@@ -117,7 +129,7 @@ func _refresh() -> void:
 	var mine := Economy.is_my_village(village_id)
 	var owner := String(state.get("owner", ""))
 	var level := int(info.level)
-	var per_hour := vr.yield_per_hour(info.resource, level)
+	var per_hour := vr.rate(info, state, Economy.now())
 	var bonus := "+%d%%" % roundi(Economy.capital_rules.bonus(level) * 100.0)
 	var now := Economy.now()
 	_title.text = String(info.name)
@@ -145,16 +157,18 @@ func _refresh() -> void:
 	else:
 		lines.append("Held by the local militia")
 		lines.append("Take it and it sends you %d %s an hour" % [per_hour, info.resource])
-	lines.append("Holds %d of %d %s%s" % [Economy.village_stock(village_id), vr.store_cap(info.resource, level), info.resource,
+	lines.append("Holds %d of %d %s%s" % [Economy.village_stock(village_id), vr.cap(info, state, now), info.resource,
 			"" if mine else " (yours if you take it)"])
-	var defenders := vr.defenders(info, state)
+	var defenders := vr.defenders(info, state, now)
 	var total := 0
 	for unit: String in defenders:
 		total += int(defenders[unit])
-	lines.append(("Guards: %d soldiers" if owner != "" else "Town guard: %d soldiers" if capital else "Militia: %d soldiers") % total)
+	lines.append(("Guards: %d soldiers" if owner != "" else "Town guard: %d soldiers" if capital else "Militia: %d soldiers") % total
+			+ (" (%d of them the guardhouse's watch)" % _count(Economy.capital_rules.watch(info, state, now))
+				if capital and not Economy.capital_rules.watch(info, state, now).is_empty() else ""))
 	for unit: String in defenders:
 		lines.append("    %d %s" % [int(defenders[unit]), Economy.rules.unit_plural(unit)])
-	var wall := Battle.wall_from_defense(vr.palisade(level))
+	var wall := Battle.wall_from_defense(vr.wall_defense(info, state, now))
 	lines.append("%s: defenders +%d%% defence" % ["Walls" if capital else "Palisade", roundi((wall - 1.0) * 100.0)])
 	var peace := Economy.village_peace_until(village_id)
 	if peace > now:
@@ -172,6 +186,7 @@ func _refresh() -> void:
 		if Economy.capital_bonus() > 0.0:
 			lines.append("Capitals give you +%d%% production now" % roundi(Economy.capital_bonus() * 100.0))
 	_details.text = "\n".join(lines)
+	_refresh_town(capital, mine)
 	_attack.visible = not mine
 	_travel.visible = capital and not Economy.online
 	_recall.visible = mine and Economy.online and total > 0
@@ -199,6 +214,36 @@ func _refresh() -> void:
 		_odds.text = "Your garrison of %d: %s (%d%%)" % [have, Battle.odds_text(chance), roundi(chance * 100.0)]
 		_odds.add_theme_color_override("font_color", BAD.lerp(GOOD, chance))
 	_attack.disabled = have <= 0 or (why != "" and why != "Choose some soldiers to send.")
+
+
+func _refresh_town(capital: bool, mine: bool) -> void:
+	## A line with the capital's town buildings, and the one going up; it
+	## opens their window (town_panel.gd), where its holder builds them.
+	_town_box.visible = capital
+	if not capital:
+		return
+	var cr := Economy.capital_rules
+	var state := Economy.village_state(village_id)
+	var now := Economy.now()
+	var built: PackedStringArray = []
+	for id: String in cr.buildings:
+		var level := cr.building_level(state, id, now)
+		if level > 0:
+			built.append("%s %d" % [cr.buildings[id].get("name", id), level])
+	_town_toggle.text = "Town buildings: %s  ▸" % (", ".join(built) if not built.is_empty() else "none yet")
+	_town_toggle.tooltip_text = "Build them in your capital" if mine else "See what this town has built"
+	var going := cr.under_way(state, now)
+	_town_now.visible = not going.is_empty()
+	if not going.is_empty():
+		_town_now.text = "Building %s level %d: %s left" % [String(cr.buildings.get(going.id, {}).get("name", going.id)), int(going.level),
+				_long_clock(float(going.finish) - now)]
+
+
+static func _count(army: Dictionary) -> int:
+	var n := 0
+	for unit: String in army:
+		n += int(army[unit])
+	return n
 
 
 func _build_guard_rows() -> void:

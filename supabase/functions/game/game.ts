@@ -16,7 +16,7 @@ import { claimReward, eventPoints, invade, rewardTiers } from "./invasion.ts";
 import { claimQuest, rollDay, type QuestRules } from "../../../server/rules/quests.ts";
 import type { GearRules, Lead } from "../../../server/rules/gear.ts";
 import { deliverCarts, OUTPOST_ID, unload, type Cart, type OutpostData } from "../../../server/rules/outposts.ts";
-import { rulesFor, type VillageInfo } from "../../../server/rules/villages.ts";
+import { rulesFor, type VillageInfo, type VillageState } from "../../../server/rules/villages.ts";
 import { checkVillageAttack, type VillageTarget } from "./villages.ts";
 
 /** A player as stored in the players table (the game columns). */
@@ -143,7 +143,7 @@ export interface Context {
   quests?: QuestRules;
   /** For "found_outpost": the free spot nearest your home, or null when there is none. */
   outpostSpot?: [number, number] | null;
-  /** For "attack_village" and "station": the village named. */
+  /** For "attack_village", "station" and "build_capital": the village (or capital) named. */
   village?: VillageTarget;
   /** What your villages sent your castle since the last request (data/villages.json). */
   villageIncome?: Dict;
@@ -191,6 +191,8 @@ export interface Outcome {
   raid?: Omit<Raid, "id">;
   /** Resources or defenders sent to an ally, for index.ts to store. */
   aid?: Omit<Aid, "id">;
+  /** For "build_capital": the capital's state with the building going up, and what it cost, for index.ts to store. */
+  capitalBuild?: { state: VillageState; cost: Dict };
 }
 
 export const NAME_RULE = /^[\p{L}\p{N}][\p{L}\p{N} _'-]{1,18}[\p{L}\p{N}]$/u;
@@ -321,6 +323,7 @@ export function act(rules: Rules, given: PlayerState, req: Request, now: number,
   let result: unknown = undefined;
   let raid: Omit<Raid, "id"> | undefined;
   let aid: Omit<Aid, "id"> | undefined;
+  let capitalBuild: Outcome["capitalBuild"];
   let protectedUntil = stored.protected_until ?? 0;
   let claimed = stored.event_claimed ?? 0;
   switch (req.action) {
@@ -475,6 +478,19 @@ export function act(rules: Rules, given: PlayerState, req: Request, now: number,
       if (attack && v.state.owner !== "") protectedUntil = 0;
       break;
     }
+    case "build_capital": {
+      // The next level of a town building in your capital, paid from your castle.
+      const v = ctx.village;
+      const building = String(req.building ?? "");
+      if (v === undefined || !v.info.capital) error = "There's no such capital.";
+      else if (v.state.owner !== stored.name) error = "That capital isn't yours.";
+      else error = rules.capitals.checkBuild(v.state, building, now, castle);
+      if (error !== "" || v === undefined) break;
+      const cost = rules.capitals.buildingCost(building, rules.capitals.buildingLevel(v.state, building, now) + 1);
+      castle.pay(cost);
+      capitalBuild = { state: rules.capitals.startBuild(v.state, building, now), cost };
+      break;
+    }
     case "craft":
       error = castle.checkCraft(String(req.tool), Number(req.amount));
       if (error === "") castle.craft(String(req.tool), Number(req.amount), now);
@@ -585,6 +601,7 @@ export function act(rules: Rules, given: PlayerState, req: Request, now: number,
     result,
     raid,
     aid,
+    ...(capitalBuild ? { capitalBuild } : {}),
   };
 }
 

@@ -122,7 +122,7 @@ func _refresh() -> void:
 		var state := Economy.village_state(id)
 		var owner := String(state.get("owner", ""))
 		var tag := String(state.get("tag", ""))
-		var defenders := vr.defenders(v, state)
+		var defenders := vr.defenders(v, state, Economy.now())
 		var n := 0
 		for unit: String in defenders:
 			n += int(defenders[unit])
@@ -146,7 +146,8 @@ func _add_capitals() -> void:
 				else "your castle produces more: up to +%d%% in all. You can hold %d." % [roundi(cr.max_bonus * 100.0), cr.per_player])
 			+ (" Now: +%d%%." % roundi(Economy.capital_bonus() * 100.0) if Economy.capital_bonus() > 0.0 else "")
 			+ "".join(Economy.my_capitals().map(func(v: Dictionary) -> String:
-				return " %s sends you %d gold an hour." % [v.name, cr.yield_per_hour(v.resource, int(v.level))])), 14, MenuStyle.MUTED)
+				return " %s sends you %d gold an hour." % [v.name, cr.rate(v, Economy.village_state(String(v.id)), Economy.now())]))
+			+ " Hold one and you can raise town buildings in it: walls, a market, a guardhouse and a guild hall.", 14, MenuStyle.MUTED)
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	hint.custom_minimum_size = Vector2(780, 0)
 	_body.add_child(hint)
