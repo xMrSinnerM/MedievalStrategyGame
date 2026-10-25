@@ -11,6 +11,7 @@ extends RefCounted
 
 const PATH := "res://data/barons.json"
 const FORTRESS_PATH := "res://data/fortresses.json"
+const HORDE_PATH := "res://data/horde.json"
 
 var max_level := 40
 var garrison_base := 14.0
@@ -31,6 +32,9 @@ var drop_level_bonus := 0         ## a fortress drops gear like a camp this many
 ## The numbers for fortresses (data/fortresses.json): online, the old
 ## kingdoms' castles are camps with "fortress" set (BaronCamp.fortress).
 var fortress: BaronRules
+## The numbers for the Ember Horde's camps (data/horde.json): online, a timed
+## event's camps with "horde" set (BaronCamp.horde).
+var horde: BaronRules
 
 
 static func load_default() -> BaronRules:
@@ -44,11 +48,17 @@ static func load_default() -> BaronRules:
 	if forts is Dictionary:
 		rules.fortress = BaronRules.new()
 		rules.fortress.load_from(forts)
+	var horde_data = JSON.parse_string(FileAccess.get_file_as_string(HORDE_PATH))
+	if horde_data is Dictionary:
+		rules.horde = BaronRules.new()
+		rules.horde.load_from(horde_data)
 	return rules
 
 
 func for_camp(camp: BaronCamp) -> BaronRules:
-	## The rules for this camp: the fortress rules for a fortress, else these.
+	## The rules for this camp: the fortress rules for a fortress, the horde's for a horde camp, else these.
+	if camp.is_horde() and horde != null:
+		return horde
 	return fortress if camp.fortress and fortress != null else self
 
 

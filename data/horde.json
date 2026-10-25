@@ -1,0 +1,21 @@
+{
+	"_comment": "The Ember Horde's camps (a timed event online, see data/events.json): the same keys as data/barons.json. The horde rides light: more horsemen and archers than the robber barons, behind a low stockade, and every win raises one of its camps a level.",
+	"max_level": 45,
+	"garrison_base": 16,
+	"garrison_growth": 1.16,
+	"armies": [
+		{ "from_level": 1, "mix": { "horseman": 0.3, "archer": 0.4, "spearman": 0.3 } },
+		{ "from_level": 6, "mix": { "horseman": 0.4, "archer": 0.35, "swordsman": 0.25 } },
+		{ "from_level": 15, "mix": { "horseman": 0.45, "archer": 0.3, "swordsman": 0.25 } }
+	],
+	"palisade_base": 10,
+	"palisade_per_level": 10,
+	"loot_base": { "wood": 300, "stone": 200, "food": 400, "gold": 250 },
+	"loot_growth": 1.15,
+	"carry_per_soldier": 12,
+	"defeats_per_level": [{ "from_level": 1, "defeats": 1 }],
+	"rebuild_base": 180,
+	"rebuild_per_level": 0,
+	"march_speed": 6,
+	"drop_level_bonus": 3
+}

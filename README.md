@@ -757,6 +757,21 @@ starts: 50, 150, 300, 600, 1000 and 2000 points. Rewards are earned only by
 playing; nothing can be bought. Resources go into your storage, and what
 doesn't fit is lost.
 
+The Ember Horde rides from Monday 12:00 to Wednesday 12:00 UTC. Four horde
+camps (ember-orange banners) appear near every castle: three outrider camps
+at the same levels as the invaders and the Warlord's camp, three levels above
+the last of them. The horde fields more horsemen and archers than the
+barons (`data/horde.json`). Every win raises a horde camp a level and gives
+horde points (10 per level it had, 30 at the Warlord's) and war trophies (2
+per level, 6 at the Warlord's); only battles fought before the horde leaves
+count. The event screen's Ember Horde tab has the Trophy Market, where war
+trophies buy resources, soldiers, siege tools and two pieces of epic gear,
+each a few times per horde, and the players with the most horde points. Once
+the horde has gone, everyone with points claims one ranked prize: #1, #2 to
+#3, #4 to #10, #11 to #25, and everyone else. Trophies, purchases and the
+prize last until the next horde arrives. War trophies come only from
+fighting; nothing can be bought.
+
 ### Owner tools
 
 The game owner's account gets an Owner button (O) on the world map. Its panel
@@ -858,6 +873,7 @@ How the parts work:
 - [x] Chat (world and alliance)
 - [x] Helping allies: sending resources and soldiers
 - [x] Timed events: weekend loot bonus, baron invasions, event rewards and leaderboard
+- [x] Ember Horde: horde camps, war trophies, Trophy Market and ranked prizes
 - [x] Owner tools: start and stop events, give players resources and soldiers
 - [x] Siege waves: battle rules (walls and courtyard)
 - [x] Siege waves: choose your waves on the attack screen

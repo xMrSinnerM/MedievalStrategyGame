@@ -61,6 +61,9 @@ export interface Report {
   /** Invader camps: the invasion it belongs to, and the event points this win earned. */
   event?: number;
   points?: number;
+  /** Ember Horde camps: the horde's run it belongs to, and the war trophies this win earned (`points` are horde points). */
+  horde?: number;
+  trophies?: number;
 }
 
 export interface Army {
@@ -193,6 +196,14 @@ function fightCamp(world: Army, rules: BaronRules, m: March): Report {
   if (camp.event !== undefined) {
     out.event = camp.event;
     out.points = result.winner === "a" ? (camp.points ?? 0) * result.level : 0;
+    out.needed = 1;
+  }
+  if (camp.horde !== undefined) {
+    // Only battles fought before the horde leaves count, so the ranking is settled when it ends.
+    const counts = result.winner === "a" && m.arrive < (camp.until ?? Infinity);
+    out.horde = camp.horde;
+    out.points = counts ? (camp.points ?? 0) * result.level : 0;
+    out.trophies = counts ? (camp.trophies ?? 0) * result.level : 0;
     out.needed = 1;
   }
   return out;

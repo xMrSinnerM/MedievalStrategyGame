@@ -1,8 +1,10 @@
 extends PanelContainer
 ## The event screen (V on the world map, online): the week's timed events,
-## the Baron Invasion's reward tiers with your points, and the players with
-## the most points in it. Rewards are earned only by playing: beat invader
-## camps for points, then claim each tier in order until the next invasion.
+## then a tab for each event with camps. Baron Invasion: its reward tiers with
+## your points, and the players with the most points in it. Ember Horde: the
+## Trophy Market, its ranking and your ranked prize (scripts/ui/horde_section.gd).
+## Rewards are earned only by playing: beat invader camps for points, then
+## claim each tier in order until the next invasion.
 
 const ME := Color(1.0, 0.85, 0.45)
 const DONE := Color(0.55, 0.9, 0.45)
@@ -12,6 +14,9 @@ var _status: Label
 var _rewards: GridContainer
 var _board: GridContainer
 var _rank: Label
+var _invasion: VBoxContainer
+var _horde: VBoxContainer
+var _tabs: Array[Button] = []
 var _timer := 0.0
 
 
@@ -37,29 +42,49 @@ func _ready() -> void:
 	_calendar = MenuStyle.label("", 15, MenuStyle.TEXT)
 	box.add_child(_calendar)
 	box.add_child(HSeparator.new())
-	box.add_child(MenuStyle.label("Baron Invasion rewards", 19, MenuStyle.GOLD))
+	var tab_row := HBoxContainer.new()
+	tab_row.add_theme_constant_override("separation", 8)
+	box.add_child(tab_row)
+	for i in 2:
+		var tab := Button.new()
+		tab.text = ["Baron Invasion", "Ember Horde"][i]
+		tab.toggle_mode = true
+		tab.focus_mode = Control.FOCUS_NONE
+		tab.custom_minimum_size = Vector2(180, 32)
+		tab.add_theme_font_size_override("font_size", 16)
+		tab.pressed.connect(show_tab.bind(i))
+		tab_row.add_child(tab)
+		_tabs.append(tab)
+	_invasion = VBoxContainer.new()
+	_invasion.add_theme_constant_override("separation", 10)
+	box.add_child(_invasion)
+	_horde = preload("res://scripts/ui/horde_section.gd").new()
+	_horde.visible = false
+	box.add_child(_horde)
+	var inv := _invasion
+	inv.add_child(MenuStyle.label("Baron Invasion rewards", 19, MenuStyle.GOLD))
 	_status = MenuStyle.label("", 15, MenuStyle.MUTED)
 	_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	box.add_child(_status)
+	inv.add_child(_status)
 	_rewards = GridContainer.new()
 	_rewards.columns = 3
 	_rewards.add_theme_constant_override("h_separation", 24)
 	_rewards.add_theme_constant_override("v_separation", 4)
-	box.add_child(_rewards)
-	box.add_child(HSeparator.new())
-	box.add_child(MenuStyle.label("Most event points", 19, MenuStyle.GOLD))
+	inv.add_child(_rewards)
+	inv.add_child(HSeparator.new())
+	inv.add_child(MenuStyle.label("Most event points", 19, MenuStyle.GOLD))
 	_board = GridContainer.new()
 	_board.columns = 3
 	_board.add_theme_constant_override("h_separation", 28)
 	_board.add_theme_constant_override("v_separation", 4)
-	box.add_child(_board)
+	inv.add_child(_board)
 	_rank = MenuStyle.label("", 16, ME)
 	_rank.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	box.add_child(_rank)
+	inv.add_child(_rank)
 	var buttons := HBoxContainer.new()
 	buttons.alignment = BoxContainer.ALIGNMENT_CENTER
 	buttons.add_theme_constant_override("separation", 12)
-	buttons.add_child(MenuStyle.button("Refresh", Economy.ask_event_board, 180.0))
+	buttons.add_child(MenuStyle.button("Refresh", _ask_boards, 180.0))
 	buttons.add_child(MenuStyle.button("Close", close_panel, 180.0))
 	box.add_child(buttons)
 	Economy.event_board_changed.connect(_fill_board)
@@ -101,8 +126,33 @@ func open_panel() -> void:
 	_fill_board()
 	if Economy.event_board.is_empty():
 		_rank.text = "Asking the server..."
-	Economy.ask_event_board()
+	_ask_boards()
+	# The horde's tab while it rides, or while its prizes wait and no invasion is on.
+	var horde := not Economy.horde_event().is_empty() or (Economy.invasion().is_empty() and Economy.my_horde_points() > 0
+			and not Economy.horde_prize_taken())
+	show_tab(1 if horde else 0)
 	visible = true
+
+
+func show_tab(i: int) -> void:
+	## 0: the Baron Invasion, 1: the Ember Horde.
+	for k in _tabs.size():
+		_tabs[k].button_pressed = k == i
+	_invasion.visible = i == 0
+	_horde.visible = i == 1
+	if i == 1:
+		_horde.fill()
+	_recenter.call_deferred()
+
+
+func _recenter() -> void:
+	## The tabs differ in size: shrink to fit and stay in the middle of the screen.
+	set_anchors_and_offsets_preset(Control.PRESET_CENTER, Control.PRESET_MODE_MINSIZE)
+
+
+func _ask_boards() -> void:
+	Economy.ask_event_board()
+	Economy.ask_horde_board()
 
 
 func close_panel() -> void:

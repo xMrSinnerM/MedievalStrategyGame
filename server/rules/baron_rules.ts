@@ -27,6 +27,8 @@ export class BaronRules {
   dropLevelBonus = 0;
   /** The numbers for fortresses (data/fortresses.json), camps with `fortress` set; none without them. */
   fortress?: BaronRules;
+  /** The numbers for the Ember Horde's camps (data/horde.json), camps with `horde` set; none without them. */
+  horde?: BaronRules;
 
   constructor(data: Json) {
     this.maxLevel = Number(data.max_level ?? this.maxLevel);
@@ -45,8 +47,9 @@ export class BaronRules {
     this.dropLevelBonus = Number(data.drop_level_bonus ?? 0);
   }
 
-  /** The rules for this camp: the fortress rules for a fortress, else these. */
-  forCamp(camp: { fortress?: boolean }): BaronRules {
+  /** The rules for this camp: the fortress rules for a fortress, the horde's for a horde camp, else these. */
+  forCamp(camp: { fortress?: boolean; horde?: number }): BaronRules {
+    if (camp.horde !== undefined && this.horde) return this.horde;
     return camp.fortress && this.fortress ? this.fortress : this;
   }
 

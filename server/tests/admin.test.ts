@@ -72,7 +72,7 @@ test("an invasion the owner starts brings invader camps, and they leave when it'
 test("the owner's panel lists every event and whether it's on", () => {
   const cal = withOverrides(events, [startEvent(events, "plunder_weekend", 1, MONDAY) as never]);
   const view = adminEvents(cal, MONDAY + 60);
-  assert.deepEqual(view.map((e) => [e.id, e.on]), [["plunder_weekend", true], ["baron_invasion", false]]);
+  assert.deepEqual(view.map((e) => [e.id, e.on]), [["plunder_weekend", true], ["baron_invasion", false], ["ember_horde", false]]);
   assert.equal(view[0].end, MONDAY + 3600);
 });
 

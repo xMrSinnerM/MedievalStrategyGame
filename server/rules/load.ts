@@ -21,9 +21,10 @@ export interface Rules {
 
 // deno-lint-ignore no-explicit-any
 export function makeRules(buildings: any, units: any, barons: any, gear: any = {}, outposts: any = {}, villages: any = {},
-  capitals: any = {}, fortresses: any = {}): Rules {
+  capitals: any = {}, fortresses: any = {}, horde: any = {}): Rules {
   const baronRules = new BaronRules(barons);
   if (Object.keys(fortresses).length > 0) baronRules.fortress = new BaronRules(fortresses);
+  if (Object.keys(horde).length > 0) baronRules.horde = new BaronRules(horde);
   return { buildings: new BuildingRules(buildings, units), barons: baronRules, gear: new GearRules(gear),
     outposts: new OutpostRules(outposts), villages: new VillageRules(villages),
     capitals: new CapitalRules(capitals) };

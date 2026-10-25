@@ -18,6 +18,11 @@ var rebuilt_at := 0.0        ## unix time it can be attacked again
 ## a win. The server decides its fights; it rises a level with every win.
 var event := 0.0
 var points := 0
+## Online only: a camp of the Ember Horde (a timed event) has the start of
+## the horde's run here, and gives `points` horde points and `trophies` war
+## trophies per level for a win, with the horde rules (BaronRules.for_camp()).
+var horde := 0.0
+var trophies := 0
 ## Online only: a fortress, one of the old kingdoms' castles, with the
 ## fortress rules (BaronRules.for_camp()).
 var fortress := false
@@ -34,6 +39,10 @@ static func create(camp_id: String, display_name: String, pos: Vector2, start_le
 
 func is_invader() -> bool:
 	return event > 0.0
+
+
+func is_horde() -> bool:
+	return horde > 0.0
 
 
 func is_ready(now: float) -> bool:
@@ -91,6 +100,10 @@ func to_dict() -> Dictionary:
 	if is_invader():
 		out["event"] = event
 		out["points"] = points
+	if is_horde():
+		out["horde"] = horde
+		out["points"] = points
+		out["trophies"] = trophies
 	if fortress:
 		out["fortress"] = true
 	return out
@@ -103,5 +116,7 @@ static func from_dict(data: Dictionary) -> BaronCamp:
 	camp.rebuilt_at = float(data.get("rebuilt_at", 0.0))
 	camp.event = float(data.get("event", 0.0))
 	camp.points = int(data.get("points", 0))
+	camp.horde = float(data.get("horde", 0.0))
+	camp.trophies = int(data.get("trophies", 0))
 	camp.fortress = bool(data.get("fortress", false))
 	return camp

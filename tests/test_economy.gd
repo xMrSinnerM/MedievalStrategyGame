@@ -653,6 +653,13 @@ func test_baron_camp() -> void:
 	var invader_copy := BaronCamp.from_dict(JSON.parse_string(JSON.stringify(invader.to_dict())))
 	check(invader_copy.is_invader() and invader_copy.points == 10 and invader_copy.event == 1792000000.0,
 			"an invader camp keeps its invasion and points")
+	var horde := BaronCamp.from_dict({"id": "horde_1", "name": "Ashrider Camp", "position": [5, 6], "level": 3,
+			"horde": 1792000000.0, "points": 10, "trophies": 1})
+	var horde_copy := BaronCamp.from_dict(JSON.parse_string(JSON.stringify(horde.to_dict())))
+	check(horde_copy.is_horde() and not horde_copy.is_invader() and horde_copy.trophies == 1 and horde_copy.horde == 1792000000.0,
+			"a horde camp keeps its run, points and trophies")
+	check(br.for_camp(horde_copy) == br.horde and br.horde != null and br.horde.garrison(3).has("horseman"),
+			"a horde camp has the horde's soldiers")
 	# Economy keeps each camp's level in the save slot.
 	var eco = load("res://scripts/core/economy.gd").new()
 	eco.save_dir = "user://test_saves"

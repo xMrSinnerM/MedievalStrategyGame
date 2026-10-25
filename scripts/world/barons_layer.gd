@@ -4,7 +4,8 @@ extends Node3D
 ## from them (and, offline, to and from resource villages). Camps are placed
 ## by BaronPlacer the first time a game sees them.
 ## Online, the invader camps of a Baron Invasion come and go with the event;
-## they fly a red banner. Fortresses (the old kingdoms' castles, online) are
+## they fly a red banner. The Ember Horde's camps come and go the same way,
+## under an ember-orange banner. Fortresses (the old kingdoms' castles, online) are
 ## camps too, without a model: the castle stands there, and its label shows
 ## the fortress's level.
 
@@ -17,6 +18,9 @@ const BARON_BANNER := {"id": "barons", "color": Color(0.1, 0.09, 0.09), "seconda
 const INVADER_BANNER := {"id": "invaders", "color": Color(0.62, 0.08, 0.06), "secondary_color": Color(0.1, 0.09, 0.09),
 		"banner": {"pattern": "chevron", "charge": ""}}
 const INVADER_LABEL := Color(1.0, 0.42, 0.32)
+const HORDE_BANNER := {"id": "horde", "color": Color(0.93, 0.45, 0.1), "secondary_color": Color(0.12, 0.1, 0.09),
+		"banner": {"pattern": "per_pale", "charge": ""}}
+const HORDE_LABEL := Color(1.0, 0.68, 0.25)
 
 var _camps := {}          ## camp id -> {"node", "label"}
 var settlements: Node3D   ## the settlements layer, for the fortresses' labels
@@ -61,7 +65,9 @@ func _sync_camps() -> void:
 		live[camp.id] = true
 		if not _camps.has(camp.id):
 			_add_camp(camp)
-			_camps[camp.id].label.visible = _zoom_t <= LABEL_MAX_ZOOM
+			# Fortresses have no model of their own (_add_camp() skips them).
+			if _camps.has(camp.id):
+				_camps[camp.id].label.visible = _zoom_t <= LABEL_MAX_ZOOM
 	for id in _camps.keys():
 		if not live.has(id):
 			_camps[id].node.queue_free()
@@ -88,7 +94,7 @@ func _add_camp(camp: BaronCamp) -> void:
 	var fire_model := MeshInstance3D.new()
 	fire_model.mesh = fire.commit()
 	root.add_child(fire_model)
-	var banner := Banners.make(INVADER_BANNER if camp.is_invader() else BARON_BANNER, 8.0, 4.0)
+	var banner := Banners.make(HORDE_BANNER if camp.is_horde() else INVADER_BANNER if camp.is_invader() else BARON_BANNER, 8.0, 4.0)
 	banner.position = Vector3(-1.5, 0, -0.5)
 	root.add_child(banner)
 	var label := Label3D.new()
@@ -140,10 +146,12 @@ func _refresh_labels() -> void:
 		var text := "%s  Lv %d" % [camp.camp_name, camp.level]
 		if camp.is_invader():
 			text = "Invaders: " + text
+		elif camp.is_horde():
+			text = "Horde: " + text
 		if not camp.is_ready(now):
 			text += "\nRebuilding %s" % _clock(camp.rebuilt_at - now)
 		label.text = text
-		var color := INVADER_LABEL if camp.is_invader() else Color(1.0, 0.62, 0.5)
+		var color := INVADER_LABEL if camp.is_invader() else HORDE_LABEL if camp.is_horde() else Color(1.0, 0.62, 0.5)
 		label.modulate = color if camp.is_ready(now) else Color(0.7, 0.62, 0.58)
 
 
