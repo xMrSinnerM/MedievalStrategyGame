@@ -117,6 +117,8 @@ func show_castle() -> void:
 	_defence_button.visible = view.editable and view.castle.limits.is_empty()
 	_defence.visible = false
 	_research.close_panel()
+	# A glimpse of someone else's castle shows its buildings, not its stores.
+	_resources.visible = not view.glimpse
 	for type: String in _build_buttons:
 		_build_buttons[type].visible = view.castle.limits.is_empty() or view.castle.limits.types.has(type)
 	_queue_signature = "?"
@@ -420,7 +422,7 @@ func _refresh_side_panel() -> void:
 	if type == "keep":
 		lines.append("[b]Builders:[/b] %d, at level %d: %d" % [rules.builders(b.level), mini(b.level + 1, max_level), rules.builders(mini(b.level + 1, max_level))])
 		lines.append("Other buildings can reach level %d" % rules.max_level("woodcutter", b.level))
-	if type == "academy" and b.level > 0:
+	if type == "academy" and b.level > 0 and not view.glimpse:
 		var study := "Researching [b]%s[/b], level %d." % [rules.study_name(castle.studying.study), int(castle.studying.target)] \
 			if not castle.studying.is_empty() else "The scholars are idle."
 		var known := 0
@@ -454,13 +456,14 @@ func _refresh_side_panel() -> void:
 	_upgrade_button.text = "Upgrade to level %d" % next
 	_move_button.visible = view.editable and b.cell.x >= 0
 	_cancel_button.visible = view.editable and building
-	_recruit.visible = type == "barracks" and b.level > 0
+	# A glimpse doesn't show who trains in the barracks or what the workshop has made.
+	_recruit.visible = type == "barracks" and b.level > 0 and not view.glimpse
 	if _recruit.visible:
 		_recruit.refresh()
-	_workshop.visible = type == "workshop" and b.level > 0
+	_workshop.visible = type == "workshop" and b.level > 0 and not view.glimpse
 	if _workshop.visible:
 		_workshop.refresh()
-	_research_button.visible = type == "academy" and b.level > 0
+	_research_button.visible = type == "academy" and b.level > 0 and not view.glimpse
 	if _research.visible:
 		_research.refresh()
 	_fit_side_panel.call_deferred()

@@ -20,6 +20,8 @@ const OTHER_COLOR := Color(0.38, 0.4, 0.46)
 
 var castle: CastleState
 var editable := false
+## Only the buildings of this castle are known (see open()).
+var glimpse := false
 var mode := Mode.SELECT
 var selected := -1
 var placing_type := ""
@@ -63,9 +65,12 @@ func _ready() -> void:
 	hud.view = self
 
 
-func open(p_castle: CastleState) -> void:
+func open(p_castle: CastleState, p_glimpse := false) -> void:
 	## Shows `p_castle`. The player's own castle can be changed, others only looked at.
+	## A glimpse (another player's castle, a fortress) shows only the buildings:
+	## its soldiers and stores aren't known.
 	castle = p_castle
+	glimpse = p_glimpse
 	editable = not castle.is_npc()
 	var faction := GameData.get_faction(castle.owner)
 	_team = PLAYER_COLOR if editable else (faction.color if not faction.is_empty() else OTHER_COLOR)

@@ -17,6 +17,7 @@ var pause_menu: CanvasLayer
 
 func _ready() -> void:
 	EventBus.castle_requested.connect(show_castle)
+	EventBus.castle_visit_requested.connect(visit_castle)
 	EventBus.world_map_requested.connect(show_world_map)
 	main_menu = preload("res://scripts/ui/main_menu.gd").new()
 	main_menu.game_requested.connect(start_game)
@@ -75,13 +76,23 @@ func show_castle(castle_id: String) -> void:
 	if castle == null:
 		push_warning("No castle with id %s" % castle_id)
 		return
+	_open_castle(castle, false)
+
+
+func visit_castle(castle: CastleState) -> void:
+	## Looks around a castle that isn't yours and isn't in the economy.
+	if in_game() and castle != null:
+		_open_castle(castle, true)
+
+
+func _open_castle(castle: CastleState, glimpse: bool) -> void:
 	if castle_view == null:
 		castle_view = CASTLE_SCENE.instantiate()
 	if world_map.is_inside_tree():
 		remove_child(world_map)
 	if not castle_view.is_inside_tree():
 		add_child(castle_view)
-	castle_view.open(castle)
+	castle_view.open(castle, glimpse)
 
 
 func show_world_map() -> void:

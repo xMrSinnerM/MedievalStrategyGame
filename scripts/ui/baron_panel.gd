@@ -2,6 +2,7 @@ extends PanelContainer
 ## Shown on the world map when you click a robber baron camp: its level and
 ## progress to the next, its garrison, palisade and loot, whether it is
 ## rebuilding, the march time and a button to open the attack screen.
+## Fortresses also have a button to look around inside.
 
 const TEXT := Color(0.95, 0.9, 0.8)
 const MUTED := Color(0.78, 0.72, 0.62)
@@ -13,6 +14,7 @@ var _level: Label
 var _details: Label
 var _odds: Label
 var _attack: Button
+var _look: Button
 
 var _picture: InfoPicture
 
@@ -40,10 +42,23 @@ func _ready() -> void:
 	_odds = _label(15, TEXT)
 	_odds.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	box.add_child(_odds)
+	var buttons := HBoxContainer.new()
+	buttons.add_theme_constant_override("separation", 8)
+	box.add_child(buttons)
+	_look = Button.new()
+	_look.text = "Look inside"
+	_look.focus_mode = Control.FOCUS_NONE
+	_look.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_look.pressed.connect(func() -> void:
+		var camp := Economy.get_baron(camp_id)
+		if camp != null:
+			EventBus.castle_visit_requested.emit(Economy.fortress_castle(camp)))
+	buttons.add_child(_look)
 	_attack = GameTheme.primary(Button.new())
 	_attack.focus_mode = Control.FOCUS_NONE
+	_attack.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_attack.pressed.connect(_send)
-	box.add_child(_attack)
+	buttons.add_child(_attack)
 	EventBus.baron_selected.connect(show_camp)
 	EventBus.party_selected.connect(func(id: String) -> void:
 		if id != "":
@@ -114,6 +129,7 @@ func _refresh() -> void:
 		var chance := Battle.siege_odds(Economy.rules, Battle.auto_waves(army), garrison, Battle.DEFAULT_LAYOUT, 1, wall)
 		_odds.text = "Your garrison of %d: %s (%d%%)" % [mine, Battle.odds_text(chance), roundi(chance * 100.0)]
 		_odds.add_theme_color_override("font_color", Color(0.95, 0.4, 0.3).lerp(Color(0.55, 0.9, 0.45), chance))
+	_look.visible = camp.fortress
 	_attack.text = "Prepare attack" if camp.is_ready(now) else "Rebuilding"
 	_attack.disabled = mine <= 0 or not camp.is_ready(now)
 
