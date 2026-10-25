@@ -749,6 +749,20 @@ export function spyReport(rules: Rules, pvp: PvpRules, stored: PlayerState, now:
   };
 }
 
+/** What a visitor sees of another player's castle (or, with `outpost`, their outpost): its name, keep level and
+ * buildings as they stand now, but not its soldiers, stores, tools or research; those take a spy. null if they
+ * have no outpost. */
+export function castleView(rules: Rules, stored: PlayerState, now: number, outpost = false) {
+  const data = outpost ? stored.outpost?.castle : stored.castle;
+  if (!data) return null;
+  const castle = CastleState.fromDict(rules.buildings, data);
+  castle.advanceTo(now);
+  return {
+    name: stored.name, at: now, outpost, castle_name: castle.castleName, level: castle.keepLevel(),
+    buildings: castle.buildings.map((b) => ({ id: b.id, type: b.type, level: b.level, cell: b.cell, target: b.target, finish: b.finish })),
+  };
+}
+
 function isCell(cell: unknown): cell is [number, number] {
   return Array.isArray(cell) && cell.length === 2 && cell.every((v) => Number.isInteger(v));
 }

@@ -58,6 +58,10 @@ const DROP_SEED := 31337
 const PROTECTED_BELOW_KEEP := 2
 ## A new NPC castle starts with this many hours of building behind it (by seed).
 const NPC_HEAD_START_HOURS := Vector2(12.0, 72.0)
+## A fortress you look around has been built up for this many hours, plus
+## FORTRESS_HOURS_PER_LEVEL for each level above 1 (fortress_castle()).
+const FORTRESS_HOURS_BASE := 24.0
+const FORTRESS_HOURS_PER_LEVEL := 24.0
 
 var rules: BuildingRules
 var player_castle: CastleState
@@ -128,6 +132,8 @@ var others: Array = []
 var raids: Array = []
 ## Online: what your spies last saw, by player name (see spy()).
 var spy_reports := {}
+## Fortresses already built up to look around (fortress_castle()), by id and level.
+var _fortress_looks := {}
 ## Online: you can't be attacked before this (Unix time), while your keep is small.
 var protected_until := 0.0
 ## Fights between players (data/pvp.json).
@@ -1088,6 +1094,48 @@ func get_other(player_name: String) -> Dictionary:
 		if String(p.name) == player_name:
 			return p
 	return {}
+
+
+func visit_player(player_name: String, outpost := false) -> void:
+	## Asks the server for another player's buildings (or their outpost's) and
+	## opens them on the castle screen when they come (castle_visit_requested).
+	get_node("/root/Online").order({"action": "view_castle", "target": player_name, "outpost": outpost})
+
+
+func _show_visit(seen: Dictionary) -> void:
+	var banner: Dictionary = get_node("/root/GameData").player_banner(String(seen.get("name", "")))
+	get_node("/root/EventBus").castle_visit_requested.emit(visited_castle(rules, seen, String(banner.id), now()))
+
+
+static func visited_castle(p_rules: BuildingRules, seen: Dictionary, banner: String, at: float) -> CastleState:
+	## Another player's castle as the server showed it (castleView in game.ts):
+	## its buildings only, flying their banner.
+	var player_name := String(seen.get("name", ""))
+	return CastleState.from_dict(p_rules, {
+		"id": ("visit-outpost:" if seen.get("outpost", false) else "visit:") + player_name,
+		"name": String(seen.get("castle_name", player_name)), "owner": banner,
+		"buildings": seen.get("buildings", []), "last_update": at})
+
+
+func fortress_castle(camp: BaronCamp) -> CastleState:
+	## The castle a fortress's lord has built, to look around.
+	var key := "%s:%d" % [camp.id, camp.level]
+	if not _fortress_looks.has(key):
+		_fortress_looks[key] = built_fortress(rules, camp, get_node("/root/GameData").get_settlement(camp.id).get("faction", ""), now())
+	return _fortress_looks[key]
+
+
+static func built_fortress(p_rules: BuildingRules, camp: BaronCamp, faction: String, at: float) -> CastleState:
+	## A kingdom's castle economy run for longer the higher the fortress's
+	## level: the same every time for the same fortress and level.
+	var head_start := (FORTRESS_HOURS_BASE + FORTRESS_HOURS_PER_LEVEL * (camp.level - 1)) * 3600.0
+	var castle := CastleState.create_new(p_rules, camp.id, camp.camp_name, faction, at - head_start)
+	# A week at a time: catch_up() only builds through the last week it is given.
+	var t := at - head_start
+	while t < at:
+		t = minf(t + NpcBrain.MAX_CATCH_UP, at)
+		NpcBrain.catch_up(castle, t)
+	return castle
 
 
 func other_position(player_name: String) -> Vector2:
@@ -2112,6 +2160,9 @@ func take_order_result(body: Dictionary, answer: Dictionary) -> void:
 	if body.get("action", "") == "event_board" and answer.get("result") is Dictionary:
 		event_board = answer.result
 		event_board_changed.emit()
+		return
+	if body.get("action", "") == "view_castle" and answer.get("result") is Dictionary:
+		_show_visit(answer.result)
 		return
 	if body.get("action", "") == "spy" and answer.get("result") is Dictionary:
 		var seen: Dictionary = answer.result

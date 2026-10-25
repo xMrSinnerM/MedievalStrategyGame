@@ -10,6 +10,10 @@ signal party_status_changed(text: String)
 
 ## Asks the game to open the castle screen for a castle (Economy castle id).
 signal castle_requested(castle_id: String)
+## Asks the game to show a castle that isn't in the economy, just to look
+## around: another player's castle sent by the server, or a fortress as its
+## lord has built it. Its soldiers and stores stay hidden.
+signal castle_visit_requested(castle: CastleState)
 ## Asks the game to go back to the world map.
 signal world_map_requested
 ## A castle on the world map was clicked ("" when the selection is cleared).

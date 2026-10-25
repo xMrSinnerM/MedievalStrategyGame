@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { makeRules } from "../rules/load.ts";
 import { CastleState } from "../rules/castle_state.ts";
-import { act, campsBeaten, castleLevel, checkName, fightRaid, isProtected, might, newPlayer, pickSpot, spyReport, type PvpRules, type Raid, type World } from "../../supabase/functions/game/game.ts";
+import { act, campsBeaten, castleLevel, castleView, checkName, fightRaid, isProtected, might, newPlayer, pickSpot, spyReport, type PvpRules, type Raid, type World } from "../../supabase/functions/game/game.ts";
 
 const root = new URL("../../", import.meta.url);
 const json = (path: string) => JSON.parse(readFileSync(new URL(path, root), "utf8"));
@@ -196,6 +196,18 @@ test("a spy costs gold and sees the soldiers at home and the wall", () => {
   assert.equal(seen.protected, true);
   me.castle.resources.gold = 0;
   assert.equal(act(rules, me, { action: "spy" }, T0, { pvp, target }).error, "Not enough gold to send a spy.");
+});
+
+test("looking around another player's castle shows its buildings, not its soldiers or stores", () => {
+  const p = newPlayer(rules, world, "Host", T0, world.home, pvp);
+  p.castle.troops = { archer: 12 };
+  const seen = castleView(rules, p, T0 + 10)!;
+  assert.equal(seen.name, "Host");
+  assert.equal(seen.castle_name, "Host's Castle");
+  assert.equal(seen.level, castleLevel(p.castle));
+  assert.deepEqual(seen.buildings.map((b) => b.type).sort(), p.castle.buildings.map((b) => b.type).sort());
+  assert.ok(!("troops" in seen) && !("resources" in seen));
+  assert.equal(castleView(rules, p, T0 + 10, true), null, "no outpost yet");
 });
 
 function CastleStateAt(p: ReturnType<typeof newPlayer>, t: number): Record<string, number> {

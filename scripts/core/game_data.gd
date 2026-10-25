@@ -92,6 +92,12 @@ func get_faction(id: String) -> Dictionary:
 	return factions_by_id.get(id, {})
 
 
+func player_banner(player_name: String) -> Dictionary:
+	## Online, each player flies the banner of one of the realm's factions, the
+	## same one every time for the same name.
+	return factions[absi(hash(player_name)) % factions.size()]
+
+
 func at_war(a: String, b: String) -> bool:
 	## Wars change during a game (Economy.diplomacy); "wars" is how it starts.
 	if Economy.diplomacy != null:

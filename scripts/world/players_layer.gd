@@ -52,10 +52,8 @@ func player_at(map_pos: Vector2, radius := 18.0) -> Dictionary:
 
 
 static func _settlement_data(p: Dictionary) -> Dictionary:
-	# Each player flies the banner of one of the realm's factions, the same
-	# one every time for the same name.
 	var player_name := String(p.get("name", "?"))
-	var faction: Dictionary = GameData.factions[absi(hash(player_name)) % GameData.factions.size()]
+	var faction := GameData.player_banner(player_name)
 	return {
 		"id": "player:" + player_name,
 		"name": ("[%s] " % p.tag if String(p.get("tag", "")) != "" else "") + "%s  Lv %d" % [player_name, int(p.get("level", 1))],

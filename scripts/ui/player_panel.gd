@@ -1,8 +1,8 @@
 extends PanelContainer
 ## Online: shown on the world map when you click another player's castle: who
 ## they are, their castle level, whether beginner protection still shelters
-## them (or they are too small for you to attack), what your spy last saw there, and buttons to send a spy or open the
-## attack screen. For members of your alliance: buttons to send them resources
+## them (or they are too small for you to attack), what your spy last saw there, buttons to look around their castle
+## (and their outpost), and buttons to send a spy or open the attack screen. For members of your alliance: buttons to send them resources
 ## or defenders, what you have on the way, and a button to call defenders home.
 
 const TEXT := Color(0.95, 0.9, 0.8)
@@ -19,6 +19,7 @@ var _spy: Button
 var _attack: Button
 var _help_buttons: HBoxContainer
 var _recall: Button
+var _look_outpost: Button
 var _timer := 0.0
 
 var _picture: InfoPicture
@@ -48,6 +49,22 @@ func _ready() -> void:
 	_note = _label(14, Color(1.0, 0.75, 0.5))
 	_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	box.add_child(_note)
+	var looks := HBoxContainer.new()
+	looks.add_theme_constant_override("separation", 8)
+	box.add_child(looks)
+	var look := Button.new()
+	look.text = "Look inside"
+	look.tooltip_text = "See their buildings; a spy tells you who guards them"
+	look.focus_mode = Control.FOCUS_NONE
+	look.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	look.pressed.connect(func() -> void: Economy.visit_player(player_name))
+	looks.add_child(look)
+	_look_outpost = Button.new()
+	_look_outpost.text = "Look inside their outpost"
+	_look_outpost.focus_mode = Control.FOCUS_NONE
+	_look_outpost.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_look_outpost.pressed.connect(func() -> void: Economy.visit_player(player_name, true))
+	looks.add_child(_look_outpost)
 	var buttons := HBoxContainer.new()
 	buttons.add_theme_constant_override("separation", 8)
 	box.add_child(buttons)
@@ -168,6 +185,7 @@ func _refresh() -> void:
 	_details.text = "\n".join(lines)
 	_spy.get_parent().visible = not ally
 	_help_buttons.visible = ally
+	_look_outpost.visible = Economy.get_other(player_name).get("outpost") is Dictionary
 	_recall.visible = standing >= 0
 	_recall.set_meta("aid", standing)
 	_spy.text = "Send a spy (%s)" % _cost(Economy.spy_cost())

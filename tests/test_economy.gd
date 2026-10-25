@@ -43,6 +43,7 @@ func _initialize() -> void:
 	test_villages()
 	test_capitals()
 	test_fortresses()
+	test_looking_around()
 	test_research()
 	test_research_in_battle()
 	print("%d checks, %d failed" % [checks, failures])
@@ -1101,6 +1102,30 @@ func test_fortresses() -> void:
 	var world = JSON.parse_string(FileAccess.get_file_as_string("res://server/world/world.json"))
 	check(world.fortresses.size() == 10 and world.fortresses.all(func(f: Dictionary) -> bool: return f.id != "player_castle"),
 			"every other castle is a fortress")
+
+
+func test_looking_around() -> void:
+	var eco: Script = load("res://scripts/core/economy.gd")
+	var low := BaronCamp.create("aldmere_castle_ravenhold", "Ravenhold", Vector2(10, 10))
+	low.fortress = true
+	var high := BaronCamp.create("aldmere_castle_ravenhold", "Ravenhold", Vector2(10, 10), 30)
+	high.fortress = true
+	var started := Time.get_ticks_msec()
+	var small: CastleState = eco.built_fortress(rules, low, "aldmere", T0)
+	var big: CastleState = eco.built_fortress(rules, high, "aldmere", T0)
+	print("fortress keeps: level 1 -> %d (%d buildings), level 30 -> %d (%d buildings), %d ms" % [small.keep_level(),
+			small.buildings.size(), big.keep_level(), big.buildings.size(), Time.get_ticks_msec() - started])
+	check(small.castle_name == "Ravenhold" and small.owner == "aldmere", "a fortress castle is its kingdom's")
+	check(big.keep_level() > small.keep_level() and big.buildings.size() > small.buildings.size(),
+			"a higher fortress has built more")
+	check(eco.built_fortress(rules, low, "aldmere", T0).to_dict().buildings == small.to_dict().buildings,
+			"the same fortress looks the same every time")
+	# Another player's castle, as the server sends it (castleView in game.ts): buildings only.
+	var host := CastleState.create_new(rules, "x", "Host's Castle", "player", T0)
+	var seen := {"name": "Host", "castle_name": "Host's Castle", "outpost": false, "buildings": host.to_dict().buildings}
+	var c: CastleState = eco.visited_castle(rules, seen, "corvane", T0)
+	check(c.castle_name == "Host's Castle" and c.is_npc() and c.buildings.size() == host.buildings.size(), "a visited castle has its buildings")
+	check(c.troop_count() == 0 and c.resources.get("gold", 0.0) == 0.0, "and nothing else")
 
 
 func test_capitals() -> void:

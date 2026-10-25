@@ -31,6 +31,7 @@
 // POST { "action": "sell_gear", "item": id }     sells gear from your bag for gold
 // POST { "action": "set_layout", "layout": { "left", "front", "right", "courtyard" } }   percent of the garrison at each post
 // POST { "action": "spy", "target": "name" }
+// POST { "action": "view_castle", "target": "name", "outpost": false }   another player's buildings, to look around inside
 // POST { "action": "found_outpost", "region": "wood" | "stone" | "food" | "gold" }   a second castle (data/outposts.json)
 //   on the free spot nearest your home; "place", "upgrade", "cancel" and "move" then take "castle": "outpost"
 // POST { "action": "send_carts", "from": "home" | "outpost", "resources": { wood: n } }   between your castles
@@ -100,7 +101,7 @@ import { nearestSpot } from "../../../server/rules/outposts.ts";
 import { CapitalRules, rulesFor, type VillageInfo, type VillageState } from "../../../server/rules/villages.ts";
 import { capitalBoost, resolveVillageRaid, type VillageTarget } from "./villages.ts";
 import {
-  act, castleLevel, checkName, fightRaid, isProtected, might, newPlayer, pickSpot, spyReport,
+  act, castleLevel, castleView, checkName, fightRaid, isProtected, might, newPlayer, pickSpot, spyReport,
   type Homecoming, type PlayerState, type PvpRules, type Raid, type Target, type World,
 } from "./game.ts";
 import { allianceView, checkFound, found, handle, type AllianceRules } from "./alliances.ts";
@@ -674,6 +675,15 @@ Deno.serve(async (req: Request) => {
         : { name: p.outpost_name, x: Number(p.outpost_x), y: Number(p.outpost_y) },
     }));
     return reply({ ok: true, now: t, error: "", players });
+  }
+
+  if (body.action === "view_castle") {
+    // Only looking: nothing of anyone's castle changes, and it costs nothing.
+    const found = await findTarget(body.target, userId);
+    if (found === null) return reply({ ok: false, error: "There's no player by that name." });
+    const result = castleView(rules, found.row as PlayerState, now(), body.outpost === true);
+    if (result === null) return reply({ ok: false, error: "They have no outpost." });
+    return reply({ ok: true, now: now(), error: "", result });
   }
 
   if (body.action === "leaderboard") {
