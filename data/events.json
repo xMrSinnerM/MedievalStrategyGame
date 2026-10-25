@@ -1,5 +1,5 @@
 {
-	"_comment": "Timed events online, the same for everyone. Each weekly event starts on a day of the week (1 = Monday ... 7 = Sunday) at an hour in UTC and lasts `hours`. Effects: baron_loot multiplies what robber baron camps drop. An event with `invasion` puts invader camps near every castle while it runs: `camps` of them (named from `names`), the first at level 1 + `level_per_keep` per keep level above 1 and each next one a level higher. Every win raises an invader camp a level and gives `points_per_level` event points for each level it had; a beaten camp rebuilds for `rebuild` seconds. `rewards` are the invasion's reward tiers: reach a tier's points to claim its resources and soldiers, in order, until the next invasion starts (resources fill your storage; what doesn't fit is lost).",
+	"_comment": "Timed events online, the same for everyone. Each weekly event starts on a day of the week (1 = Monday ... 7 = Sunday) at an hour in UTC and lasts `hours`. Effects: baron_loot multiplies what robber baron camps drop. An event with `invasion` puts invader camps near every castle while it runs: `camps` of them (named from `names`), the first at level 1 + `level_per_keep` per keep level above 1 and each next one a level higher. Every win raises an invader camp a level and gives `points_per_level` event points for each level it had; a beaten camp rebuilds for `rebuild` seconds. `rewards` are the invasion's reward tiers: reach a tier's points to claim its resources and soldiers, in order, until the next invasion starts (resources fill your storage; what doesn't fit is lost). An event with `horde` is the Ember Horde: while it runs, its `camps` stand near every castle (the first at level 1 + `level_per_keep` per keep level above 1, the others `level` higher; where there's room for fewer, the Warlord's camp comes first). Each win raises the camp a level and gives `points` horde points and `trophies` war trophies per level it had, as long as the battle is fought before the event ends. War trophies buy what the Trophy Market (`market`) sells, each item `stock` times per horde. When the horde has gone, every player with points claims one ranked prize: the first of `prizes` whose `up_to` their rank reaches (0: any rank). Trophies, purchases and prizes last until the next horde arrives. The horde's soldiers are in data/horde.json.",
 	"weekly": [
 		{
 			"id": "plunder_weekend",
@@ -73,6 +73,203 @@
 						"troops": {
 							"horseman": 20
 						}
+					}
+				]
+			}
+		},
+		{
+			"id": "ember_horde",
+			"name": "Ember Horde",
+			"description": "Riders of the Ember Horde have made camp near your castle. Beat them for horde points and war trophies.",
+			"day": 1,
+			"hour": 12,
+			"hours": 48,
+			"effects": {},
+			"horde": {
+				"camps": [
+					{
+						"name": "Ashrider Camp",
+						"level": 0,
+						"points": 10,
+						"trophies": 2
+					},
+					{
+						"name": "Cinder Riders' Camp",
+						"level": 1,
+						"points": 10,
+						"trophies": 2
+					},
+					{
+						"name": "Smokeplain Camp",
+						"level": 2,
+						"points": 10,
+						"trophies": 2
+					},
+					{
+						"name": "The Warlord's Camp",
+						"level": 5,
+						"points": 30,
+						"trophies": 6,
+						"warlord": true
+					}
+				],
+				"level_per_keep": 2,
+				"rebuild": 180,
+				"market": [
+					{
+						"id": "timber",
+						"name": "Timber and stone",
+						"cost": 40,
+						"stock": 5,
+						"resources": {
+							"wood": 1200,
+							"stone": 1200
+						}
+					},
+					{
+						"id": "grain",
+						"name": "Grain carts",
+						"cost": 40,
+						"stock": 5,
+						"resources": {
+							"food": 2000
+						}
+					},
+					{
+						"id": "coin",
+						"name": "Horde silver",
+						"cost": 80,
+						"stock": 3,
+						"resources": {
+							"gold": 1200
+						}
+					},
+					{
+						"id": "spears",
+						"name": "Spear levy",
+						"cost": 60,
+						"stock": 3,
+						"troops": {
+							"spearman": 40
+						}
+					},
+					{
+						"id": "archers",
+						"name": "Steppe bowmen",
+						"cost": 80,
+						"stock": 3,
+						"troops": {
+							"archer": 40
+						}
+					},
+					{
+						"id": "riders",
+						"name": "Captured horses",
+						"cost": 150,
+						"stock": 3,
+						"troops": {
+							"horseman": 25
+						}
+					},
+					{
+						"id": "ladders",
+						"name": "Siege ladders",
+						"cost": 50,
+						"stock": 3,
+						"tools": {
+							"ladder": 10
+						}
+					},
+					{
+						"id": "rams",
+						"name": "Battering rams",
+						"cost": 90,
+						"stock": 2,
+						"tools": {
+							"ram": 4
+						}
+					},
+					{
+						"id": "standard",
+						"name": "Ember-Breaker Standard",
+						"cost": 400,
+						"stock": 1,
+						"gear": {
+							"slot": "banner",
+							"side": "attack",
+							"rarity": "epic",
+							"name": "Ember-Breaker Standard",
+							"stats": {
+								"wall_cut": 10,
+								"loot": 12
+							}
+						}
+					},
+					{
+						"id": "helm",
+						"name": "Ashwarden Helm",
+						"cost": 400,
+						"stock": 1,
+						"gear": {
+							"slot": "helmet",
+							"side": "defence",
+							"rarity": "epic",
+							"name": "Ashwarden Helm",
+							"stats": {
+								"wall_defence": 10,
+								"yard_defence": 8
+							}
+						}
+					}
+				],
+				"prizes": [
+					{
+						"up_to": 1,
+						"resources": {
+							"gold": 4000
+						},
+						"troops": {
+							"horseman": 80
+						},
+						"trophies": 300
+					},
+					{
+						"up_to": 3,
+						"resources": {
+							"gold": 2500
+						},
+						"troops": {
+							"horseman": 50
+						},
+						"trophies": 200
+					},
+					{
+						"up_to": 10,
+						"resources": {
+							"gold": 1500
+						},
+						"troops": {
+							"swordsman": 50
+						},
+						"trophies": 120
+					},
+					{
+						"up_to": 25,
+						"resources": {
+							"gold": 800
+						},
+						"troops": {
+							"swordsman": 30
+						},
+						"trophies": 60
+					},
+					{
+						"up_to": 0,
+						"resources": {
+							"wood": 500,
+							"stone": 500
+						},
+						"trophies": 20
 					}
 				]
 			}

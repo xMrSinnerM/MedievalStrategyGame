@@ -286,6 +286,8 @@ func _show_event() -> void:
 		_event.text = "%s: %s  Ends in %s" % [e.name, e.description, _days(float(e.end) - Economy.now())]
 		if e.has("invasion"):
 			_event.text += "    Your points: %d" % Economy.invasion_points()
+		elif e.has("horde"):
+			_event.text += "    Horde points: %d    Trophies: %d" % [Economy.my_horde_points(), Economy.war_trophies()]
 		_event.add_theme_color_override("font_color", MenuStyle.GOLD)
 		banner.visible = true
 		return

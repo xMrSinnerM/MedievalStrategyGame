@@ -112,6 +112,20 @@ the tiers taken. Points count for the invasion on now, or the last one until
 the next starts. `event_board` lists the players with the most points in
 that invasion and the asking player's rank.
 
+The Ember Horde (`supabase/functions/game/horde.ts`, `horde` in
+`data/events.json`, its soldiers in `data/horde.json`) works the same way
+with its own columns: when a horde run has begun since the player last
+played, `hordeArrives()` puts its camps (with `horde`, the run's start, and
+`until`, its end) on the same places and starts `horde_points` and `horde`
+({trophies, bought, ranked}) again, with `horde_key` the run's start. A win
+before `until` gives horde points and war trophies. `buy_horde` sells a
+Trophy Market item for trophies, `stock` times per run, while that run is
+the last one; `claim_horde_prize` gives the ranked prize once the run is
+over, by the player's place among that run's players (`hordeRank()` in
+index.ts, ties share a place). `horde_board` lists the most horde points,
+the asking player's rank and the prize it earns. Migration
+`20261026120000_ember_horde.sql` adds the columns.
+
 Quests (`server/rules/quests.ts`, `data/quests.json`) live in the castle's
 own JSON (`quests`, with lifetime counts in `stats`), so they need no column
 of their own. Every request starts a new day's daily tasks once the UTC day

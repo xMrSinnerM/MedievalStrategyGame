@@ -13,6 +13,8 @@ export interface WeeklyEvent {
   effects: Record<string, number>;
   /** Invader camps near every castle while the event runs (see invasion.ts). */
   invasion?: InvasionRules;
+  /** The Ember Horde: its camps, the Trophy Market and the ranked prizes (see horde.ts). */
+  horde?: HordeRules;
 }
 
 /** How a Baron Invasion goes, from data/events.json. */
@@ -34,6 +36,50 @@ export interface RewardTier {
   points: number;
   resources?: Record<string, number>;
   troops?: Record<string, number>;
+}
+
+/** One of the Ember Horde's camps near your castle. */
+export interface HordeCamp {
+  name: string;
+  /** Levels above the first camp's (1 + level_per_keep per keep level above 1). */
+  level: number;
+  /** Horde points and war trophies for a win: these times the camp's level. */
+  points: number;
+  trophies: number;
+  /** The Warlord's camp: placed even when there is room for only some of the camps. */
+  warlord?: boolean;
+}
+
+/** Something the Trophy Market sells for war trophies, `stock` times per horde. */
+export interface MarketItem {
+  id: string;
+  name: string;
+  cost: number;
+  stock: number;
+  resources?: Record<string, number>;
+  troops?: Record<string, number>;
+  tools?: Record<string, number>;
+  /** A piece of gear, as gear.ts makes them (its id is given when it goes in your bag). */
+  gear?: { slot: string; side: "attack" | "defence"; rarity: string; name: string; stats: Record<string, number> };
+}
+
+/** A ranked prize: for the players ranked `up_to` or better (0: everyone with points). */
+export interface HordePrize {
+  up_to: number;
+  resources?: Record<string, number>;
+  troops?: Record<string, number>;
+  trophies?: number;
+}
+
+/** How the Ember Horde goes, from data/events.json (its soldiers are in data/horde.json). */
+export interface HordeRules {
+  camps: HordeCamp[];
+  level_per_keep: number;
+  /** Seconds a beaten horde camp rebuilds. */
+  rebuild: number;
+  market: MarketItem[];
+  /** Best rank first; a player gets the first prize their rank reaches. */
+  prizes: HordePrize[];
 }
 
 export interface EventRules {
@@ -60,6 +106,7 @@ export interface EventTime {
   description: string;
   effects: Record<string, number>;
   invasion?: InvasionRules;
+  horde?: HordeRules;
   start: number;
   end: number;
 }
@@ -80,6 +127,7 @@ export function lastStart(e: WeeklyEvent, t: number): number {
 function at(e: WeeklyEvent, start: number): EventTime {
   const out: EventTime = { id: e.id, name: e.name, description: e.description, effects: e.effects, start, end: start + e.hours * 3600 };
   if (e.invasion !== undefined) out.invasion = e.invasion;
+  if (e.horde !== undefined) out.horde = e.horde;
   return out;
 }
 
@@ -116,14 +164,24 @@ export function upcomingEvents(rules: EventRules, t: number): EventTime[] {
   return rules.weekly.map((e) => at(e, lastStart(e, t) + WEEK)).sort((a, b) => a.start - b.start);
 }
 
-/** The Baron Invasion on at `t`, or else the last one to have started (undefined if there is none on the calendar). */
-export function lastInvasion(rules: EventRules, t: number): EventTime | undefined {
+/** The run of an event that `has` picks on at `t`, or else the last one to have started. */
+function lastRun(rules: EventRules, t: number, has: (e: EventTime) => boolean): EventTime | undefined {
   let best: EventTime | undefined;
   for (const time of runs(rules, t)) {
-    if (time.invasion === undefined || time.start > t) continue;
+    if (!has(time) || time.start > t) continue;
     if (best === undefined || time.start > best.start) best = time;
   }
   return best;
+}
+
+/** The Baron Invasion on at `t`, or else the last one to have started (undefined if there is none on the calendar). */
+export function lastInvasion(rules: EventRules, t: number): EventTime | undefined {
+  return lastRun(rules, t, (e) => e.invasion !== undefined);
+}
+
+/** The Ember Horde on at `t`, or else the last one to have started (undefined if there is none on the calendar). */
+export function lastHorde(rules: EventRules, t: number): EventTime | undefined {
+  return lastRun(rules, t, (e) => e.horde !== undefined);
 }
 
 /** The product of an effect over the events on at `t` (1 when none). */
@@ -133,7 +191,11 @@ export function effectAt(rules: EventRules, t: number, effect: string): number {
   return factor;
 }
 
-/** What the game shows: the events on now and the next ones. */
+/** What the game shows: the events on now, the next ones, and the last invasion and horde when they are over
+ * (their rewards, market and prizes stay open until the next run, even after the owner moved the calendar). */
 export function eventsView(rules: EventRules, t: number) {
-  return { active: activeEvents(rules, t), upcoming: upcomingEvents(rules, t) };
+  const active = activeEvents(rules, t);
+  const recent = [lastInvasion(rules, t), lastHorde(rules, t)]
+    .filter((e): e is EventTime => e !== undefined && !active.some((a) => a.id === e.id && a.start === e.start));
+  return { active, upcoming: upcomingEvents(rules, t), recent };
 }

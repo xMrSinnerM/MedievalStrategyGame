@@ -20,6 +20,12 @@ export interface CampData {
   points?: number;
   /** Invader camps only: seconds it rebuilds after a defeat. */
   rebuild?: number;
+  /** Ember Horde camps only (online events): the start of the horde's run, with the horde rules (BaronRules.forCamp()). */
+  horde?: number;
+  /** Ember Horde camps only: war trophies per level for a win (`points` are horde points). */
+  trophies?: number;
+  /** Ember Horde camps only: the end of the horde's run; wins after it earn no points or trophies. */
+  until?: number;
   /** A fortress (one of the old kingdoms' castles), with the fortress rules (BaronRules.forCamp()). */
   fortress?: boolean;
 }
@@ -54,8 +60,8 @@ export function attackCamp(camp: CampData, barons: BaronRules, units: BuildingRu
   out.loot = carried(stock, rules.carry(out.survivors) * (1 + (lead.loot ?? 0)));
   camp.rebuilt_at = now + (camp.rebuild ?? rules.rebuildTime(camp.level));
   camp.defeats += 1;
-  // An invader camp rises a level with every win.
-  const needed = camp.event === undefined ? rules.defeatsNeeded(camp.level) : 1;
+  // An invader or horde camp rises a level with every win.
+  const needed = camp.event === undefined && camp.horde === undefined ? rules.defeatsNeeded(camp.level) : 1;
   if (camp.defeats >= needed && camp.level < rules.maxLevel) {
     camp.level += 1;
     camp.defeats = 0;

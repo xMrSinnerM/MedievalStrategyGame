@@ -17,7 +17,7 @@ import { readFileSync } from "node:fs";
 import { makeRules } from "../rules/load.ts";
 import { nearestSpot } from "../rules/outposts.ts";
 import { CapitalRules, rulesFor, settled, untouched, type VillageInfo, type VillageState } from "../rules/villages.ts";
-import { effectAt, eventsView, lastInvasion, withOverrides, type EventOverride, type EventRules } from "../rules/events.ts";
+import { effectAt, eventsView, lastHorde, lastInvasion, withOverrides, type EventOverride, type EventRules } from "../rules/events.ts";
 import { CastleState } from "../rules/castle_state.ts";
 import {
   act, castleLevel, checkName, fightRaid, isProtected, might, newPlayer, pickSpot, spyReport,
@@ -29,6 +29,7 @@ import {
 import { chatView, MemoryChatStore, send as sendChat, type Speaker } from "../../supabase/functions/game/chat.ts";
 import { deliver, recall, type Aid, type AidRules } from "../../supabase/functions/game/aid.ts";
 import { invade } from "../../supabase/functions/game/invasion.ts";
+import { hordeArrives, prizeFor } from "../../supabase/functions/game/horde.ts";
 import { capitalBoost, resolveVillageRaid, type VillageTarget } from "../../supabase/functions/game/villages.ts";
 import type { QuestRules } from "../rules/quests.ts";
 import {
@@ -38,7 +39,8 @@ import {
 const root = new URL("../../", import.meta.url);
 const json = (path: string) => JSON.parse(readFileSync(new URL(path, root), "utf8"));
 const rules = makeRules(json("data/buildings.json"), json("data/units.json"), json("data/barons.json"), json("data/gear.json"),
-  json("data/outposts.json"), json("data/villages.json"), json("data/capitals.json"), json("data/fortresses.json"));
+  json("data/outposts.json"), json("data/villages.json"), json("data/capitals.json"), json("data/fortresses.json"),
+  json("data/horde.json"));
 const world: World = json("server/world/world.json");
 // The resource villages and the capitals (the towns), kept the same way.
 const PLACES: VillageInfo[] = [...(world.villages ?? []), ...(world.capitals ?? [])];
@@ -251,9 +253,16 @@ function villageOrder(user: string, body: Record<string, unknown>): string {
 }
 
 /** The event view with times moved back from the shifted calendar to the real clock. */
+/** The players with horde points in the Ember Horde run starting at `key` (on the real clock), most first. */
+function hordeRanking(key: number) {
+  return [...players.entries()].filter(([, p]) => p.horde_key === key && (p.horde_points ?? 0) > 0)
+    .map(([id, p]) => ({ id, name: p.name, points: p.horde_points ?? 0, tag: tagOf(id) }))
+    .sort((a, b) => b.points - a.points || a.name.localeCompare(b.name));
+}
+
 function shifted(v: ReturnType<typeof eventsView>) {
   const back = (e: { start: number; end: number }) => ({ ...e, start: e.start - EVENTS_OFFSET, end: e.end - EVENTS_OFFSET });
-  return { active: v.active.map(back), upcoming: v.upcoming.map(back) };
+  return { active: v.active.map(back), upcoming: v.upcoming.map(back), recent: v.recent.map(back) };
 }
 
 /** The same as adminOrder in index.ts, on the shifted calendar. */
@@ -407,7 +416,7 @@ createServer(async (req, res) => {
       Object.assign(state.castle.resources, START_RESOURCES);
       const keep = state.castle.buildings.find((b) => b.type === "keep");
       if (keep && START_KEEP > 0) keep.level = START_KEEP;
-      const placed = invade(state, eventRules, world, now(), EVENTS_OFFSET);
+      const placed = hordeArrives(invade(state, eventRules, world, now(), EVENTS_OFFSET), eventRules, world, now(), EVENTS_OFFSET);
       players.set(user, placed);
       return send(res, 200, view(user, placed));
     }
@@ -438,8 +447,20 @@ createServer(async (req, res) => {
       const mine = all.find((r) => r.id === user);
       const rank = mine ? all.filter((r) => r.points > mine.points).length + 1 : 0;
       return send(res, 200, { ok: true, now: now(), error: "", result: {
-        event: inv === undefined ? null : shifted({ active: [inv], upcoming: [] }).active[0],
+        event: inv === undefined ? null : shifted({ active: [inv], upcoming: [], recent: [] }).active[0],
         players: all.slice(0, 50).map(strip), me: mine ? strip(mine) : null, rank, total: all.length } });
+    }
+    if (body.action === "horde_board") {
+      const run = lastHorde(eventRules, now() + EVENTS_OFFSET);
+      const key = run === undefined ? -1 : run.start - EVENTS_OFFSET;
+      const all = hordeRanking(key);
+      const strip = ({ id: _id, ...row }: (typeof all)[number]) => row;
+      const mine = all.find((r) => r.id === user);
+      const rank = mine ? all.filter((r) => r.points > mine.points).length + 1 : 0;
+      return send(res, 200, { ok: true, now: now(), error: "", result: {
+        event: run === undefined ? null : shifted({ active: [run], upcoming: [], recent: [] }).active[0],
+        players: all.slice(0, 50).map(strip), me: mine ? strip(mine) : null, rank, total: all.length,
+        prize: mine && run?.horde ? prizeFor(run.horde.prizes, rank) ?? null : null } });
     }
     if (!players.has(user)) return send(res, 200, { ok: false, error: "No castle yet.", needs_join: true });
     if (body.action === "chat" || body.action === "chat_send") {
@@ -491,10 +512,14 @@ createServer(async (req, res) => {
     const t = now();
     const me = players.get(user)!;
     const outpostSpot = body.action === "found_outpost" && !me.outpost ? nearestSpot(world.spots, [me.home_x, me.home_y], takenSpots()) : null;
+    let hordePlace = 0;
+    if (body.action === "claim_horde_prize" && (me.horde_points ?? 0) > 0) {
+      hordePlace = hordeRanking(me.horde_key ?? 0).filter((r) => r.points > (me.horde_points ?? 0)).length + 1;
+    }
     const outcome = act(rules, me, body, t,
       { pvp, outpostSpot, target: target?.target, homecomings, alliances: allianceRules, aid: aidRules,
         events: { rules: eventRules, world, offset: EVENTS_OFFSET }, quests: questRules, village: village?.target, villageIncome,
-        capitalBoost: capitalBoost(rules, allianceCapitals(user).levels, allianceCapitals(user).guilds), fortresses: world.fortresses });
+        capitalBoost: capitalBoost(rules, allianceCapitals(user).levels, allianceCapitals(user).guilds), fortresses: world.fortresses, hordeRank: hordePlace });
     players.set(user, outcome.state);
     for (const r of outcome.reports) report(user, r);
     if (outcome.capitalBuild && village) villages.set(village.target.info.id, { ...outcome.capitalBuild.state, holder: user });

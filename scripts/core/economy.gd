@@ -36,6 +36,8 @@ signal events_changed
 signal barons_changed
 ## Online: the server sent the event leaderboard (see `event_board`).
 signal event_board_changed
+## Online: the server sent the Ember Horde's ranking (see `horde_board`).
+signal horde_board_changed
 ## Online: the server sent the game owner's panel (see `admin_view`), or refused an owner's order.
 signal admin_changed(error: String)
 ## your outpost was founded, or carts left or arrived
@@ -168,8 +170,9 @@ var aid: Array = []
 ## Helping allies (data/aid.json): carry_per_keep_level, station_hours.
 var aid_rules := {}
 ## Online: timed events as the server last sent them: {"active": [...],
-## "upcoming": [...]}, each {"id", "name", "description", "effects", "start",
-## "end"} in Unix seconds (data/events.json).
+## "upcoming": [...], "recent": [...]}, each {"id", "name", "description",
+## "effects", "start", "end"} in Unix seconds (data/events.json); "recent" has
+## the last Baron Invasion and Ember Horde once they are over.
 var events := {}
 ## Online: the start of the last Baron Invasion you played in, and your event points in it.
 var event_key := 0.0
@@ -179,6 +182,15 @@ var event_claimed := 0
 ## Online: the event leaderboard as the server last sent it: {"event", "players":
 ## [{"name", "points", "tag"}], "me", "rank", "total"}.
 var event_board := {}
+## Online: the start of the last Ember Horde you played in, your horde points
+## in it, and {"trophies", "bought": {item id: n}, "ranked"} (your war
+## trophies, Trophy Market purchases and whether you took your prize).
+var horde_key := 0.0
+var horde_points := 0
+var horde_state := {}
+## Online: the Ember Horde's ranking as the server last sent it: {"event",
+## "players": [{"name", "points", "tag"}], "me", "rank", "total", "prize"}.
+var horde_board := {}
 ## Online: true when your account has the game owner's tools (the server decides).
 var is_admin := false
 ## Online, for the owner: {"events": [{id, name, hours, on, start, end}], "players": [names], "log": [{at, action, details}]}.
@@ -891,6 +903,10 @@ func begin_online(answer: Dictionary) -> void:
 	event_points = 0
 	event_claimed = 0
 	event_board = {}
+	horde_key = 0.0
+	horde_points = 0
+	horde_state = {}
+	horde_board = {}
 	is_admin = false
 	admin_view = {}
 	protected_until = 0.0
@@ -949,6 +965,9 @@ func apply_server(answer: Dictionary) -> void:
 	event_key = float(p.get("event_key", 0.0))
 	event_points = int(p.get("event_points", 0))
 	event_claimed = int(p.get("event_claimed", 0))
+	horde_key = float(p.get("horde_key", 0.0))
+	horde_points = int(p.get("horde_points", 0))
+	horde_state = p.get("horde", {}) if p.get("horde") is Dictionary else {}
 	marches = p.get("marches", [])
 	_next_march = int(p.get("next_march", _next_march))
 	protected_until = float(p.get("protected_until", 0.0))
@@ -1020,6 +1039,7 @@ func _server_report(r: Dictionary) -> Dictionary:
 		"new_level": int(r.get("new_level", 1)), "defeats": int(r.get("defeats", 0)),
 		"needed": int(r.get("needed", 1)), "home_in": maxf(0.0, back - now()),
 		"invader": r.has("event"), "points": int(r.get("points", 0)),
+		"horde": r.has("horde"), "trophies": int(r.get("trophies", 0)),
 		"walls": r.get("walls", {}), "courtyard": r.get("courtyard", {}), "tools": r.get("tools", {}),
 		"lead": r.get("lead", {}), "gear": r.get("gear", {}), "bag_full": r.get("bag_full", false),
 		"fortress": r.get("fortress", false),
@@ -1393,6 +1413,9 @@ func last_invasion() -> Dictionary:
 	var on := invasion()
 	if not on.is_empty():
 		return on
+	for e: Dictionary in events.get("recent", []):
+		if e.has("invasion") and float(e.end) <= now():
+			return e
 	for e: Dictionary in events.get("upcoming", []):
 		if e.has("invasion"):
 			var last := e.duplicate()
@@ -1434,6 +1457,104 @@ func claim_reward(tier: int) -> String:
 	if why == "":
 		get_node("/root/Online").order({"action": "claim_reward", "tier": tier})
 	return why
+
+
+# --- Online: the Ember Horde ------------------------------------------------------------
+
+func horde_event() -> Dictionary:
+	## The Ember Horde on now ({} if none).
+	for e: Dictionary in events_on():
+		if e.has("horde"):
+			return e
+	return {}
+
+
+func last_horde() -> Dictionary:
+	## The Ember Horde on now, or else the last one ({} if none is known).
+	var on := horde_event()
+	if not on.is_empty():
+		return on
+	for e: Dictionary in events.get("recent", []):
+		if e.has("horde") and float(e.end) <= now():
+			return e
+	for e: Dictionary in events.get("upcoming", []):
+		if e.has("horde"):
+			var last := e.duplicate()
+			last.start = float(e.start) - 7 * 86400.0
+			last.end = float(e.end) - 7 * 86400.0
+			return last
+	return {}
+
+
+func in_last_horde() -> bool:
+	## Whether you met the last Ember Horde: your points, trophies and purchases are its.
+	var last := last_horde()
+	return not last.is_empty() and horde_key > 0.0 and float(last.start) == horde_key
+
+
+func my_horde_points() -> int:
+	## Your horde points in the last Ember Horde (0 if you didn't meet it).
+	return horde_points if in_last_horde() else 0
+
+
+func war_trophies() -> int:
+	## Your war trophies to spend in the Trophy Market (0 if you didn't meet the last horde).
+	return int(horde_state.get("trophies", 0)) if in_last_horde() else 0
+
+
+func horde_bought(item_id: String) -> int:
+	## How many times you bought this Trophy Market item from the last horde.
+	return int(horde_state.get("bought", {}).get(item_id, 0)) if in_last_horde() else 0
+
+
+func horde_prize_taken() -> bool:
+	return in_last_horde() and bool(horde_state.get("ranked", false))
+
+
+func horde_rules() -> Dictionary:
+	## The Ember Horde's camps, Trophy Market and prizes (data/events.json), as the server sent them.
+	return last_horde().get("horde", {})
+
+
+func check_horde_buy(item: Dictionary) -> String:
+	## Why this Trophy Market item can't be bought now ("" if it can).
+	if not in_last_horde():
+		return "The Trophy Market opens when the Ember Horde arrives."
+	if horde_bought(String(item.id)) >= int(item.stock):
+		return "That's sold out until the next horde."
+	if war_trophies() < int(item.cost):
+		return "That costs %d war trophies." % int(item.cost)
+	var cap := player_castle.storage_capacity()
+	var res: Dictionary = item.get("resources", {})
+	for r: String in res:
+		if float(player_castle.resources.get(r, 0.0)) + float(res[r]) > cap:
+			return "Make room in your storage first: it can't hold all of that."
+	return ""
+
+
+func buy_horde(item: Dictionary) -> String:
+	## Asks the server for a Trophy Market item; your castle shows it with the server's answer.
+	var why := check_horde_buy(item)
+	if why == "":
+		get_node("/root/Online").order({"action": "buy_horde", "item": String(item.id)})
+	return why
+
+
+func claim_horde_prize() -> String:
+	## Asks the server for your ranked prize once the horde has gone.
+	if my_horde_points() <= 0:
+		return "Beat horde camps for points to earn a prize."
+	if now() < float(last_horde().get("end", 0.0)):
+		return "The prizes are given once the horde has gone."
+	if horde_prize_taken():
+		return "You already have your prize."
+	get_node("/root/Online").order({"action": "claim_horde_prize"})
+	return ""
+
+
+func ask_horde_board() -> void:
+	## Asks the server for the Ember Horde's ranking; it arrives with horde_board_changed.
+	get_node("/root/Online").order({"action": "horde_board"})
 
 
 func castellan_effects(castle: CastleState) -> Dictionary:
@@ -2204,6 +2325,10 @@ func take_order_result(body: Dictionary, answer: Dictionary) -> void:
 	if body.get("action", "") == "event_board" and answer.get("result") is Dictionary:
 		event_board = answer.result
 		event_board_changed.emit()
+		return
+	if body.get("action", "") == "horde_board" and answer.get("result") is Dictionary:
+		horde_board = answer.result
+		horde_board_changed.emit()
 		return
 	if body.get("action", "") == "view_castle" and answer.get("result") is Dictionary:
 		_show_visit(answer.result)

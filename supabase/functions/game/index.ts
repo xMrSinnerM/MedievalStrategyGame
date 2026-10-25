@@ -9,6 +9,9 @@
 // POST { "action": "leaderboard" }               the mightiest castles, and your own rank
 // POST { "action": "event_board" }               the most event points in the Baron Invasion, and your rank
 // POST { "action": "claim_reward", "tier": n }   the invasion's next reward tier (data/events.json)
+// POST { "action": "horde_board" }               the most horde points in the Ember Horde, your rank and your prize
+// POST { "action": "buy_horde", "item": id }      something from the Trophy Market, for war trophies (data/events.json)
+// POST { "action": "claim_horde_prize" }          your ranked prize, once the Ember Horde has gone
 // POST { "action": "claim_quest", "kind": "story" | "daily" | "chest", "index": n }   a quest reward (data/quests.json)
 // POST { "action": "place", "type", "cell": [x, y] }
 // POST { "action": "upgrade" | "cancel", "id" }
@@ -96,9 +99,10 @@ import outpostsData from "../../../data/outposts.json" with { type: "json" };
 import villagesData from "../../../data/villages.json" with { type: "json" };
 import capitalsData from "../../../data/capitals.json" with { type: "json" };
 import fortressesData from "../../../data/fortresses.json" with { type: "json" };
+import hordeData from "../../../data/horde.json" with { type: "json" };
 import world from "../../../server/world/world.json" with { type: "json" };
 import { makeRules } from "../../../server/rules/load.ts";
-import { effectAt, eventsView, lastInvasion, withOverrides, type EventOverride, type EventRules } from "../../../server/rules/events.ts";
+import { effectAt, eventsView, lastHorde, lastInvasion, withOverrides, type EventOverride, type EventRules } from "../../../server/rules/events.ts";
 import { CastleState } from "../../../server/rules/castle_state.ts";
 import { nearestSpot } from "../../../server/rules/outposts.ts";
 import { CapitalRules, rulesFor, settled, type VillageInfo, type VillageState } from "../../../server/rules/villages.ts";
@@ -113,12 +117,13 @@ import { chatView, send, type Speaker } from "./chat.ts";
 import { DatabaseChatStore } from "./chat_store.ts";
 import { deliver, recall, type Aid, type AidRules } from "./aid.ts";
 import { invade } from "./invasion.ts";
+import { hordeArrives, prizeFor } from "./horde.ts";
 import type { QuestRules } from "../../../server/rules/quests.ts";
 import {
   adminEvents, checkGift, giftReport, giveCastle, NOT_ADMIN, OVERRIDES_KEPT, startEvent, stopEvent, type Gift,
 } from "./admin.ts";
 
-const rules = makeRules(buildings, units, barons, gearData, outpostsData, villagesData, capitalsData, fortressesData);
+const rules = makeRules(buildings, units, barons, gearData, outpostsData, villagesData, capitalsData, fortressesData, hordeData);
 const CAPITALS: VillageInfo[] = (world as World).capitals ?? [];
 const VILLAGES: VillageInfo[] = [...((world as World).villages ?? []), ...CAPITALS];
 const CAPITAL_IDS = CAPITALS.map((c) => c.id);
@@ -140,7 +145,7 @@ const ALLIANCE_ORDERS = new Set([
   "alliance", "join_alliance", "accept_invite", "decline_invite", "cancel_request", "leave_alliance", "disband_alliance",
   "invite", "cancel_invite", "kick", "answer_request", "set_role", "alliance_settings",
 ]);
-const COLUMNS = "name, home_x, home_y, castle, camps, marches, next_march, protected_until, barons_beaten, event_key, event_points, event_claimed, outpost, version";
+const COLUMNS = "name, home_x, home_y, castle, camps, marches, next_march, protected_until, barons_beaten, event_key, event_points, event_claimed, horde_key, horde_points, horde, outpost, version";
 const REPORTS_SHOWN = 20;
 const RETRIES = 4;
 const PLAYERS_SHOWN = 500;
@@ -558,6 +563,13 @@ async function speaker(userId: string): Promise<Speaker | null> {
   return { user: userId, name: me.name, tag: a?.tag ?? "", alliance_id: a === null ? null : me.alliance_id };
 }
 
+/** A place in an Ember Horde's ranking: one more than the players of that run with more points (ties share it). */
+async function hordeRank(key: number, points: number): Promise<number> {
+  const { count } = await admin.from("players").select("user_id", { count: "exact", head: true })
+    .eq("horde_key", key).gt("horde_points", points);
+  return (count ?? 0) + 1;
+}
+
 // --- The game owner's tools (admin.ts) --------------------------------------
 
 async function loadCalendar(): Promise<EventRules> {
@@ -689,7 +701,8 @@ Deno.serve(async (req: Request) => {
       const spot = pickSpot(world as World, spots);
       if (spot === null) return reply({ ok: false, error: "The world is full. Try again later." });
       // A castle founded during a Baron Invasion meets its invaders straight away.
-      const state = invade(newPlayer(rules, world as World, String(body.name), now(), spot, pvp), calendar, world as World, now());
+      const state = hordeArrives(invade(newPlayer(rules, world as World, String(body.name), now(), spot, pvp), calendar, world as World, now()),
+        calendar, world as World, now());
       const { error } = await admin.from("players").insert({ user_id: userId, ...state, ...publicColumns(state), version: 1 });
       if (!error) return reply(await view(userId, state));
       if (error.code !== "23505") return reply({ ok: false, error: "The server couldn't create your castle." }, 500);
@@ -766,6 +779,25 @@ Deno.serve(async (req: Request) => {
       .eq("event_key", key).gt("event_points", 0);
     return reply({ ok: true, now: now(), error: "",
       result: { event: inv ?? null, players: (data ?? []).map(flat), me, rank, total: total ?? 0 } });
+  }
+
+  if (body.action === "horde_board") {
+    // The Ember Horde on now (or the last one): the players with the most horde points in it, your rank and your prize.
+    const run = lastHorde(calendar, now());
+    const key = run?.start ?? -1;
+    const shown = "name, horde_key, horde_points, alliance:alliances!players_alliance_id_fkey(tag)";
+    const { data, error } = await admin.from("players").select(shown).eq("horde_key", key).gt("horde_points", 0)
+      .order("horde_points", { ascending: false }).order("name").limit(RANKS_SHOWN);
+    if (error) return reply({ ok: false, error: "The server couldn't load the horde ranking." }, 500);
+    const { data: mine } = await admin.from("players").select(shown).eq("user_id", userId).maybeSingle();
+    const flat = (r: Row) => ({ name: r.name, points: r.horde_points, tag: tagOf(r) });
+    const me = mine && Number(mine.horde_key) === key && mine.horde_points > 0 ? flat(mine) : null;
+    const rank = me ? await hordeRank(key, me.points) : 0;
+    const { count: total } = await admin.from("players").select("user_id", { count: "exact", head: true })
+      .eq("horde_key", key).gt("horde_points", 0);
+    return reply({ ok: true, now: now(), error: "",
+      result: { event: run ?? null, players: (data ?? []).map(flat), me, rank, total: total ?? 0,
+        prize: me && run?.horde ? prizeFor(run.horde.prizes, rank) ?? null : null } });
   }
 
   if (body.action === "chat" || body.action === "chat_send") {
@@ -845,6 +877,11 @@ Deno.serve(async (req: Request) => {
     }
     const { version, ...stored } = row as PlayerState & { version: number };
     const t = now();
+    // A ranked prize goes by your place among the players of that horde.
+    let hordePlace = 0;
+    if (body.action === "claim_horde_prize" && (stored.horde_points ?? 0) > 0) {
+      hordePlace = await hordeRank(Number(stored.horde_key ?? 0), Number(stored.horde_points));
+    }
     // An outpost goes on the free spot nearest your home.
     let outpostSpot: [number, number] | null = null;
     if (body.action === "found_outpost" && !stored.outpost) {
@@ -854,7 +891,7 @@ Deno.serve(async (req: Request) => {
     }
     const outcome = act(rules, stored, body, t, { pvp, outpostSpot, target: target?.target, homecomings, alliances: allianceRules, aid: aidRules,
       events: { rules: calendar, world: world as World }, quests: questRules, village: village?.target, villageIncome,
-      capitalBoost: boost, fortresses: (world as World).fortresses });
+      capitalBoost: boost, fortresses: (world as World).fortresses, hordeRank: hordePlace });
     // Save only if nobody else changed the row meanwhile; otherwise start over.
     const { data: saved, error: saveError } = await admin.from("players")
       .update({ ...outcome.state, ...publicColumns(outcome.state), version: version + 1, updated_at: new Date().toISOString() })
