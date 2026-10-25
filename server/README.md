@@ -161,8 +161,13 @@ Capitals (the towns, `data/capitals.json`, listed under `capitals` in
 and guarded with the same orders by their town id. `rulesFor()` picks
 `CapitalRules` for them: a stronger guard, a keep of level 4, one capital a
 player and three an alliance. Every request sets your castle's `boost` from
-the capitals your alliance holds (or you alone), so all its members produce
-more.
+the capitals your alliance holds (or you alone) and their guild halls, so
+all its members produce more. `build_capital` (`village`, `building`) starts
+the next level of a town building in your capital: `act()` checks it and
+pays from your castle, then `index.ts` saves it in the capital's `buildings`
+and `building` columns if the row is unchanged since (and refunds the castle
+if it isn't). A building under way counts once its `finish` has passed, with
+no write needed; `capture()` keeps the buildings and drops one still going up.
 
 Fortresses (the old kingdoms' castles, `data/fortresses.json`, listed under
 `fortresses` in `server/world/world.json`) are camps in each player's

@@ -11,6 +11,7 @@ import { CastleState } from "../rules/castle_state.ts";
 import { makeRules } from "../rules/load.ts";
 import { deliverCarts, nearestSpot, type Cart } from "../rules/outposts.ts";
 import { godotHash } from "../rules/util.ts";
+import { capture } from "../rules/villages.ts";
 import { claimQuest, cofferReward, cofferStreak, currentStory, dailyProgress, pickDailies, progress, type QuestRules } from "../rules/quests.ts";
 
 const root = new URL("../../", import.meta.url);
@@ -343,8 +344,24 @@ for (const [name, v] of [["villages", rules.villages], ["capitals", rules.capita
 
 test("capital bonus", () => {
   for (const b of fixtures.capitals.bonus) {
-    same(rules.capitals.totalBonus(b.levels), b.total, `bonus ${b.levels}`);
-    same(rules.capitals.boost(b.levels, rules.buildings.resources), b.boost, `boost ${b.levels}`);
+    same(rules.capitals.totalBonus(b.levels, b.guilds), b.total, `bonus ${b.levels} ${b.guilds}`);
+    same(rules.capitals.boost(b.levels, rules.buildings.resources, b.guilds), b.boost, `boost ${b.levels} ${b.guilds}`);
     same(rules.capitals.checkAlliance(b.levels.length), b.alliance, `alliance ${b.levels}`);
   }
+});
+
+test("capital town buildings", () => {
+  const c = rules.capitals;
+  const run = fixtures.capitals.town;
+  for (const id of Object.keys(run.levels)) {
+    run.levels[id].forEach((row: Record<string, unknown>, level: number) =>
+      same({ cost: c.buildingCost(id, level), time: c.buildingTime(id, level), effect: c.buildingEffect(id, level) }, row,
+        `${id} level ${level}`));
+  }
+  run.starts.forEach((s: Record<string, any>, i: number) => {
+    same(c.buildingLevels(s.state, s.t), s.levels, `start ${i} levels`);
+    same(c.underWay(s.state, s.t) ?? {}, s.under_way, `start ${i} under way`);
+    same(c.startBuild(s.state, s.id, s.t), s.start, `start ${i}`);
+    same(capture(s.state, "Taker", s.t), s.settled, `start ${i} captured`);
+  });
 });

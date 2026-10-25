@@ -1604,9 +1604,21 @@ func capital_levels() -> Array:
 	return out
 
 
+func capital_guilds() -> Array:
+	## The guild hall levels in the capitals that count for capital_levels().
+	var out := []
+	for v: Dictionary in capitals:
+		var id := String(v.id)
+		if is_my_village(id) or (online and village_state(id).get("ally", false)):
+			var level := capital_rules.building_level(village_state(id), "guildhall", now())
+			if level > 0:
+				out.append(level)
+	return out
+
+
 func capital_bonus() -> float:
-	## How much more your castles produce thanks to capitals.
-	return capital_rules.total_bonus(capital_levels())
+	## How much more your castles produce thanks to capitals and their guild halls.
+	return capital_rules.total_bonus(capital_levels(), capital_guilds())
 
 
 func alliance_capitals() -> int:
@@ -1617,7 +1629,7 @@ func alliance_capitals() -> int:
 func _apply_capital_boost() -> void:
 	## Offline: your castle produces more for the capitals you hold (online the server sets it).
 	if not online:
-		player_castle.boost = capital_rules.boost(capital_levels(), rules.resources)
+		player_castle.boost = capital_rules.boost(capital_levels(), rules.resources, capital_guilds())
 
 
 func village_slots() -> int:
@@ -1835,8 +1847,40 @@ func abandon_village(id: String) -> String:
 	if online:
 		get_node("/root/Online").order({"action": "abandon_village", "village": id})
 		return ""
+	# A capital's town buildings stay in the town.
+	var left := VillageRules.settled(village_state(id), now())
 	village_states.erase(id)
+	if left.has("buildings"):
+		village_states[id] = VillageRules.untouched(id)
+		village_states[id]["buildings"] = left.buildings
 	_apply_capital_boost()
+	save_game()
+	villages_changed.emit()
+	changed.emit()
+	return ""
+
+
+func check_capital_build(id: String, building: String) -> String:
+	## Why you can't start the next level of this town building in your capital ("" if you can).
+	if not is_capital(id):
+		return "That's not a capital."
+	if not is_my_village(id):
+		return "That capital isn't yours."
+	return capital_rules.check_build(village_state(id), building, now(), player_castle)
+
+
+func build_in_capital(id: String, building: String) -> String:
+	## Starts the next level of a town building in your capital, paid from
+	## your castle. Online the server decides.
+	var why := check_capital_build(id, building)
+	if why != "":
+		return why
+	if online:
+		get_node("/root/Online").order({"action": "build_capital", "village": id, "building": building})
+		return ""
+	var t := now()
+	player_castle.pay(capital_rules.building_cost(building, capital_rules.building_level(village_state(id), building, t) + 1))
+	village_states[id] = capital_rules.start_build(village_state(id), building, t)
 	save_game()
 	villages_changed.emit()
 	changed.emit()

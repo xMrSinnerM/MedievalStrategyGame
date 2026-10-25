@@ -16,7 +16,7 @@ import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { makeRules } from "../rules/load.ts";
 import { nearestSpot } from "../rules/outposts.ts";
-import { CapitalRules, rulesFor, untouched, type VillageInfo, type VillageState } from "../rules/villages.ts";
+import { CapitalRules, rulesFor, settled, untouched, type VillageInfo, type VillageState } from "../rules/villages.ts";
 import { effectAt, eventsView, lastInvasion, withOverrides, type EventOverride, type EventRules } from "../rules/events.ts";
 import { CastleState } from "../rules/castle_state.ts";
 import {
@@ -153,7 +153,8 @@ function villagesView(user: string) {
     const vr = rulesFor(rules, info);
     return { id: info.id, owner: state.owner, mine: holder === user, tag: holder ? tagOf(holder) : "",
       ally: holder !== null && holder !== user && allies(user, holder), guard: state.guard, taken_at: state.taken_at,
-      peace_until: vr.peaceUntil(state), stock: vr.stock(info, state, now()) };
+      peace_until: vr.peaceUntil(state), stock: vr.stock(info, state, now()),
+      ...(info.capital ? { buildings: state.buildings ?? {}, building: state.building ?? null } : {}) };
   });
 }
 
@@ -162,12 +163,17 @@ function held(user: string, capital = false): number {
   return PLACES.filter((info) => Boolean(info.capital) === capital && villages.get(info.id)!.holder === user).length;
 }
 
-/** The levels of the capitals held by this player's alliance (by the player alone outside one). */
-function allianceCapitals(user: string): number[] {
-  return (world.capitals ?? []).flatMap((info) => {
-    const holder = villages.get(info.id)!.holder;
-    return holder !== null && (holder === user || allies(user, holder)) ? [info.level] : [];
-  });
+/** The capitals held by this player's alliance (by the player alone outside one): their levels and their guild halls' levels. */
+function allianceCapitals(user: string): { levels: number[]; guilds: number[] } {
+  const out = { levels: [] as number[], guilds: [] as number[] };
+  for (const info of world.capitals ?? []) {
+    const v = villages.get(info.id)!;
+    if (v.holder === null || (v.holder !== user && !allies(user, v.holder))) continue;
+    out.levels.push(info.level);
+    const guild = rules.capitals.buildingLevel(v, "guildhall", now());
+    if (guild > 0) out.guilds.push(guild);
+  }
+  return out;
 }
 
 function hasRoom(user: string, info: VillageInfo): boolean {
@@ -175,7 +181,7 @@ function hasRoom(user: string, info: VillageInfo): boolean {
   if (!p) return false;
   const vr = rulesFor(rules, info);
   if (vr.checkRoom(castleLevel(p.castle), held(user, Boolean(info.capital))) !== "") return false;
-  return !(vr instanceof CapitalRules) || vr.checkAlliance(allianceCapitals(user).length) === "";
+  return !(vr instanceof CapitalRules) || vr.checkAlliance(allianceCapitals(user).levels.length) === "";
 }
 
 function findVillage(id: unknown, user: string): { target: VillageTarget; holder: string | null } | undefined {
@@ -184,7 +190,7 @@ function findVillage(id: unknown, user: string): { target: VillageTarget; holder
   const { holder, ...state } = villages.get(info.id)!;
   const target: VillageTarget = { info, state, ally: holder !== null && holder !== user && allies(user, holder),
     held: held(user, Boolean(info.capital)) };
-  if (info.capital) target.allianceHeld = allianceCapitals(user).length;
+  if (info.capital) target.allianceHeld = allianceCapitals(user).levels.length;
   return { target, holder };
 }
 
@@ -236,7 +242,9 @@ function villageOrder(user: string, body: Record<string, unknown>): string {
   const abandon = body.action === "abandon_village";
   if (!abandon && Object.keys(v.guard).length === 0) return "No soldiers guard that village.";
   const guard = v.guard;
-  if (abandon) villages.set(v.id, { ...untouched(v.id), holder: null });
+  // A capital's town buildings stay in the town; one still going up is lost.
+  const buildings = settled(v, now()).buildings;
+  if (abandon) villages.set(v.id, { ...untouched(v.id), ...(buildings ? { buildings } : {}), holder: null });
   else v.guard = {};
   sendHome(user, v.id, guard, now());
   return "";
@@ -470,7 +478,7 @@ createServer(async (req, res) => {
       villageError = villageOrder(user, body);
       body.action = "state";
     }
-    const village = body.action === "attack_village" || body.action === "station" ? findVillage(body.village, user) : undefined;
+    const village = ["attack_village", "station", "build_capital"].includes(String(body.action)) ? findVillage(body.village, user) : undefined;
     const target = ["attack_player", "spy", "send_resources", "send_defenders"].includes(String(body.action))
       ? findTarget(body.target, user) : undefined;
     const homecomings = [
@@ -486,9 +494,10 @@ createServer(async (req, res) => {
     const outcome = act(rules, me, body, t,
       { pvp, outpostSpot, target: target?.target, homecomings, alliances: allianceRules, aid: aidRules,
         events: { rules: eventRules, world, offset: EVENTS_OFFSET }, quests: questRules, village: village?.target, villageIncome,
-        capitalBoost: capitalBoost(rules, allianceCapitals(user)), fortresses: world.fortresses });
+        capitalBoost: capitalBoost(rules, allianceCapitals(user).levels, allianceCapitals(user).guilds), fortresses: world.fortresses });
     players.set(user, outcome.state);
     for (const r of outcome.reports) report(user, r);
+    if (outcome.capitalBuild && village) villages.set(village.target.info.id, { ...outcome.capitalBuild.state, holder: user });
     if (outcome.raid && village) {
       raids.push({ ...outcome.raid, id: nextRaid++, attacker: user, defender: outcome.raid.mission === "attack" ? village.holder : null });
     } else if (outcome.raid && target) raids.push({ ...outcome.raid, id: nextRaid++, attacker: user, defender: target.user });

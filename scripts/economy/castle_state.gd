@@ -926,6 +926,11 @@ func _check_start_work(cost: Dictionary) -> String:
 	return ""
 
 
+func pay(cost: Dictionary) -> void:
+	## Takes what something outside the castle costs (a capital's town building).
+	_pay(cost)
+
+
 func _pay(cost: Dictionary) -> void:
 	for r: String in cost:
 		resources[r] = resources.get(r, 0.0) - cost[r]

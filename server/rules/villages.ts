@@ -5,7 +5,9 @@
 // data/villages.json, where the villages stand in server/world/world.json.
 // Capitals (the towns, data/capitals.json) are villages with a stronger
 // guard that also raise their holder's alliance's production: CapitalRules,
-// a port of scripts/economy/capital_rules.gd.
+// a port of scripts/economy/capital_rules.gd. Whoever holds a capital can
+// raise town buildings there (walls, market, guardhouse, guild hall), one at
+// a time; they stay with the town when it changes hands.
 
 import { carried } from "./baron_camp.ts";
 import type { BaronRules } from "./baron_rules.ts";
@@ -41,6 +43,18 @@ export interface VillageState {
   taken_at: number;
   /** Up to when its yield has gone to the owner. */
   paid_at: number;
+  /** A capital's town buildings (building -> level). */
+  buildings?: Dict;
+  /** A capital's town building under way, if any. */
+  building?: TownBuild | null;
+}
+
+/** A town building going up in a capital. */
+export interface TownBuild {
+  id: string;
+  /** The level it reaches. */
+  level: number;
+  finish: number;
 }
 
 export interface VillageFight extends SiegeResult {
@@ -87,11 +101,21 @@ export class VillageRules {
     return this.yieldPerHour(resource, level) * this.storeHours;
   }
 
+  /** What the village sends its holder each hour now (a capital's market adds to it). */
+  rate(info: VillageInfo, _state: VillageState, _t: number): number {
+    return this.yieldPerHour(info.resource, info.level);
+  }
+
+  /** The most the village holds now. */
+  cap(info: VillageInfo, state: VillageState, t: number): number {
+    return round(this.rate(info, state, t) * this.storeHours);
+  }
+
   /** What the village holds at time `t`: its full store under the militia, else its yield since it was last paid. */
   stock(info: VillageInfo, state: VillageState, t: number): number {
-    const cap = this.storeCap(info.resource, info.level);
-    if (state.owner === "") return cap;
-    return Math.floor(Math.min(cap, this.yieldPerHour(info.resource, info.level) * Math.max(0, t - state.paid_at) / 3600));
+    const most = this.cap(info, state, t);
+    if (state.owner === "") return most;
+    return Math.floor(Math.min(most, this.rate(info, state, t) * Math.max(0, t - state.paid_at) / 3600));
   }
 
   /**
@@ -100,18 +124,22 @@ export class VillageRules {
    * store sends everything it holds.
    */
   collect(info: VillageInfo, state: VillageState, t: number): { amount: number; paid_at: number } {
-    const perHour = this.yieldPerHour(info.resource, info.level);
+    const perHour = this.rate(info, state, t);
     if (state.owner === "" || perHour <= 0 || t <= state.paid_at) return { amount: 0, paid_at: state.paid_at };
     const made = perHour * (t - state.paid_at) / 3600;
-    const cap = this.storeCap(info.resource, info.level);
-    if (made >= cap) return { amount: cap, paid_at: t };
+    const most = this.cap(info, state, t);
+    if (made >= most) return { amount: most, paid_at: t };
     const amount = Math.floor(made);
     return { amount, paid_at: state.paid_at + amount * 3600 / perHour };
   }
 
   /** The militia holding a village of this level (unit -> count). */
   militia(level: number): Dict {
-    const all = round(this.guardBase * Math.pow(this.guardGrowth, level - 1));
+    return this.mix(round(this.guardBase * Math.pow(this.guardGrowth, level - 1)), level);
+  }
+
+  /** `all` soldiers in the militia's mix for this level. */
+  protected mix(all: number, level: number): Dict {
     let mix: Dict = {};
     for (const army of this.guardArmies) if (level >= Number(army.from_level)) mix = army.mix;
     const out: Dict = {};
@@ -131,8 +159,13 @@ export class VillageRules {
     return this.palisadeBase + this.palisadePerLevel * (level - 1);
   }
 
+  /** How strong the village's walls are now (a capital's town walls add to them). */
+  wallDefense(info: VillageInfo, _state: VillageState, _t: number): number {
+    return this.palisade(info.level);
+  }
+
   /** Who defends the village: the militia, or the soldiers its owner stationed there. */
-  defenders(info: VillageInfo, state: VillageState): Dict {
+  defenders(info: VillageInfo, state: VillageState, _t = 0): Dict {
     return state.owner === "" ? this.militia(info.level) : { ...state.guard };
   }
 
@@ -169,8 +202,8 @@ export class VillageRules {
    */
   attack(units: BuildingRules, barons: BaronRules, info: VillageInfo, state: VillageState, army: Dict, seed: number, t: number,
     waves?: Wave[], tools: Tools = {}, lead: Dict = {}): VillageFight {
-    const result = siege(units, waves ?? autoWaves(army), this.defenders(info, state), DEFAULT_LAYOUT, seed,
-      wallFromDefense(this.palisade(info.level)), { a: tools, lead_a: lead });
+    const result = siege(units, waves ?? autoWaves(army), this.defenders(info, state, t), DEFAULT_LAYOUT, seed,
+      wallFromDefense(this.wallDefense(info, state, t)), { a: tools, lead_a: lead });
     const out: VillageFight = { ...result, survivors: survivors(result.a), guardLeft: survivors(result.b), loot: {} };
     if (result.winner === "a") {
       out.loot = carried({ [info.resource]: this.stock(info, state, t) }, barons.carry(out.survivors) * (1 + (lead.loot ?? 0)));
@@ -179,9 +212,21 @@ export class VillageRules {
   }
 }
 
-/** Hands a village to a new owner at time `t`, empty of soldiers, its peace starting. */
+/**
+ * Hands a village to a new owner at time `t`, empty of soldiers, its peace
+ * starting. A capital keeps its town buildings; one still being built is lost.
+ */
 export function capture(state: VillageState, owner: string, t: number): VillageState {
-  return { ...state, owner, guard: {}, taken_at: t, paid_at: t };
+  return { ...settled(state, t), owner, guard: {}, taken_at: t, paid_at: t };
+}
+
+/** The state with a town building finished by `t` counted in and one still under way dropped (for a change of hands). */
+export function settled(state: VillageState, t: number): VillageState {
+  const { building, ...out } = state;
+  const levels: Dict = { ...(state.buildings ?? {}) };
+  if (building && building.finish <= t) levels[building.id] = building.level;
+  if (Object.keys(levels).length > 0) out.buildings = levels;
+  return out;
 }
 
 /** A village as nobody has touched it yet. */
@@ -197,9 +242,14 @@ export class CapitalRules extends VillageRules {
   bonusBase: number;
   bonusPerLevel: number;
   maxBonus: number;
+  /** Town buildings: id -> {name, max_level, cost, cost_growth, time, time_growth, and its effect}. */
+  buildings: Record<string, Json>;
+  guildMax: number;
 
   constructor(data: Json = {}) {
     super(data);
+    this.buildings = data.buildings ?? {};
+    this.guildMax = Number(data.guild_max ?? 0);
     this.minKeep = Number(data.min_keep ?? 4);
     this.perPlayer = Number(data.per_player ?? 1);
     this.perAlliance = Number(data.per_alliance ?? 3);
@@ -233,17 +283,125 @@ export class CapitalRules extends VillageRules {
     return this.bonusBase + this.bonusPerLevel * (level - 1);
   }
 
-  /** The production bonus for capitals of these levels, at most maxBonus. */
-  totalBonus(levels: number[]): number {
-    return Math.min(levels.reduce((sum, level) => sum + this.bonus(level), 0), this.maxBonus);
+  /**
+   * The production bonus for capitals of these levels, at most maxBonus,
+   * plus what guild halls of these levels add, at most guildMax.
+   */
+  totalBonus(levels: number[], guilds: number[] = []): number {
+    const guild = guilds.reduce((sum, level) => sum + this.buildingEffect("guildhall", level), 0);
+    return Math.min(levels.reduce((sum, level) => sum + this.bonus(level), 0), this.maxBonus) + Math.min(guild, this.guildMax);
   }
 
-  /** The castle boost (CastleState.boost) for capitals of these levels. */
-  boost(levels: number[], resources: string[]): Dict {
-    const b = this.totalBonus(levels);
+  /** The castle boost (CastleState.boost) for capitals of these levels, with guild halls of these levels. */
+  boost(levels: number[], resources: string[], guilds: number[] = []): Dict {
+    const b = this.totalBonus(levels, guilds);
     const out: Dict = {};
     if (b > 0) for (const r of resources) out[r] = b;
     return out;
+  }
+
+  // --- Town buildings ---------------------------------------------------------
+
+  /** The town's buildings at time `t` (building -> level), one finished by then included. */
+  buildingLevels(state: VillageState, t: number): Dict {
+    const out: Dict = { ...(state.buildings ?? {}) };
+    const b = state.building;
+    if (b && b.finish <= t) out[b.id] = b.level;
+    return out;
+  }
+
+  buildingLevel(state: VillageState, id: string, t: number): number {
+    return this.buildingLevels(state, t)[id] ?? 0;
+  }
+
+  /** The building going up at time `t`, null if none. */
+  underWay(state: VillageState, t: number): TownBuild | null {
+    const b = state.building;
+    return b && b.finish > t ? b : null;
+  }
+
+  /** What raising this building to `level` costs. */
+  buildingCost(id: string, level: number): Dict {
+    const def = this.buildings[id] ?? {};
+    const out: Dict = {};
+    for (const r of Object.keys(def.cost ?? {})) out[r] = round(Number(def.cost[r]) * Math.pow(Number(def.cost_growth ?? 1), level - 1));
+    return out;
+  }
+
+  /** How many seconds raising this building to `level` takes. */
+  buildingTime(id: string, level: number): number {
+    const def = this.buildings[id] ?? {};
+    return round(Number(def.time ?? 0) * Math.pow(Number(def.time_growth ?? 1), level - 1));
+  }
+
+  /**
+   * What this building does at `level`: walls' defence, the market's share
+   * more gold, the guardhouse's soldiers or the guild hall's share more production.
+   */
+  buildingEffect(id: string, level: number): number {
+    const def = this.buildings[id] ?? {};
+    for (const key of ["defense", "yield_bonus", "guards", "production"]) if (key in def) return Number(def[key]) * level;
+    return 0;
+  }
+
+  /** Why the holder can't start the next level of this town building now ("" if they can). */
+  checkBuild(state: VillageState, id: string, t: number, castle: { canAfford(cost: Dict): boolean }): string {
+    const def = this.buildings[id];
+    if (typeof id !== "string" || !Object.hasOwn(this.buildings, id)) return "There's no such town building.";
+    if (this.underWay(state, t)) return "The town is already building something.";
+    const level = this.buildingLevel(state, id, t);
+    if (level >= Number(def.max_level ?? 1)) return `${def.name ?? id} is at its highest level.`;
+    if (!castle.canAfford(this.buildingCost(id, level + 1))) return "Not enough resources";
+    return "";
+  }
+
+  /** The state with the next level of this building going up from `t`. */
+  startBuild(state: VillageState, id: string, t: number): VillageState {
+    const levels = this.buildingLevels(state, t);
+    const next = (levels[id] ?? 0) + 1;
+    const out: VillageState = { ...state, building: { id, level: next, finish: t + this.buildingTime(id, next) } };
+    if (Object.keys(levels).length > 0) out.buildings = levels;
+    return out;
+  }
+
+  /** The town's gold an hour, with what its market adds. */
+  override rate(info: VillageInfo, state: VillageState, t: number): number {
+    const base = this.yieldPerHour(info.resource, info.level);
+    return round(base * (1 + this.buildingEffect("market", this.buildingLevel(state, "market", t))));
+  }
+
+  override wallDefense(info: VillageInfo, state: VillageState, t: number): number {
+    return this.palisade(info.level) + this.buildingEffect("walls", this.buildingLevel(state, "walls", t));
+  }
+
+  /** The guardhouse's soldiers (in the town guard's mix), fighting for the town's holder. */
+  watch(info: VillageInfo, state: VillageState, t: number): Dict {
+    const level = this.buildingLevel(state, "guardhouse", t);
+    if (level <= 0 || state.owner === "") return {};
+    return this.mix(round(this.buildingEffect("guardhouse", level)), info.level);
+  }
+
+  /** The town guard, or its holder's guards with the guardhouse's watch beside them. */
+  override defenders(info: VillageInfo, state: VillageState, t = 0): Dict {
+    const out = super.defenders(info, state, t);
+    const extra = this.watch(info, state, t);
+    for (const unit of Object.keys(extra)) out[unit] = (out[unit] ?? 0) + extra[unit];
+    return out;
+  }
+
+  /** As for a village; guardLeft is the holder's own guards still standing, each unit's losses shared with the watch. */
+  override attack(units: BuildingRules, barons: BaronRules, info: VillageInfo, state: VillageState, army: Dict, seed: number,
+    t: number, waves?: Wave[], tools: Tools = {}, lead: Dict = {}): VillageFight {
+    const out = super.attack(units, barons, info, state, army, seed, t, waves, tools, lead);
+    const extra = this.watch(info, state, t);
+    if (Object.keys(extra).length === 0) return out;
+    const left: Dict = {};
+    for (const unit of Object.keys(out.guardLeft)) {
+      const own = state.guard[unit] ?? 0;
+      const n = own > 0 ? Math.floor(out.guardLeft[unit] * own / (own + (extra[unit] ?? 0))) : 0;
+      if (n > 0) left[unit] = n;
+    }
+    return { ...out, guardLeft: left };
   }
 }
 

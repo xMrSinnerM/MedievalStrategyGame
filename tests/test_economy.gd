@@ -1150,10 +1150,29 @@ func test_capitals() -> void:
 	check(eco.check_village_attack(String(world[1].id), {"swordsman": 10}) == "You already hold a capital.", "economy: one capital")
 	check(eco.check_village_attack(String(eco.villages[0].id), {"swordsman": 10}) != "You already hold a capital.",
 			"economy: a capital takes no village slot")
+	# Town buildings: paid from your castle, one at a time, and they stay in the town.
+	var cost := cr.building_cost("guildhall", 1)
+	for r: String in cost:
+		eco.player_castle.resources[r] = float(cost[r])
+	check(eco.check_capital_build(info.id, "palace") == "There's no such town building.", "economy: no such town building")
+	check(eco.check_capital_build(String(world[1].id), "guildhall") == "That capital isn't yours.", "economy: only in your capital")
+	check(eco.build_in_capital(info.id, "guildhall") == "", "economy: a guild hall is begun")
+	check(cost.keys().all(func(r: String) -> bool: return float(eco.player_castle.resources[r]) < 1.0), "economy: the castle pays for it")
+	check(eco.check_capital_build(info.id, "market") == "The town is already building something.", "economy: one at a time")
+	var done := float(cr.under_way(eco.village_state(info.id), eco.now()).finish)
+	check(cr.building_level(eco.village_state(info.id), "guildhall", done) == 1, "economy: the guild hall is finished in time")
+	near(cr.total_bonus([int(info.level)], [1]), cr.bonus(int(info.level)) + cr.building_effect("guildhall", 1), "a guild hall adds to the bonus")
+	var walled := {"id": info.id, "owner": "Me", "guard": {}, "taken_at": T0, "paid_at": T0, "buildings": {"walls": 2, "market": 1}}
+	check(cr.wall_defense(info, walled, T0) == cr.palisade(int(info.level)) + 2.0 * float(cr.buildings.walls.defense), "town walls")
+	check(cr.rate(info, walled, T0) > cr.yield_per_hour("gold", int(info.level)), "the market sends more gold")
 	eco.save_game()
 	eco.begin_load(1)
 	check(eco.is_my_village(info.id) and eco.capital_bonus() > 0.0, "economy: capitals are saved")
+	check(not cr.under_way(eco.village_state(info.id), eco.now()).is_empty(), "economy: the town building under way is saved")
+	eco.village_states[info.id].building.finish = eco.now() - 1.0
 	check(eco.abandon_village(info.id) == "" and eco.player_castle.boost.is_empty(), "economy: given up, the bonus goes")
+	check(cr.building_level(eco.village_state(info.id), "guildhall", eco.now()) == 1 and not eco.is_my_village(info.id),
+			"economy: the town keeps its buildings")
 	eco.delete_slot(1)
 	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://test_saves"))
 	eco.free()

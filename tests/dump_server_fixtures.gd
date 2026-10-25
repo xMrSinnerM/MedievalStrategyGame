@@ -68,6 +68,7 @@ func _initialize() -> void:
 	data.villages = village_run(villages, VillageRules.load_villages(), 25)
 	data.capitals = village_run(capitals, CapitalRules.load_capitals(), 300)
 	data.capitals["bonus"] = capital_bonus_run()
+	data.capitals["town"] = town_building_run()
 	var fr := baron_rules.fortress
 	for level in range(1, fr.max_level + 1):
 		data.fortresses.append({
@@ -529,9 +530,36 @@ func capital_bonus_run() -> Array:
 		var levels: Array = []
 		for i in rng.randi_range(0, 6):
 			levels.append(rng.randi_range(1, 2))
-		out.append({"levels": levels, "total": capitals.total_bonus(levels), "boost": capitals.boost(levels, rules.resources),
-				"alliance": capitals.check_alliance(levels.size())})
+		var guilds: Array = levels.map(func(l: int) -> int: return (l * 3 + k) % 6)
+		out.append({"levels": levels, "guilds": guilds, "total": capitals.total_bonus(levels, guilds),
+				"boost": capitals.boost(levels, rules.resources, guilds), "alliance": capitals.check_alliance(levels.size())})
 	return out
+
+
+func town_building_run() -> Dictionary:
+	## Every town building's cost, time and effect at each level, and builds
+	## started on capitals with and without a building finished or under way.
+	var levels := {}
+	for id: String in capitals.buildings:
+		var rows: Array = []
+		for level in range(0, int(capitals.buildings[id].max_level) + 1):
+			rows.append({"cost": capitals.building_cost(id, level), "time": capitals.building_time(id, level),
+					"effect": capitals.building_effect(id, level)})
+		levels[id] = rows
+	var ids: Array = capitals.buildings.keys()
+	var starts: Array = []
+	for k in 12:
+		var state := {"id": "town", "owner": "Holder", "guard": {}, "taken_at": T0, "paid_at": T0}
+		if k % 2 == 1:
+			state["buildings"] = {ids[k % ids.size()]: 1 + k % 3}
+		if k % 3 != 0:
+			state["building"] = {"id": ids[(k + 1) % ids.size()], "level": 2, "finish": T0 + 1000.0 * k}
+		var t := T0 + 2500.0 + 300.0 * k
+		var id: String = ids[(k * 5) % ids.size()]
+		starts.append({"state": state, "t": t, "id": id, "levels": capitals.building_levels(state, t),
+				"under_way": capitals.under_way(state, t), "start": capitals.start_build(state, id, t),
+				"settled": VillageRules.capture(state, "Taker", t)})
+	return {"levels": levels, "starts": starts}
 
 
 func village_run(vr: VillageRules, world: Array, army_per_level: int) -> Dictionary:
@@ -552,6 +580,10 @@ func village_run(vr: VillageRules, world: Array, army_per_level: int) -> Diction
 		var info: Dictionary = world[rng.randi() % world.size()]
 		var state := {"id": info.id, "owner": "" if k % 7 == 0 else "Someone", "guard": {},
 				"taken_at": T0, "paid_at": T0 + rng.randf_range(0.0, 3600.0)}
+		if vr is CapitalRules and k % 3 == 2:
+			state["buildings"] = {"market": 1 + k % 5}
+		if vr is CapitalRules and k % 4 == 1:
+			state["building"] = {"id": "market", "level": 1 + k % 5, "finish": T0 + 3000.0 * k}
 		var t := T0 + rng.randf_range(0.0, 3600.0 * 30.0)
 		payouts.append({"info": info, "state": state, "t": t, "stock": vr.stock(info, state, t),
 				"collect": vr.collect(info, state, t), "peace": vr.peace_until(state)})
@@ -563,6 +595,8 @@ func village_run(vr: VillageRules, world: Array, army_per_level: int) -> Diction
 		if k % 3 == 1:
 			state = {"id": info.id, "owner": "Holder", "taken_at": T0 - 9000.0, "paid_at": T0 - rng.randf_range(0.0, 50000.0),
 					"guard": {units[rng.randi() % 4]: rng.randi_range(0, 60), units[rng.randi() % 4]: rng.randi_range(0, 40)}}
+		if vr is CapitalRules and k % 5 != 0:
+			state["buildings"] = {"walls": k % 6, "guardhouse": 1 + k % 5}
 		var army := {}
 		for unit: String in units:
 			if rng.randf() < 0.7:
