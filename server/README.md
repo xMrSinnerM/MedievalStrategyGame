@@ -126,6 +126,23 @@ index.ts, ties share a place). `horde_board` lists the most horde points,
 the asking player's rank and the prize it earns. Migration
 `20261026120000_ember_horde.sql` adds the columns.
 
+Alliance wars (`supabase/functions/game/wars.ts`, `data/wars.json`) run in
+weekly seasons (Monday 00:00 UTC to the next). Alliances win war points with
+the capitals, as rows of `war_points` (season, alliance, capital, kind,
+points): every request first gives each capital's holder's alliance its
+`hold` points up to the start of the hour (`scoreCapitals()` in index.ts;
+`villages.scored_at` is up to when, moved only by the request that counts
+it), taking a capital gives `capture` points once per capital, alliance and
+season, and holding one against another player gives `defence` points for
+the attackers who fell. The view `war_standings` adds them up per season and
+alliance. `war_board` answers with this season's and the last season's
+standings, who holds each capital, the player's alliance and the prize they
+can claim; `claim_war_prize` gives every member of a ranked alliance its
+prize for the last season once (`players.war_claimed`), if they were in the
+alliance before that season ended. Migration
+`20261026150000_alliance_wars.sql` adds the table, view and columns. The
+local server's `WAR_DAYS` makes seasons shorter for testing.
+
 Quests (`server/rules/quests.ts`, `data/quests.json`) live in the castle's
 own JSON (`quests`, with lifetime counts in `stats`), so they need no column
 of their own. Every request starts a new day's daily tasks once the UTC day

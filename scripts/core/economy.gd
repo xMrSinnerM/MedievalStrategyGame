@@ -38,6 +38,8 @@ signal barons_changed
 signal event_board_changed
 ## Online: the server sent the Ember Horde's ranking (see `horde_board`).
 signal horde_board_changed
+## Online: the server sent the alliance war's standings (see `war_board`).
+signal war_board_changed
 ## Online: the server sent the game owner's panel (see `admin_view`), or refused an owner's order.
 signal admin_changed(error: String)
 ## your outpost was founded, or carts left or arrived
@@ -169,6 +171,8 @@ const CHAT_KEPT := 150
 var aid: Array = []
 ## Helping allies (data/aid.json): carry_per_keep_level, station_hours.
 var aid_rules := {}
+## Online: the alliance war's rules (data/wars.json).
+var war_rules := {}
 ## Online: timed events as the server last sent them: {"active": [...],
 ## "upcoming": [...], "recent": [...]}, each {"id", "name", "description",
 ## "effects", "start", "end"} in Unix seconds (data/events.json); "recent" has
@@ -191,6 +195,10 @@ var horde_state := {}
 ## Online: the Ember Horde's ranking as the server last sent it: {"event",
 ## "players": [{"name", "points", "tag"}], "me", "rank", "total", "prize"}.
 var horde_board := {}
+## Online: the alliance war as the server last sent it: {"season": {start, end,
+## "alliances"}, "last": {start, end, "alliances"}, "capitals", "mine",
+## "prize": {prize, claimed, can_claim, why}, "rules"} (data/wars.json).
+var war_board := {}
 ## Online: true when your account has the game owner's tools (the server decides).
 var is_admin := false
 ## Online, for the owner: {"events": [{id, name, hours, on, start, end}], "players": [names], "log": [{at, action, details}]}.
@@ -907,6 +915,7 @@ func begin_online(answer: Dictionary) -> void:
 	horde_points = 0
 	horde_state = {}
 	horde_board = {}
+	war_board = {}
 	is_admin = false
 	admin_view = {}
 	protected_until = 0.0
@@ -914,6 +923,8 @@ func begin_online(answer: Dictionary) -> void:
 		pvp = get_node("/root/GameData").load_json("res://data/pvp.json")
 	if aid_rules.is_empty():
 		aid_rules = get_node("/root/GameData").load_json("res://data/aid.json")
+	if war_rules.is_empty():
+		war_rules = get_node("/root/GameData").load_json("res://data/wars.json")
 	_world_timer = WORLD_POLL
 	apply_server(answer)
 	get_node("/root/Online").order({"action": "alliance"})
@@ -1555,6 +1566,21 @@ func claim_horde_prize() -> String:
 func ask_horde_board() -> void:
 	## Asks the server for the Ember Horde's ranking; it arrives with horde_board_changed.
 	get_node("/root/Online").order({"action": "horde_board"})
+
+
+func ask_war_board() -> void:
+	## Asks the server for the alliance war's standings; they arrive with war_board_changed.
+	get_node("/root/Online").order({"action": "war_board"})
+
+
+func claim_war_prize() -> String:
+	## Asks the server for your prize for your alliance's place in the last war season.
+	var prize: Dictionary = war_board.get("prize", {})
+	if not bool(prize.get("can_claim", false)):
+		return String(prize.get("why", "There's no prize to claim."))
+	get_node("/root/Online").order({"action": "claim_war_prize"})
+	ask_war_board()
+	return ""
 
 
 func castellan_effects(castle: CastleState) -> Dictionary:
@@ -2329,6 +2355,10 @@ func take_order_result(body: Dictionary, answer: Dictionary) -> void:
 	if body.get("action", "") == "horde_board" and answer.get("result") is Dictionary:
 		horde_board = answer.result
 		horde_board_changed.emit()
+		return
+	if body.get("action", "") == "war_board" and answer.get("result") is Dictionary and answer.result.get("war") is Dictionary:
+		war_board = answer.result.war
+		war_board_changed.emit()
 		return
 	if body.get("action", "") == "view_castle" and answer.get("result") is Dictionary:
 		_show_visit(answer.result)
