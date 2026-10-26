@@ -27,6 +27,7 @@ func _ready() -> void:
 	add_theme_stylebox_override("panel", MenuStyle.panel(0.95))
 	custom_minimum_size = Vector2(760, 0)
 	visible = false
+	add_to_group("tutorial_window")
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 8)
 	add_child(box)
@@ -69,6 +70,7 @@ func _ready() -> void:
 	_quest_progress.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(_quest_progress)
 	_quest_claim = _claim_button("Claim", func() -> void: _claim("story", 0))
+	_quest_claim.add_to_group("tutorial_quest_claim")
 	row.add_child(_quest_claim)
 	_quest_reward = _wrapped("", 15, MenuStyle.GOLD)
 	qbox.add_child(_quest_reward)

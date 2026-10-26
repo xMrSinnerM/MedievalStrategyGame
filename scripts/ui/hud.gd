@@ -63,8 +63,10 @@ func _ready() -> void:
 		row.add_child(_bar_button("Leaderboard (L)", "leaderboard", leaderboard.toggle))
 	else:
 		row.add_child(_bar_button("Diplomacy (K)", "diplomacy", diplomacy.toggle))
-	row.add_child(_bar_button("Your castle (C)", "might", func() -> void:
-		EventBus.castle_requested.emit(Economy.player_castle.id)))
+	var castle_button := _bar_button("Your castle (C)", "might", func() -> void:
+		EventBus.castle_requested.emit(Economy.player_castle.id))
+	castle_button.add_to_group("tutorial_castle_button")
+	row.add_child(castle_button)
 	var left := VBoxContainer.new()
 	left.position = Vector2(12, TOP + 2)
 	left.add_theme_constant_override("separation", 6)
@@ -74,6 +76,7 @@ func _ready() -> void:
 	left.add_child(_controls)
 	var tracker := preload("res://scripts/ui/quest_tracker.gd").new()
 	tracker.panel = quests
+	tracker.add_to_group("tutorial_quest_tracker")
 	tracker.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	left.add_child(tracker)
 	# Right: the minimap, with the card of whatever you clicked under it.

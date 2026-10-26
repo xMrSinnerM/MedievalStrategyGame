@@ -27,6 +27,7 @@ func _ready() -> void:
 	add_theme_stylebox_override("panel", MenuStyle.panel(0.96, 14))
 	custom_minimum_size = Vector2(780, 0)
 	visible = false
+	add_to_group("tutorial_window")
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 12)
 	add_child(box)

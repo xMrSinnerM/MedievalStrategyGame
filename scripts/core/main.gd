@@ -5,6 +5,7 @@ extends Node
 ## so coming back is instant and the map keeps its camera, parties and routes.
 ##
 ## C toggles between the world map and your castle; Esc opens the pause menu.
+## The tutorial for new players runs on top of both screens.
 
 const WORLD_SCENE := preload("res://scenes/world_map/world_map.tscn")
 const CASTLE_SCENE := preload("res://scenes/castle/castle_view.tscn")
@@ -13,6 +14,7 @@ var world_map: Node
 var castle_view: Node
 var main_menu: CanvasLayer
 var pause_menu: CanvasLayer
+var tutorial: CanvasLayer
 
 
 func _ready() -> void:
@@ -26,6 +28,10 @@ func _ready() -> void:
 	pause_menu = preload("res://scripts/ui/pause_menu.gd").new()
 	pause_menu.main_menu_requested.connect(show_main_menu)
 	add_child(pause_menu)
+	tutorial = preload("res://scripts/ui/tutorial.gd").new()
+	tutorial.main = self
+	add_child(tutorial)
+	pause_menu.tutorial_requested.connect(tutorial.replay)
 
 
 func in_game() -> bool:
@@ -43,6 +49,7 @@ func start_game(slot: int, new_game: bool) -> void:
 	world_map = WORLD_SCENE.instantiate()
 	add_child(world_map)
 	main_menu.visible = false
+	tutorial.begin(new_game)
 
 
 func start_online(answer: Dictionary) -> void:
@@ -57,6 +64,7 @@ func start_online(answer: Dictionary) -> void:
 	world_map = WORLD_SCENE.instantiate()
 	add_child(world_map)
 	main_menu.visible = false
+	tutorial.begin(false)
 
 
 func show_main_menu() -> void:
@@ -64,6 +72,7 @@ func show_main_menu() -> void:
 	Economy.save_game()
 	if Economy.online:
 		Economy.end_online()
+	tutorial.stop()
 	_free_screens()
 	main_menu.refresh()
 	main_menu.visible = true
