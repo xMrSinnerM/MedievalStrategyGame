@@ -735,6 +735,23 @@ Allied defenders in your own castle show when you click it, and a battle
 report says when they fought for you. Helping costs only what you send, so
 it can't be bought.
 
+### Market
+
+Press T (or the Market button) to trade wood, stone and food with any other
+player, from keep level 2. **Buy** lists everyone's offers, cheapest first,
+and can show only one good; buying takes the whole offer, you pay what it
+asks and the goods are in your storage at once (if it has room). **Sell**
+puts your own offer up: what you give and what you want for it. The goods
+leave your castle and wait at the market for up to 48 hours; if nobody buys
+them, or you take the offer down under **Your offers**, they come back. When
+it sells you get the price minus the market's 5% cut with your next visit
+(what your storage can't hold then is lost), and a message tells you who
+bought it. One offer gives at most 1000 per keep level, you can have 5 up at
+once, and every price lies between 0.5 and 2 of the good you want for each
+one you give, so the market can't be used to hand an account resources for
+nothing. Recent trades show the going rates. The numbers are in
+`data/market.json`.
+
 ### Timed events
 
 Online, a banner at the bottom of the map shows the event that's on and how
