@@ -1,5 +1,5 @@
 extends PanelContainer
-## Display settings, shared by the main menu and the pause menu. Changes apply
+## Display and notice settings, shared by the main menu and the pause menu. Changes apply
 ## at once and are saved by the Settings autoload.
 
 signal closed
@@ -23,6 +23,8 @@ func _ready() -> void:
 	_toggle("Ambient occlusion", "ambient_occlusion")
 	_slider("3D resolution", "render_scale", 0.5, 1.0, 0.05, "%d%%", 100.0)
 	_slider("Interface size", "ui_scale", 0.75, 1.5, 0.05, "%d%%", 100.0)
+	_toggle("Notices (attacks, finished work)", "notices")
+	_toggle("Desktop notices in the background", "desktop_notices")
 	var back := MenuStyle.button("Back", func() -> void: closed.emit(), 200.0)
 	back.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	box.add_child(back)

@@ -14,6 +14,8 @@ const DEFAULTS := {
 	"ambient_occlusion": true,
 	"render_scale": 1.0,    ## 3D resolution relative to the window, 0.5 .. 1
 	"ui_scale": 1.0,        ## size of menus and panels, 0.75 .. 1.5
+	"notices": true,        ## cards for attacks and finished work (Notices)
+	"desktop_notices": true,   ## the same on the desktop while the game is in the background
 }
 
 var values := DEFAULTS.duplicate()
