@@ -519,6 +519,35 @@ numbers live in `research` in `data/buildings.json`; the rules are in
 `scripts/ui/research_panel.gd`. Online, the orders are `research` and
 `cancel_research`.
 
+## Decorations and public order
+
+Every castle has a **public order**. The keep raises it (+25 at level 1, up to
++96 at level 5), and every other finished building except the wall crowds the
+castle and lowers it: farms, woodcutters, quarries and the academy -6 each,
+houses -5, storehouses -4, the barracks and workshop -10. Each point of order
+changes the production of every resource by 0.2%, up to +30% or down to -30%.
+A new castle starts at +13 (+2.6%); a full castle with no decorations sits
+around -100 (-20%).
+
+**Decorations** raise it again. They have their own tab in the build menu,
+beside the order (hover it to see where the order comes from); the keep's panel
+shows it too.
+
+| Decoration | Size | Keep | How many | Order at level 1 |
+|---|---|---|---|---|
+| Banner Pole | 1x1 | 1 | 2 to 4 | +6 |
+| Flower Garden | 2x2 | 1 | 1 to 3 | +12 |
+| Town Well | 2x2 | 2 | 1 to 3 | +20 |
+| Shady Grove | 3x3 | 3 | 1 to 2 | +35 |
+| Tavern | 3x3 | 4 | 1 | +60 |
+
+Each upgrades to level 5 and gives 30% more order per level. They cost
+resources and building time only; nothing bought gives order. NPC lords put up
+decorations too when their castles get crowded, and an outpost can build
+banners, gardens and wells. The numbers live in `public_order` and the
+decorations in `data/buildings.json`; the rules are in `CastleState`
+(`public_order()`, `order_bonus()`), the same as `server/rules/castle_state.ts`.
+
 ## Commanders and gear
 
 Press **H** (or the **Commanders** button on the map) for the commanders
@@ -882,6 +911,7 @@ How the parts work:
 - [x] Siege workshop: attack and defence tools
 - [x] Commanders and gear
 - [x] Academy and research tree
+- [x] Decorations and public order
 
 ## Known limitations
 

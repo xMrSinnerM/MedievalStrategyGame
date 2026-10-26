@@ -3,7 +3,7 @@
 	"keep_needed": 3,
 	"cost": { "wood": 4000, "stone": 4000, "food": 2000, "gold": 2000 },
 	"keep_cap": 3,
-	"types": ["keep", "wall", "woodcutter", "quarry", "farm", "house", "storehouse"],
+	"types": ["keep", "wall", "woodcutter", "quarry", "farm", "house", "storehouse", "banner", "garden", "well"],
 	"cart_share": 0.5,
 	"cart_min": 500,
 	"regions": {

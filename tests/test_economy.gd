@@ -11,6 +11,9 @@ const T0 := 1_000_000.0
 
 func _initialize() -> void:
 	rules = BuildingRules.load_default()
+	# Most tests check plain production numbers, so public order leaves
+	# production alone here; test_public_order uses the real rules.
+	rules.order_per_point = 0.0
 	test_new_castle()
 	test_production_and_cap()
 	test_construction()
@@ -46,6 +49,7 @@ func _initialize() -> void:
 	test_looking_around()
 	test_research()
 	test_research_in_battle()
+	test_public_order()
 	print("%d checks, %d failed" % [checks, failures])
 	quit(1 if failures > 0 else 0)
 
@@ -1387,3 +1391,44 @@ func test_research_in_battle() -> void:
 	eco.delete_slot(1)
 	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://test_saves"))
 	eco.free()
+
+
+func test_public_order() -> void:
+	var real := BuildingRules.load_default()
+	var c := CastleState.create_new(real, "order", "Order", "player", T0)
+	# A new castle: the keep's order, less a woodcutter and a farm crowding it.
+	var start_order := real.order("keep", 1) + real.order("woodcutter", 1) + real.order("farm", 1)
+	near(c.public_order(), start_order, "a new castle's public order")
+	check(start_order > 0.0, "a new castle starts content (%d)" % start_order)
+	near(c.production_per_hour().wood, 40.0 * (1.0 + start_order * real.order_per_point), "content townsfolk produce a little more")
+	check(real.is_decoration("banner") and not real.is_decoration("house"), "banners are decorations, houses aren't")
+	check(real.order("house", 1) < 0.0 and real.order("house", 5) == real.order("house", 1), "a house crowds the castle the same at any level")
+	check(real.order("garden", 2) > real.order("garden", 1), "a better garden pleases more")
+	near(real.order_bonus(10000.0), real.order_max_bonus, "the bonus has a ceiling")
+	near(real.order_bonus(-10000.0), -real.order_max_penalty, "and so does the penalty")
+	# Building a decoration: nothing until it is finished.
+	c.resources = {"wood": 5000.0, "stone": 5000.0, "food": 5000.0, "gold": 5000.0}
+	var banner := c.place("banner", Vector2i(0, 0), T0)
+	check(banner > 0, "a banner pole placed")
+	near(c.public_order(), start_order, "a decoration counts only once built")
+	c.advance_to(T0 + real.build_time("banner", 1))
+	near(c.public_order(), start_order + real.order("banner", 1), "the finished banner raises public order")
+	check(c.check_build("tavern") == "Needs keep level 4", "a tavern needs keep level 4")
+	# A crowded castle produces less.
+	for k in 8:
+		c._add_building("house", 1, Vector2i(2 * k, 20))
+	check(c.public_order() < 0.0, "eight more houses crowd the castle (%d)" % c.public_order())
+	near(c.order_bonus(), c.public_order() * real.order_per_point, "and lower production")
+	var wood: float = c.production_per_hour().wood
+	var plain := 40.0
+	check(wood < plain, "a crowded castle cuts less wood (%.1f/h)" % wood)
+	# The NPC lords decorate a crowded castle first.
+	var npc := CastleState.create_new(real, "npc", "NPC", "aldmere", T0)
+	for k in 8:
+		npc._add_building("house", 1, Vector2i(2 * k, 20))
+	var order := NpcBrain.choose(npc)
+	var type: String = order.get("type", npc.get_building(int(order.get("id", -1))).get("type", ""))
+	check(real.is_decoration(type), "an NPC with an unhappy castle builds a decoration (%s)" % type)
+	# Saved castles keep their decorations.
+	var copy := CastleState.from_dict(real, JSON.parse_string(JSON.stringify(c.to_dict())))
+	near(copy.public_order(), c.public_order(), "public order survives a save")

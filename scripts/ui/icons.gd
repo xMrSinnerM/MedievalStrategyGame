@@ -148,6 +148,16 @@ const SVG := {
 		<rect x="8" y="8" width="48" height="48" rx="4" fill="#5d8a3a" stroke="#e0b048" stroke-width="4"/>
 		<path d="M8 36 C20 30 28 44 40 34 C46 29 52 32 56 30" fill="none" stroke="#5aa0d0" stroke-width="4"/>
 		<rect x="22" y="18" width="18" height="13" fill="none" stroke="#f2ead8" stroke-width="2.5"/>""",
+	# A flower in bloom, for public order and decorations.
+	"order": """
+		<path d="M32 36 V60" stroke="#4f8a3a" stroke-width="4" stroke-linecap="round"/>
+		<path d="M32 52 Q22 44 16 48 Q22 56 32 54" fill="#5fa046" stroke="%s" stroke-width="2.5"/>
+		<circle cx="32" cy="14" r="9" fill="#e86a8a" stroke="%s" stroke-width="3"/>
+		<circle cx="20" cy="24" r="9" fill="#e86a8a" stroke="%s" stroke-width="3"/>
+		<circle cx="44" cy="24" r="9" fill="#e86a8a" stroke="%s" stroke-width="3"/>
+		<circle cx="25" cy="37" r="9" fill="#e86a8a" stroke="%s" stroke-width="3"/>
+		<circle cx="39" cy="37" r="9" fill="#e86a8a" stroke="%s" stroke-width="3"/>
+		<circle cx="32" cy="27" r="7" fill="#f5c842" stroke="%s" stroke-width="3"/>""",
 	# A banner on a pole, for your warband.
 	"banner": """
 		<path d="M18 6 V60" stroke="#8a5a2e" stroke-width="4" stroke-linecap="round"/>

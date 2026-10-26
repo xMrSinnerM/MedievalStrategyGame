@@ -22,6 +22,9 @@ var _research_button: Button
 var _research_bar: ProgressBar
 var _build_menu: PanelContainer
 var _build_buttons := {}       ## type -> Button
+var _build_tab := "buildings"  ## "buildings" or "decorations": which the build menu shows
+var _tab_buttons := {}         ## tab -> Button
+var _order_label: Label
 var _side_panel: PanelContainer
 var _side_scroll: ScrollContainer
 var _side_box: VBoxContainer
@@ -119,8 +122,7 @@ func show_castle() -> void:
 	_research.close_panel()
 	# A glimpse of someone else's castle shows its buildings, not its stores.
 	_resources.visible = not view.glimpse
-	for type: String in _build_buttons:
-		_build_buttons[type].visible = view.castle.limits.is_empty() or view.castle.limits.types.has(type)
+	_show_build_tab(_build_tab)
 	_queue_signature = "?"
 	_on_mode_changed(view.mode)
 	_refresh()
@@ -184,8 +186,25 @@ func _build_build_menu() -> void:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 5)
 	_build_menu.add_child(row)
-	var title := _label("Build", 16, Color(1.0, 0.9, 0.65))
-	row.add_child(title)
+	# Two tabs, buildings and decorations, above the castle's public order.
+	var tabs := VBoxContainer.new()
+	tabs.add_theme_constant_override("separation", 2)
+	tabs.custom_minimum_size = Vector2(118, 0)
+	row.add_child(tabs)
+	for tab: String in ["buildings", "decorations"]:
+		var t := _button(tab.capitalize())
+		t.toggle_mode = true
+		t.add_theme_font_size_override("font_size", 13)
+		t.icon = Icons.get_icon("builders" if tab == "buildings" else "order", 18)
+		t.tooltip_text = "Houses, farms, the barracks and the rest" if tab == "buildings" \
+			else "Banners, gardens and the like: they raise public order, and with it production"
+		t.pressed.connect(_show_build_tab.bind(tab))
+		tabs.add_child(t)
+		_tab_buttons[tab] = t
+	_order_label = _label("", 13, TEXT)
+	_order_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_order_label.mouse_filter = Control.MOUSE_FILTER_STOP
+	tabs.add_child(_order_label)
 	for type: String in Economy.rules.types:
 		if Economy.rules.is_perimeter(type) or type == "keep":
 			continue
@@ -193,6 +212,36 @@ func _build_build_menu() -> void:
 		b.pressed.connect(func() -> void: view.start_placing(type))
 		row.add_child(b)
 		_build_buttons[type] = b
+
+
+func _show_build_tab(tab: String) -> void:
+	_build_tab = tab
+	for t: String in _tab_buttons:
+		_tab_buttons[t].button_pressed = t == tab
+	var castle: CastleState = view.castle if view != null else null
+	var rules: BuildingRules = castle.rules if castle != null else Economy.rules
+	for type: String in _build_buttons:
+		var allowed: bool = castle == null or castle.limits.is_empty() or castle.limits.types.has(type)
+		_build_buttons[type].visible = allowed and rules.is_decoration(type) == (tab == "decorations")
+
+
+func _order_text(castle: CastleState) -> String:
+	## "Public order +13: production +2.6%", and where it comes from.
+	var rules := castle.rules
+	var decor := 0.0
+	var crowd := 0.0
+	var keep := 0.0
+	for b in castle.buildings:
+		var o := rules.order(b.type, b.level)
+		if b.type == "keep":
+			keep += o
+		elif o > 0.0:
+			decor += o
+		else:
+			crowd += o
+	return "Public order %+d: production %+.1f%%\nThe keep %+d, decorations %+d, crowding %+d.\nEvery building but the keep, the wall and decorations crowds the castle; decorations please the townsfolk. Each point changes production by %.1f%%, up to %+d%% or down to -%d%%." % [
+		roundi(castle.public_order()), 100.0 * castle.order_bonus(), roundi(keep), roundi(decor), roundi(crowd),
+		100.0 * rules.order_per_point, roundi(100.0 * rules.order_max_bonus), roundi(100.0 * rules.order_max_penalty)]
 
 
 func _build_side_panel() -> void:
@@ -333,6 +382,10 @@ func _refresh() -> void:
 	_resources.show_castle(castle)
 	_warband_button.text = "Warband %d" % castle.field_count()
 	_warband.refresh()
+	var mood := castle.order_bonus()
+	_order_label.text = "Order %+d (%+d%%)" % [roundi(castle.public_order()), roundi(100.0 * mood)]
+	_order_label.add_theme_color_override("font_color", Color(0.62, 0.85, 0.54) if mood > 0.0 else (Color(1.0, 0.56, 0.45) if mood < 0.0 else TEXT))
+	_order_label.tooltip_text = _order_text(castle)
 
 	for type: String in _build_buttons:
 		var b: Button = _build_buttons[type]
@@ -420,6 +473,10 @@ func _refresh_side_panel() -> void:
 		if stat_next != "":
 			lines.append("[b]Level %d:[/b] %s" % [next, stat_next])
 	if type == "keep":
+		lines.append("")
+		var order_lines := _order_text(castle).split("\n")
+		lines.append("[b]%s[/b]" % order_lines[0])
+		lines.append("[color=#c8b89e]%s %s[/color]" % [order_lines[1], order_lines[2]])
 		lines.append("[b]Builders:[/b] %d, at level %d: %d" % [rules.builders(b.level), mini(b.level + 1, max_level), rules.builders(mini(b.level + 1, max_level))])
 		lines.append("Other buildings can reach level %d" % rules.max_level("woodcutter", b.level))
 	if type == "academy" and b.level > 0 and not view.glimpse:
@@ -494,6 +551,11 @@ func _stats(type: String, level: int) -> String:
 	var def := rules.defense(type, level)
 	if def > 0.0:
 		parts.append("defence %d" % roundi(def))
+	var order := rules.order(type, level)
+	if order > 0.0:
+		parts.append("public order %+d" % roundi(order))
+	elif order < 0.0:
+		parts.append("crowds the castle: public order %d" % roundi(order))
 	return ", ".join(parts)
 
 

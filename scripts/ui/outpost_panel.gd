@@ -107,7 +107,7 @@ func _refresh() -> void:
 func _build_found(o: OutpostRules) -> void:
 	var about := MenuStyle.label("An outpost is a second castle near yours, with its own buildings, storage and production. "
 			+ "Pick the land it works: that resource flows half as fast again there. It can build farms, woodcutters, quarries, "
-			+ "houses, storehouses, a wall and a keep up to level %d, and carts carry what it makes home." % o.keep_cap,
+			+ "houses, storehouses, banners, gardens and wells, a wall and a keep up to level %d, and carts carry what it makes home." % o.keep_cap,
 			14, MenuStyle.MUTED)
 	about.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	about.custom_minimum_size = Vector2(960, 0)

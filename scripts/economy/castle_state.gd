@@ -140,7 +140,25 @@ func production_per_hour() -> Dictionary:
 		var more := research_bonus(r)
 		if more != 0.0:
 			out[r] *= 1.0 + more
+	var mood := order_bonus()
+	if mood != 0.0:
+		for r: String in out:
+			out[r] *= 1.0 + mood
 	return out
+
+
+func public_order() -> float:
+	## The keep and decorations raise it; every other finished building crowds
+	## the castle and lowers it (see "public_order" in buildings.json).
+	var total := 0.0
+	for b in buildings:
+		total += rules.order(b.type, b.level)
+	return total
+
+
+func order_bonus() -> float:
+	## How much more (or, below zero, less) the castle produces because of its public order.
+	return rules.order_bonus(public_order())
 
 
 func upkeep_per_hour() -> float:
