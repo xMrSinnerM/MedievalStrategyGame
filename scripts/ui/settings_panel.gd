@@ -1,5 +1,5 @@
 extends PanelContainer
-## Display settings, shared by the main menu and the pause menu. Changes apply
+## Display and sound settings, shared by the main menu and the pause menu. Changes apply
 ## at once and are saved by the Settings autoload.
 
 signal closed
@@ -23,6 +23,10 @@ func _ready() -> void:
 	_toggle("Ambient occlusion", "ambient_occlusion")
 	_slider("3D resolution", "render_scale", 0.5, 1.0, 0.05, "%d%%", 100.0)
 	_slider("Interface size", "ui_scale", 0.75, 1.5, 0.05, "%d%%", 100.0)
+	_slider("Volume", "master_volume", 0.0, 1.0, 0.05, "%d%%", 100.0)
+	_slider("Music", "music_volume", 0.0, 1.0, 0.05, "%d%%", 100.0)
+	_slider("Sound effects", "effects_volume", 0.0, 1.0, 0.05, "%d%%", 100.0)
+	_slider("Ambience", "ambience_volume", 0.0, 1.0, 0.05, "%d%%", 100.0)
 	var back := MenuStyle.button("Back", func() -> void: closed.emit(), 200.0)
 	back.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	box.add_child(back)
@@ -62,6 +66,7 @@ func _slider(text: String, key: String, lo: float, hi: float, step: float, fmt: 
 	value_label.text = fmt % roundi(slider.value * show_scale)
 	# While dragging, only the number follows; the value applies on release so
 	# changing the interface size doesn't resize the slider under the mouse.
+	# Volumes change as you drag, so you can hear them.
 	var dragging := [false]
 	slider.drag_started.connect(func() -> void: dragging[0] = true)
 	slider.drag_ended.connect(func(_changed: bool) -> void:
@@ -69,7 +74,7 @@ func _slider(text: String, key: String, lo: float, hi: float, step: float, fmt: 
 		Settings.set_value(key, slider.value))
 	slider.value_changed.connect(func(v: float) -> void:
 		value_label.text = fmt % roundi(v * show_scale)
-		if not dragging[0]:
+		if not dragging[0] or key.ends_with("_volume"):
 			Settings.set_value(key, v))
 	row.add_child(slider)
 	row.add_child(value_label)
