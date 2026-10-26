@@ -24,6 +24,7 @@ GameData="*res://scripts/core/game_data.gd"
 Economy="*res://scripts/core/economy.gd"
 Settings="*res://scripts/core/settings.gd"
 Online="*res://scripts/core/online.gd"
+Audio="*res://scripts/core/audio.gd"
 Notices="*res://scripts/core/notices.gd"
 
 [display]

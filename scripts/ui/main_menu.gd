@@ -12,6 +12,8 @@ const VIGNETTE := preload("res://shaders/menu_vignette.gdshader")
 const CREDITS := [
 	"Castles, buildings, trees and props: KayKit Medieval Hexagon Pack by Kay Lousberg (CC0), kaylousberg.com",
 	"Soldiers: KayKit Adventurers Character Pack by Kay Lousberg (CC0)",
+	"Music, alarms, battle and building sounds: from 0 A.D. by Wildfire Games (CC BY-SA 3.0), wildfiregames.com",
+	"Building placement sounds: Kenney (CC0), kenney.nl",
 	"Fonts: Cinzel by Natanael Gama and Alegreya Sans by Huerta Tipográfica (SIL Open Font License)",
 	"Made with the Godot Engine (MIT licence), godotengine.org",
 ]
