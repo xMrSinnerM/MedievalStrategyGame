@@ -21,6 +21,7 @@ var _coffer: Label
 var _coffer_claim: Button
 var _status: Label
 var _signature := ""
+var achievements: Control   ## the achievements panel, opened from the header; set by the HUD
 
 
 func _ready() -> void:
@@ -36,6 +37,15 @@ func _ready() -> void:
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(title)
+	var open_achievements := Button.new()
+	open_achievements.text = "Achievements (T)"
+	open_achievements.focus_mode = Control.FOCUS_NONE
+	open_achievements.add_theme_font_size_override("font_size", 15)
+	open_achievements.pressed.connect(func() -> void:
+		if achievements != null:
+			close_panel()
+			achievements.open_panel())
+	head.add_child(open_achievements)
 	var close := Button.new()
 	close.text = "×"
 	close.focus_mode = Control.FOCUS_NONE

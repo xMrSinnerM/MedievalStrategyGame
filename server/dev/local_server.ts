@@ -32,6 +32,7 @@ import { invade } from "../../supabase/functions/game/invasion.ts";
 import { hordeArrives, prizeFor } from "../../supabase/functions/game/horde.ts";
 import { capitalBoost, resolveVillageRaid, type VillageTarget } from "../../supabase/functions/game/villages.ts";
 import type { QuestRules } from "../rules/quests.ts";
+import type { AchievementRules } from "../rules/achievements.ts";
 import {
   adminEvents, checkGift, giftReport, giveCastle, NOT_ADMIN, startEvent, stopEvent, type AdminLogEntry,
 } from "../../supabase/functions/game/admin.ts";
@@ -49,6 +50,7 @@ const allianceRules: AllianceRules = json("data/alliances.json");
 const aidRules: AidRules = json("data/aid.json");
 const eventRules0: EventRules = json("data/events.json");
 const questRules: QuestRules = json("data/quests.json");
+const achievementRules: AchievementRules = json("data/achievements.json");
 // The calendar with the owner's changes (kept on the shifted clock below).
 let eventRules: EventRules = eventRules0;
 // For testing: run the event calendar this many hours ahead, to see an event on.
@@ -342,7 +344,8 @@ function resolveRaids(user: string) {
     if (helpers.length > 0) outcome.defenderReport.helped_by = [...new Set(helpers.map((h) => h.sender_name))];
     report(raid.defender!, outcome.defenderReport);
     report(raid.attacker, outcome.attackerReport);
-    Object.assign(raid, { state: "home", survivors: outcome.survivors, loot: outcome.loot, ...(outcome.lead ? { lead: outcome.lead } : {}) });
+    Object.assign(raid, { state: "home", survivors: outcome.survivors, loot: outcome.loot, won: outcome.attackerReport.winner === "a",
+      ...(outcome.lead ? { lead: outcome.lead } : {}) });
     for (const [i, h] of helpers.entries()) {
       const left = outcome.helpers[i];
       const lost: Record<string, number> = {};
@@ -423,13 +426,13 @@ createServer(async (req, res) => {
     if (body.action === "world") {
       const others = [...players.entries()].filter(([id]) => id !== user)
         .map(([id, p]) => ({ name: p.name, home_x: p.home_x, home_y: p.home_y, level: castleLevel(p.castle),
-          protected: isProtected(p, pvp, now()), tag: tagOf(id), ally: allies(user, id),
+          protected: isProtected(p, pvp, now()), tag: tagOf(id), title: p.castle.achievements?.title ?? "", ally: allies(user, id),
           outpost: p.outpost ? { name: p.outpost.name, x: p.outpost.x, y: p.outpost.y } : null }));
       return send(res, 200, { ok: true, now: now(), error: "", players: others });
     }
     if (body.action === "leaderboard") {
       const all = [...players.entries()].map(([id, p]) => ({ id, name: p.name, level: castleLevel(p.castle),
-        might: might(p.castle, pvp), barons_beaten: p.barons_beaten ?? 0, tag: tagOf(id) }))
+        might: might(p.castle, pvp), barons_beaten: p.barons_beaten ?? 0, tag: tagOf(id), title: p.castle.achievements?.title ?? "" }))
         .sort((a, b) => b.might - a.might || b.barons_beaten - a.barons_beaten || a.name.localeCompare(b.name));
       const strip = ({ id: _id, ...row }: (typeof all)[number]) => row;
       const mine = all.find((r) => r.id === user);
@@ -518,7 +521,7 @@ createServer(async (req, res) => {
     }
     const outcome = act(rules, me, body, t,
       { pvp, outpostSpot, target: target?.target, homecomings, alliances: allianceRules, aid: aidRules,
-        events: { rules: eventRules, world, offset: EVENTS_OFFSET }, quests: questRules, village: village?.target, villageIncome,
+        events: { rules: eventRules, world, offset: EVENTS_OFFSET }, quests: questRules, achievements: achievementRules, village: village?.target, villageIncome,
         capitalBoost: capitalBoost(rules, allianceCapitals(user).levels, allianceCapitals(user).guilds), fortresses: world.fortresses, hordeRank: hordePlace });
     players.set(user, outcome.state);
     for (const r of outcome.reports) report(user, r);

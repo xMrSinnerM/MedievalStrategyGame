@@ -28,12 +28,17 @@ var field_ready := false       ## the warband has been given its starting army
 ## Where the garrison stands when the castle is stormed: percent on the left,
 ## front and right walls and in the courtyard (Battle.siege()).
 var layout := Battle.DEFAULT_LAYOUT.duplicate()
-## Lifetime counts the quests check (QuestBook): soldiers trained, resources
-## spent (less what cancelling gave back), robber barons beaten, loot brought home.
+## Lifetime counts the quests and achievements check (QuestBook, Achievements):
+## soldiers trained, resources spent (less what cancelling gave back), robber
+## barons beaten, loot brought home and, online, battles won against players'
+## castles and attacks on this one held off.
 var stats := new_stats()
 ## Where the castle stands with its quests: the story quest being worked on,
 ## today's daily tasks and the coffer (QuestBook).
 var quests := new_quest_log()
+## Achievements: tiers earned and claimed by achievement, and the title shown
+## ("id:tier", or "" for none) (Achievements).
+var achievements := new_achievement_log()
 ## Siege tools in store (tool -> count), the workshop's queue (batches
 ## {tool, remaining, unit_time, next}, like training) and the defence tools
 ## posted on each wall (wall -> {tool: count}, Battle.siege()).
@@ -77,7 +82,11 @@ static func create_new(p_rules: BuildingRules, p_id: String, p_name: String, p_o
 
 
 static func new_stats() -> Dictionary:
-	return {"trained": 0, "spent": 0.0, "barons": 0, "looted": 0.0}
+	return {"trained": 0, "spent": 0.0, "barons": 0, "looted": 0.0, "pvp_won": 0, "pvp_held": 0}
+
+
+static func new_achievement_log() -> Dictionary:
+	return {"tiers": {}, "claimed": {}, "title": ""}
 
 
 static func new_quest_log() -> Dictionary:
@@ -780,6 +789,7 @@ func copy_from(other: CastleState) -> void:
 	layout = other.layout
 	stats = other.stats
 	quests = other.quests
+	achievements = other.achievements
 	tools = other.tools
 	crafting = other.crafting
 	defence_tools = other.defence_tools
@@ -806,7 +816,7 @@ func to_dict() -> Dictionary:
 		"last_update": last_update, "next_id": _next_id,
 		"troops": troops.duplicate(), "training": training.duplicate(true), "hunger": hunger,
 		"field": field.duplicate(), "field_ready": field_ready, "layout": layout.duplicate(),
-		"stats": stats.duplicate(), "quests": quests.duplicate(true),
+		"stats": stats.duplicate(), "quests": quests.duplicate(true), "achievements": achievements.duplicate(true),
 		"tools": tools.duplicate(), "crafting": crafting.duplicate(true), "defence_tools": defence_tools.duplicate(true),
 		"armoury": armoury.duplicate(true),
 		"boost": boost.duplicate(), "limits": limits.duplicate(true) if not limits.is_empty() else null,
@@ -853,7 +863,8 @@ static func from_dict(p_rules: BuildingRules, data: Dictionary) -> CastleState:
 	# Castles saved before quests have no stats or quest log yet.
 	var st: Dictionary = data.get("stats", {})
 	castle.stats = {"trained": int(st.get("trained", 0)), "spent": float(st.get("spent", 0.0)),
-		"barons": int(st.get("barons", 0)), "looted": float(st.get("looted", 0.0))}
+		"barons": int(st.get("barons", 0)), "looted": float(st.get("looted", 0.0)),
+		"pvp_won": int(st.get("pvp_won", 0)), "pvp_held": int(st.get("pvp_held", 0))}
 	var q: Dictionary = data.get("quests", {})
 	var base := {}
 	for k: String in q.get("base", {}):
@@ -867,6 +878,15 @@ static func from_dict(p_rules: BuildingRules, data: Dictionary) -> CastleState:
 	castle.quests = {"story": int(q.get("story", 0)), "day": int(q.get("day", -1)), "keep": int(q.get("keep", 1)),
 		"picks": picks, "base": base, "claimed": claimed, "chest": bool(q.get("chest", false)),
 		"streak": int(q.get("streak", 0)), "chest_day": int(q.get("chest_day", -1))}
+	# Castles saved before achievements have earned none yet.
+	var ach: Variant = data.get("achievements", {})
+	if ach is Dictionary:
+		for k: String in ach.get("tiers", {}):
+			castle.achievements.tiers[k] = int(ach.tiers[k])
+		for k: String in ach.get("claimed", {}):
+			castle.achievements.claimed[k] = int(ach.claimed[k])
+		var shown: Variant = ach.get("title", "")
+		castle.achievements.title = shown if shown is String else ""
 	var stock: Dictionary = data.get("tools", {})
 	for tool: String in stock:
 		if p_rules.has_tool(tool) and int(stock[tool]) > 0:

@@ -1,6 +1,6 @@
 extends Node3D
 ## Online: the other players' castles on the world map, each with its owner's
-## name, alliance tag and castle level, allies' names in green. The list comes
+## name, alliance tag, castle level and title, allies' names in green. The list comes
 ## from the server (Economy.others) and
 ## is redrawn whenever it changes. Armies sent between players march here too:
 ## yours in gold, and in red the ones coming for your castle.
@@ -56,7 +56,8 @@ static func _settlement_data(p: Dictionary) -> Dictionary:
 	var faction := GameData.player_banner(player_name)
 	return {
 		"id": "player:" + player_name,
-		"name": ("[%s] " % p.tag if String(p.get("tag", "")) != "" else "") + "%s  Lv %d" % [player_name, int(p.get("level", 1))],
+		"name": ("[%s] " % p.tag if String(p.get("tag", "")) != "" else "") + "%s  Lv %d" % [player_name, int(p.get("level", 1))]
+			+ ("\n" + Economy.title_of(p) if Economy.title_of(p) != "" else ""),
 		"type": "castle",
 		"faction": faction.id,
 		"position": [float(p.home_x), float(p.home_y)],

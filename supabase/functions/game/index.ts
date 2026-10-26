@@ -13,6 +13,8 @@
 // POST { "action": "buy_horde", "item": id }      something from the Trophy Market, for war trophies (data/events.json)
 // POST { "action": "claim_horde_prize" }          your ranked prize, once the Ember Horde has gone
 // POST { "action": "claim_quest", "kind": "story" | "daily" | "chest", "index": n }   a quest reward (data/quests.json)
+// POST { "action": "claim_achievement", "id": id }  an achievement's next earned reward (data/achievements.json)
+// POST { "action": "set_title", "title": "id:tier" | "" }   the title shown with your name
 // POST { "action": "place", "type", "cell": [x, y] }
 // POST { "action": "upgrade" | "cancel", "id" }
 // POST { "action": "move", "id", "cell": [x, y] }
@@ -94,6 +96,7 @@ import alliancesData from "../../../data/alliances.json" with { type: "json" };
 import aidData from "../../../data/aid.json" with { type: "json" };
 import eventsData from "../../../data/events.json" with { type: "json" };
 import questsData from "../../../data/quests.json" with { type: "json" };
+import achievementsData from "../../../data/achievements.json" with { type: "json" };
 import gearData from "../../../data/gear.json" with { type: "json" };
 import outpostsData from "../../../data/outposts.json" with { type: "json" };
 import villagesData from "../../../data/villages.json" with { type: "json" };
@@ -119,6 +122,7 @@ import { deliver, recall, type Aid, type AidRules } from "./aid.ts";
 import { invade } from "./invasion.ts";
 import { hordeArrives, prizeFor } from "./horde.ts";
 import type { QuestRules } from "../../../server/rules/quests.ts";
+import type { AchievementRules } from "../../../server/rules/achievements.ts";
 import {
   adminEvents, checkGift, giftReport, giveCastle, NOT_ADMIN, OVERRIDES_KEPT, startEvent, stopEvent, type Gift,
 } from "./admin.ts";
@@ -133,6 +137,7 @@ const allianceRules = alliancesData as AllianceRules;
 const aidRules = aidData as AidRules;
 const eventRules = eventsData as EventRules;
 const questRules = questsData as unknown as QuestRules;
+const achievementRules = achievementsData as unknown as AchievementRules;
 // The calendar with the game owner's changes (admin.ts), loaded with every request.
 let calendar: EventRules = eventRules;
 rules.barons.lootFactor = (t) => effectAt(calendar, t, "baron_loot");
@@ -166,7 +171,7 @@ function raidFromRow(r: Row): Raid {
   return {
     id: Number(r.id), attacker_name: r.attacker_name, defender_name: r.defender_name, army: r.army,
     ...(r.waves ? { waves: r.waves } : {}), ...(r.tools ? { tools: r.tools } : {}), ...(r.lead ? { lead: r.lead } : {}), from: [r.from_x, r.from_y], to: [r.to_x, r.to_y], depart: r.depart, arrive: r.arrive, back: r.back,
-    state: r.state, survivors: r.survivors, loot: r.loot, ...(r.village ? { village: r.village, mission: r.mission } : {}),
+    state: r.state, survivors: r.survivors, loot: r.loot, ...(r.won ? { won: true } : {}), ...(r.village ? { village: r.village, mission: r.mission } : {}),
   };
 }
 
@@ -507,7 +512,7 @@ async function resolveRaids(userId: string) {
       await saveReports(row.defender, [...outcome.campReports, outcome.defenderReport]);
       await saveReports(row.attacker, [outcome.attackerReport]);
       await admin.from("raids").update({ state: "home", survivors: outcome.survivors, loot: outcome.loot,
-        ...(outcome.lead ? { lead: outcome.lead } : {}) }).eq("id", row.id);
+        won: outcome.attackerReport.winner === "a", ...(outcome.lead ? { lead: outcome.lead } : {}) }).eq("id", row.id);
       // Allied defenders who fought: what is left of them, and a word to whoever sent them.
       for (const [i, h] of helpers.entries()) {
         const left = outcome.helpers[i];
@@ -716,7 +721,7 @@ Deno.serve(async (req: Request) => {
   if (body.action === "world") {
     const { data, error } = await admin.from("players")
       .select("name, home_x, home_y, level, protected_until, alliance_id, alliance:alliances!players_alliance_id_fkey(tag), "
-        + "outpost_name:outpost->>name, outpost_x:outpost->x, outpost_y:outpost->y")
+        + "outpost_name:outpost->>name, outpost_x:outpost->x, outpost_y:outpost->y, title:castle->achievements->>title")
       .neq("user_id", userId).limit(PLAYERS_SHOWN);
     if (error) return reply({ ok: false, error: "The server couldn't load the map." }, 500);
     const me = await store.player(userId);
@@ -724,7 +729,7 @@ Deno.serve(async (req: Request) => {
     const players = (data ?? []).map((p: Row) => ({
       name: p.name, home_x: p.home_x, home_y: p.home_y, level: p.level,
       protected: p.protected_until > t && p.level < pvp.protection_until_keep,
-      tag: tagOf(p), ally: p.alliance_id !== null && me !== null && Number(p.alliance_id) === me.alliance_id,
+      tag: tagOf(p), title: p.title ?? "", ally: p.alliance_id !== null && me !== null && Number(p.alliance_id) === me.alliance_id,
       outpost: p.outpost_x === null || p.outpost_x === undefined ? null
         : { name: p.outpost_name, x: Number(p.outpost_x), y: Number(p.outpost_y) },
     }));
@@ -741,12 +746,13 @@ Deno.serve(async (req: Request) => {
   }
 
   if (body.action === "leaderboard") {
-    const shown = "name, level, might, barons_beaten, alliance:alliances!players_alliance_id_fkey(tag)";
+    const shown = "name, level, might, barons_beaten, alliance:alliances!players_alliance_id_fkey(tag), title:castle->achievements->>title";
     const { data, error } = await admin.from("players").select(shown)
       .order("might", { ascending: false }).order("barons_beaten", { ascending: false }).order("name")
       .limit(RANKS_SHOWN);
     const { data: mine } = await admin.from("players").select(shown).eq("user_id", userId).maybeSingle();
-    const flat = (r: Row) => ({ name: r.name, level: r.level, might: r.might, barons_beaten: r.barons_beaten, tag: tagOf(r) });
+    const flat = (r: Row) => ({ name: r.name, level: r.level, might: r.might, barons_beaten: r.barons_beaten, tag: tagOf(r),
+      title: r.title ?? "" });
     const me = mine ? flat(mine) : null;
     if (error) return reply({ ok: false, error: "The server couldn't load the leaderboard." }, 500);
     let rank = 0;
@@ -890,7 +896,7 @@ Deno.serve(async (req: Request) => {
       outpostSpot = nearestSpot((world as World).spots, [stored.home_x, stored.home_y], taken);
     }
     const outcome = act(rules, stored, body, t, { pvp, outpostSpot, target: target?.target, homecomings, alliances: allianceRules, aid: aidRules,
-      events: { rules: calendar, world: world as World }, quests: questRules, village: village?.target, villageIncome,
+      events: { rules: calendar, world: world as World }, quests: questRules, achievements: achievementRules, village: village?.target, villageIncome,
       capitalBoost: boost, fortresses: (world as World).fortresses, hordeRank: hordePlace });
     // Save only if nobody else changed the row meanwhile; otherwise start over.
     const { data: saved, error: saveError } = await admin.from("players")

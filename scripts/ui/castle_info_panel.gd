@@ -106,7 +106,8 @@ func _refresh() -> void:
 		_owner.add_theme_color_override("font_color", Color(1.0, 0.84, 0.4))
 		_enter.text = "Enter outpost"
 	else:
-		_owner.text = "Your castle"
+		_owner.text = "Your castle" if castle != Economy.player_castle or Economy.my_title() == "" \
+				else "Your castle  ·  %s" % Economy.my_title()
 		_owner.add_theme_color_override("font_color", Color(1.0, 0.84, 0.4))
 		_enter.text = "Enter castle (C)" if castle == Economy.player_castle else "Enter castle"
 	var lines: PackedStringArray = []

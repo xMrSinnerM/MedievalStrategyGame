@@ -54,6 +54,9 @@ export interface Stats {
   barons: number;
   /** Resources armies brought home. */
   looted: number;
+  /** Online: battles won against other players' castles, and attacks on yours held off. */
+  pvp_won: number;
+  pvp_held: number;
 }
 
 /** Where the castle stands with its quests (server/rules/quests.ts). */
@@ -78,7 +81,18 @@ export interface QuestLog {
 }
 
 export function newStats(): Stats {
-  return { trained: 0, spent: 0, barons: 0, looted: 0 };
+  return { trained: 0, spent: 0, barons: 0, looted: 0, pvp_won: 0, pvp_held: 0 };
+}
+
+/** Achievements (achievements.ts): tiers earned and claimed by achievement, and the title shown ("id:tier" or ""). */
+export interface AchievementLog {
+  tiers: Dict;
+  claimed: Dict;
+  title: string;
+}
+
+export function newAchievementLog(): AchievementLog {
+  return { tiers: {}, claimed: {}, title: "" };
 }
 
 export function newQuestLog(): QuestLog {
@@ -101,6 +115,7 @@ export interface CastleData {
   layout: Layout;
   stats: Stats;
   quests: QuestLog;
+  achievements: AchievementLog;
   tools: Dict;
   crafting: Craft[];
   defence_tools: Tools;
@@ -134,6 +149,8 @@ export class CastleState {
   layout: Layout = { ...DEFAULT_LAYOUT };
   stats: Stats = newStats();
   quests: QuestLog = newQuestLog();
+  /** Achievements earned and claimed, and the title picked (achievements.ts). */
+  achievements: AchievementLog = newAchievementLog();
   /** Siege tools in store, the workshop's queue, and the defence tools posted on each wall. */
   tools: Dict = {};
   crafting: Craft[] = [];
@@ -687,6 +704,7 @@ export class CastleState {
       layout: { ...this.layout },
       stats: { ...this.stats },
       quests: structuredClone(this.quests),
+      achievements: structuredClone(this.achievements),
       tools: { ...this.tools },
       crafting: this.crafting.map((c) => ({ ...c })),
       defence_tools: structuredClone(this.defenceTools),
@@ -737,7 +755,8 @@ export class CastleState {
     // Castles saved before quests have no stats or quest log yet.
     const stats = data.stats ?? {};
     castle.stats = { trained: Math.trunc(Number(stats.trained ?? 0)), spent: Number(stats.spent ?? 0),
-      barons: Math.trunc(Number(stats.barons ?? 0)), looted: Number(stats.looted ?? 0) };
+      barons: Math.trunc(Number(stats.barons ?? 0)), looted: Number(stats.looted ?? 0),
+      pvp_won: Math.trunc(Number(stats.pvp_won ?? 0)), pvp_held: Math.trunc(Number(stats.pvp_held ?? 0)) };
     const q = data.quests ?? {};
     const base: Dict = {};
     for (const k of Object.keys(q.base ?? {})) base[k] = Number(q.base[k]);
@@ -746,6 +765,13 @@ export class CastleState {
       picks: (q.picks ?? []).map(String), base, claimed: (q.claimed ?? []).map((i: unknown) => Math.trunc(Number(i))),
       chest: Boolean(q.chest ?? false), streak: Math.trunc(Number(q.streak ?? 0)), chest_day: Math.trunc(Number(q.chest_day ?? -1)),
     };
+    // Castles saved before achievements have earned none yet.
+    const ach = data.achievements ?? {};
+    const tiers: Dict = {};
+    const claimed: Dict = {};
+    for (const k of Object.keys(ach.tiers ?? {})) tiers[k] = Math.trunc(Number(ach.tiers[k]));
+    for (const k of Object.keys(ach.claimed ?? {})) claimed[k] = Math.trunc(Number(ach.claimed[k]));
+    castle.achievements = { tiers, claimed, title: typeof ach.title === "string" ? ach.title : "" };
     for (const tool of Object.keys(data.tools ?? {})) {
       const n = Math.trunc(Number(data.tools[tool]));
       if (rules.hasTool(tool) && n > 0) castle.tools[tool] = n;
