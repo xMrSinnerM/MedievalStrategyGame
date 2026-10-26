@@ -280,10 +280,10 @@ func _process(delta: float) -> void:
 		var shield := ""
 		if Economy.is_protected():
 			shield = "\nBeginner protection: %s left (ends if you attack a player)" % _hours(Economy.protected_until - Economy.now())
-		_controls.keys = "Click: pick your castle, another player's, a robber baron camp, a village or a town\nC: your castle   L: leaderboard   G: alliance   V: events   J: quests   T: achievements   H: commanders   P: outpost   B: villages   Enter: chat" + ("   O: owner tools" if Economy.is_admin else "") + "\nWASD / drag: pan   Q E / right-drag: rotate   wheel: zoom\nM: parchment map   N: minimap   Home: recentre   F1: hide   Esc: menu"
+		_controls.keys = "Click: pick your castle, another player's, a robber baron camp, a village or a town\nC: your castle   L: leaderboard   G: alliance   V: events   J: quests   Y: achievements   H: commanders   P: outpost   B: villages   Enter: chat" + ("   O: owner tools" if Economy.is_admin else "") + "\nWASD / drag: pan   Q E / right-drag: rotate   wheel: zoom\nM: parchment map   N: minimap   Home: recentre   F1: hide   Esc: menu"
 		_controls.show_status("Online as %s" % Online.email + shield, _zoom_t)
 		return
-	_controls.keys = "Click: travel there, or pick a castle, town, party or village\nF: find your party   C: your castle   K: diplomacy   J: quests   T: achievements   H: commanders   P: outpost   B: villages\nWASD / drag: pan   Q E / right-drag: rotate   wheel: zoom\nM: parchment map   N: minimap   Home: recentre   F1: hide   Esc: menu"
+	_controls.keys = "Click: travel there, or pick a castle, town, party or village\nF: find your party   C: your castle   K: diplomacy   J: quests   Y: achievements   H: commanders   P: outpost   B: villages\nWASD / drag: pan   Q E / right-drag: rotate   wheel: zoom\nM: parchment map   N: minimap   Home: recentre   F1: hide   Esc: menu"
 	_controls.show_status("Your party: %s" % _party_status if _party_status != "" else "", _zoom_t)
 
 

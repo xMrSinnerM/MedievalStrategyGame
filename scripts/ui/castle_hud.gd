@@ -67,7 +67,7 @@ func _ready() -> void:
 	_toast.add_theme_constant_override("outline_size", 7)
 	_toast.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.85))
 	add_child(_toast)
-	var controls := _label("WASD / drag: pan    Q E / right-drag: rotate    wheel: zoom    Esc: deselect    C: world map    J: quests    T: achievements", 13, MUTED)
+	var controls := _label("WASD / drag: pan    Q E / right-drag: rotate    wheel: zoom    Esc: deselect    C: world map    J: quests    Y: achievements", 13, MUTED)
 	controls.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
 	controls.offset_left = 12
 	controls.offset_top = -26

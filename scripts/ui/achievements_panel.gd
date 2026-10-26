@@ -1,5 +1,5 @@
 extends PanelContainer
-## The achievements screen (T): every achievement with its three tiers, how
+## The achievements screen (Y): every achievement with its three tiers, how
 ## far you are towards the next one, the rewards waiting to be claimed, and
 ## the titles you've earned, one of which can stand with your name on the
 ## map, on the leaderboard and in your castle (Achievements).
@@ -76,7 +76,7 @@ func _ready() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if not event is InputEventKey or not event.pressed or event.echo:
 		return
-	if event.physical_keycode == KEY_T and not get_tree().paused:
+	if event.physical_keycode == KEY_Y and not get_tree().paused:
 		toggle()
 		get_viewport().set_input_as_handled()
 	elif event.physical_keycode == KEY_ESCAPE and visible:

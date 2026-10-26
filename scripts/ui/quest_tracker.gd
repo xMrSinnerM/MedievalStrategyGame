@@ -59,7 +59,7 @@ func _refresh() -> void:
 		lines.append("Daily tasks: %d / %d%s" % [done, q.picks.size(), "    coffer opened" if q.chest else ""])
 	if Economy.achievements != null:
 		lines.append("Achievements: %d points%s" % [Economy.achievements.score(castle),
-			"    reward waiting (T)" if _achievement_waiting() else ""])
+			"    reward waiting (Y)" if _achievement_waiting() else ""])
 	_ready_glow = book.can_claim_anything(castle) or _achievement_waiting()
 	if book.can_claim_anything(castle):
 		lines.append("A reward is waiting! Click or press J")

@@ -2163,9 +2163,9 @@ func _announce_achievements() -> void:
 			parts.append("%s (%s)" % [def.get("name", id), achievements.tier_names[t - 1] if t <= achievements.tier_names.size() else str(t)])
 	_known_tiers = tiers.duplicate()
 	if parts.size() > 2:
-		achievement_news.emit("%d achievement tiers earned! Press T to claim the rewards and pick your title." % parts.size())
+		achievement_news.emit("%d achievement tiers earned! Press Y to claim the rewards and pick your title." % parts.size())
 	elif not parts.is_empty():
-		achievement_news.emit("Achievement earned: %s. Press T to claim the reward and pick your title." % ", ".join(parts))
+		achievement_news.emit("Achievement earned: %s. Press Y to claim the reward and pick your title." % ", ".join(parts))
 
 
 func ask_event_board() -> void:

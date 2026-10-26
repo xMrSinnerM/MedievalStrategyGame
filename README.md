@@ -449,7 +449,7 @@ give the same answers (checked by the server fixtures).
 
 ## Achievements and titles
 
-Press **T** (or **Achievements** at the top of the quest screen) for 13
+Press **Y** (or **Achievements** at the top of the quest screen) for 13
 lifetime achievements, each in three tiers (bronze, silver, gold): building
 levels, keep level, soldiers trained, soldiers at home at once, robber baron
 camps beaten, loot brought home, resources spent, story quests, the coffer

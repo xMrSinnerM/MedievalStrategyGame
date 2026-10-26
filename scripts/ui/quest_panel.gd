@@ -38,7 +38,7 @@ func _ready() -> void:
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(title)
 	var open_achievements := Button.new()
-	open_achievements.text = "Achievements (T)"
+	open_achievements.text = "Achievements (Y)"
 	open_achievements.focus_mode = Control.FOCUS_NONE
 	open_achievements.add_theme_font_size_override("font_size", 15)
 	open_achievements.pressed.connect(func() -> void:
