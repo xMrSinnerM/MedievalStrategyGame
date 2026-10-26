@@ -789,7 +789,8 @@ from the game: owners are added by hand in the database (see
 data/        JSON: terrain config, factions, settlements, roads, parties, buildings, units, player
 world/       heightmap, biome mask, rivers
 assets/      fonts (SIL OFL), kaykit (KayKit Medieval Hexagon and Adventurers packs, CC0),
-             ui/buildings (building pictures rendered from the kit models)
+             ui/buildings (building pictures rendered from the kit models),
+             audio (music and sounds from 0 A.D., CC BY-SA 3.0, and Kenney, CC0)
 scenes/      main.tscn -> world_map/world_map.tscn and castle/castle_view.tscn
 scripts/
   core/      main (switches map and castle), GameData, EventBus and Economy autoloads, map style
@@ -913,6 +914,28 @@ the owner's colour.
 The pictures on the castle's build bar and building panel are rendered from
 the same models by `tools/bake_portraits.tscn` (run it again after changing
 `CastleModels`). The main menu's Credits screen lists every pack used.
+
+## Music and sound
+
+The `Audio` autoload (`scripts/core/audio.gd`) plays a shuffled playlist for
+the title screen, the world map and the castle, and battle music while the
+attack screen is open, crossfading when you switch. The map and the castle
+each have a looping ambience (birdsong, a busy castle yard). Effects: every
+button clicks; picking a castle, camp, village or building has its own sound;
+placing, upgrading and cancelling buildings, training soldiers and starting
+research make a sound, and so do buildings and studies finishing; armies
+march off with a horn; battle reports open with clashing swords and a fanfare
+or a lament; an alarm sounds when your castle is besieged or (online) another
+player's army sets out for it; and a chime marks a chat message.
+
+Volume, music, sound effects and ambience each have a slider in Settings.
+
+The music, the ambience and most effects are from 0 A.D. by Wildfire Games
+(music by Omri Lahav), under CC BY-SA 3.0; the building placement sounds are
+from Kenney (CC0). `assets/audio/CREDITS.md` lists every file and where it
+comes from. To add a sound, drop an .ogg into `assets/audio/sfx/` and give it
+a name in `Audio.EFFECTS`; to add music, put it in `assets/audio/music/` and
+list it in `Audio.MUSIC`.
 Other CC0 packs that would fit:
 
 - Castles and walls: Kenney Castle Kit

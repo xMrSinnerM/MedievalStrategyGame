@@ -207,6 +207,7 @@ func _fill_rewards() -> void:
 			claim.add_theme_font_size_override("font_size", 15)
 			claim.pressed.connect(func() -> void:
 				claim.disabled = true
+				Audio.play("reward")
 				Economy.claim_reward(i))
 			_rewards.add_child(claim)
 		else:

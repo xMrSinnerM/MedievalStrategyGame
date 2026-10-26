@@ -1,6 +1,7 @@
 extends Node
-## Autoload holding the player's display settings, saved to user://settings.cfg
-## and applied at start and whenever they change. Lights that cast shadows
+## Autoload holding the player's display and sound settings, saved to
+## user://settings.cfg and applied at start and whenever they change (the
+## volumes by the Audio autoload). Lights that cast shadows
 ## join the "sun" group so the shadow setting reaches them; environments join
 ## "environment" for ambient occlusion.
 
@@ -14,6 +15,10 @@ const DEFAULTS := {
 	"ambient_occlusion": true,
 	"render_scale": 1.0,    ## 3D resolution relative to the window, 0.5 .. 1
 	"ui_scale": 1.0,        ## size of menus and panels, 0.75 .. 1.5
+	"master_volume": 0.8,   ## volumes 0 .. 1
+	"music_volume": 0.6,
+	"effects_volume": 0.8,
+	"ambience_volume": 0.6,
 }
 
 var values := DEFAULTS.duplicate()
