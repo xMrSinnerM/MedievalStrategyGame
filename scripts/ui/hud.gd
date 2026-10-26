@@ -11,6 +11,10 @@ const TOP := 66.0                ## panels start below the resource bar
 var _controls: MapControls
 var _resources: ResourceBar
 var _alliance_button: Button
+var _bar_row: FlowContainer      ## the main buttons, see _fit_bar_buttons
+var _bar_level := 0              ## 0 full names, 1 names without keys, 2 icons only
+var _key_hint := RegEx.create_from_string("\\s*\\([^)]{1,3}\\)")
+var _bar_fit_queued := false
 var _owner_panel: Control
 var _zoom_t := 0.0
 var _party_status := ""
@@ -26,18 +30,29 @@ func _ready() -> void:
 	bar.add_theme_stylebox_override("panel", GameTheme.bar_box())
 	bar.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
 	add_child(bar)
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 10)
-	bar.add_child(row)
+	var top := HBoxContainer.new()
+	top.add_theme_constant_override("separation", 10)
+	bar.add_child(top)
 	var crest := Icons.rect("crest", 40)
-	crest.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	row.add_child(crest)
+	crest.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	top.add_child(crest)
 	_resources = ResourceBar.new()
 	_resources.show_builders = false
-	row.add_child(_resources)
-	var spacer := Control.new()
-	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_child(spacer)
+	_resources.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	top.add_child(_resources)
+	## The buttons fill the rest of the bar. When their names don't fit they
+	## show only their icons (names in tooltips), and if even that is too wide
+	## they wrap to a second row instead of running off the screen.
+	var row := HFlowContainer.new()
+	row.alignment = FlowContainer.ALIGNMENT_END
+	row.last_wrap_alignment = FlowContainer.LAST_WRAP_ALIGNMENT_END
+	row.add_theme_constant_override("h_separation", 10)
+	row.add_theme_constant_override("v_separation", 4)
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.resized.connect(_fit_bar_buttons)
+	top.add_child(row)
+	_bar_row = row
 	var diplomacy := preload("res://scripts/ui/diplomacy_panel.gd").new()
 	var leaderboard := preload("res://scripts/ui/leaderboard_panel.gd").new()
 	var alliance := preload("res://scripts/ui/alliance_panel.gd").new()
@@ -301,18 +316,71 @@ func _show_event() -> void:
 func _update_alliance_button() -> void:
 	## Invitations to you, or players asking to join your alliance, show as a count.
 	var waiting: int = Economy.alliance.get("invites", []).size() + Economy.alliance.get("requests", []).size()
-	_alliance_button.text = "Alliance (G)" if waiting == 0 else "Alliance (G)  %d new" % waiting
+	if waiting == 0:
+		_set_bar_label(_alliance_button, "Alliance (G)")
+	else:
+		_set_bar_label(_alliance_button, "Alliance (G)  %d new" % waiting, str(waiting))
 
 
 func _bar_button(text: String, icon: String, action: Callable) -> Button:
 	var b := Button.new()
-	b.text = text
 	b.icon = Icons.get_icon(icon, 22)
 	b.focus_mode = Control.FOCUS_NONE
 	b.add_theme_font_size_override("font_size", 15)
 	b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	b.pressed.connect(action)
+	b.visibility_changed.connect(_queue_fit_bar)
+	_set_bar_label(b, text)
 	return b
+
+
+## Sets a bar button's name. `short` is what it shows when the bar only has
+## room for icons (for example a count of new invitations).
+func _set_bar_label(b: Button, text: String, short := "") -> void:
+	b.set_meta("label", text)
+	b.set_meta("short", short)
+	_show_bar_label(b)
+	_queue_fit_bar()
+
+
+func _show_bar_label(b: Button, level := _bar_level) -> void:
+	var text: String = b.get_meta("label", "")
+	match level:
+		0: b.text = text
+		1: b.text = _key_hint.sub(text, "", true)
+		_: b.text = b.get_meta("short", "")
+	b.tooltip_text = "" if level == 0 else text
+
+
+func _queue_fit_bar() -> void:
+	if not _bar_fit_queued:
+		_bar_fit_queued = true
+		_fit_bar_buttons.call_deferred()
+
+
+## Shows the buttons' full names when they all fit on one row, then names
+## without the keys, then only icons (the full names stay in the tooltips).
+func _fit_bar_buttons() -> void:
+	_bar_fit_queued = false
+	if _bar_row == null or _bar_row.size.x <= 0.0:
+		return
+	var buttons: Array[Button] = []
+	for b in _bar_row.get_children():
+		if b is Button and b.visible:
+			buttons.append(b)
+	var gap: int = _bar_row.get_theme_constant("h_separation")
+	_bar_level = 2
+	for level in 2:
+		var needed := maxi(0, buttons.size() - 1) * gap
+		for b in buttons:
+			_show_bar_label(b, level)
+			needed += b.get_combined_minimum_size().x
+		if needed <= _bar_row.size.x:
+			_bar_level = level
+			break
+	for b in _bar_row.get_children():
+		if b is Button:
+			_show_bar_label(b)
 
 
 static func _clock(seconds: float) -> String:
