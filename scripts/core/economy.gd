@@ -38,12 +38,18 @@ signal barons_changed
 signal event_board_changed
 ## Online: the server sent the Ember Horde's ranking (see `horde_board`).
 signal horde_board_changed
+## Online: the server sent the alliance war's standings (see `war_board`).
+signal war_board_changed
 ## Online: the server sent the game owner's panel (see `admin_view`), or refused an owner's order.
 signal admin_changed(error: String)
 ## your outpost was founded, or carts left or arrived
 signal outpost_changed
 ## Who holds the resource villages changed (or, online, the server sent them again).
 signal villages_changed
+## Achievement tiers your castle has just earned, as a line for the news.
+signal achievement_news(text: String)
+## Online: the server sent the market (see `market`); error is "" unless an order was refused.
+signal market_changed(error: String)
 
 ## Games are kept in SLOTS save slots under save_dir (slot_1.json ...).
 const SLOTS := 3
@@ -74,6 +80,10 @@ var diplomacy: Diplomacy
 var baron_rules: BaronRules
 ## The story quests and daily tasks (data/quests.json).
 var quest_book: QuestBook
+## Achievements and titles (data/achievements.json).
+var achievements: Achievements
+## The achievement tiers already announced (null: take the next ones silently).
+var _known_tiers: Variant = null
 ## Commanders and gear (data/gear.json).
 var gear_rules: GearRules
 var outpost_rules: OutpostRules
@@ -169,6 +179,17 @@ const CHAT_KEPT := 150
 var aid: Array = []
 ## Helping allies (data/aid.json): carry_per_keep_level, station_hours.
 var aid_rules := {}
+## Online: the alliance war's rules (data/wars.json).
+var war_rules := {}
+## Online: the market as the server last sent it: "offers" (everyone else's,
+## newest first, each {"id", "seller_name", "tag", "give", "give_amount",
+## "want", "want_amount", "proceeds", "posted", "expires"}), "mine" (your open
+## offers), "sold" (your recent sales, with "buyer_name" and "sold_at") and
+## "rates" ({"wood>stone": stone asked per wood in recent sales}).
+var market := {}
+## The market (data/market.json): goods, unlock_keep, lot_per_keep_level,
+## max_offers, min_rate, max_rate, fee, offer_hours.
+var market_rules := {}
 ## Online: timed events as the server last sent them: {"active": [...],
 ## "upcoming": [...], "recent": [...]}, each {"id", "name", "description",
 ## "effects", "start", "end"} in Unix seconds (data/events.json); "recent" has
@@ -191,6 +212,10 @@ var horde_state := {}
 ## Online: the Ember Horde's ranking as the server last sent it: {"event",
 ## "players": [{"name", "points", "tag"}], "me", "rank", "total", "prize"}.
 var horde_board := {}
+## Online: the alliance war as the server last sent it: {"season": {start, end,
+## "alliances"}, "last": {start, end, "alliances"}, "capitals", "mine",
+## "prize": {prize, claimed, can_claim, why}, "rules"} (data/wars.json).
+var war_board := {}
 ## Online: true when your account has the game owner's tools (the server decides).
 var is_admin := false
 ## Online, for the owner: {"events": [{id, name, hours, on, start, end}], "players": [names], "log": [{at, action, details}]}.
@@ -221,12 +246,14 @@ func ensure_loaded() -> void:
 	rules = BuildingRules.load_default()
 	baron_rules = BaronRules.load_default()
 	quest_book = QuestBook.load_default()
+	achievements = Achievements.load_default()
 	gear_rules = GearRules.load_default()
 	outpost_rules = OutpostRules.load_default()
 	_load_villages()
 	if not load_game():
 		new_game()
 	gear_rules.sync(player_castle)
+	_known_tiers = player_castle.achievements.tiers.duplicate()
 
 
 func save_path(n := -1) -> String:
@@ -289,6 +316,7 @@ func begin_new(n := 1) -> void:
 	rules = BuildingRules.load_default()
 	baron_rules = BaronRules.load_default()
 	quest_book = QuestBook.load_default()
+	achievements = Achievements.load_default()
 	gear_rules = GearRules.load_default()
 	outpost_rules = OutpostRules.load_default()
 	_load_villages()
@@ -296,6 +324,7 @@ func begin_new(n := 1) -> void:
 	_loaded = true
 	new_game()
 	gear_rules.sync(player_castle)
+	_known_tiers = player_castle.achievements.tiers.duplicate()
 
 
 func begin_load(n := 1) -> void:
@@ -303,6 +332,7 @@ func begin_load(n := 1) -> void:
 	rules = BuildingRules.load_default()
 	baron_rules = BaronRules.load_default()
 	quest_book = QuestBook.load_default()
+	achievements = Achievements.load_default()
 	gear_rules = GearRules.load_default()
 	outpost_rules = OutpostRules.load_default()
 	_load_villages()
@@ -311,6 +341,7 @@ func begin_load(n := 1) -> void:
 	if not load_game():
 		new_game()
 	gear_rules.sync(player_castle)
+	_known_tiers = player_castle.achievements.tiers.duplicate()
 
 
 func _move_old_save() -> void:
@@ -840,6 +871,8 @@ func _process(delta: float) -> void:
 		_collect_villages(t)
 		quest_book.roll_day(player_castle, t)
 		gear_rules.sync(player_castle)
+		achievements.note(player_castle, false)
+		_announce_achievements()
 		changed.emit()
 	_diplomacy_timer += delta
 	if _diplomacy_timer >= DIPLOMACY_TICK and diplomacy != null:
@@ -865,6 +898,8 @@ func begin_online(answer: Dictionary) -> void:
 	rules = BuildingRules.load_default()
 	baron_rules = BaronRules.load_default()
 	quest_book = QuestBook.load_default()
+	achievements = Achievements.load_default()
+	_known_tiers = null
 	gear_rules = GearRules.load_default()
 	outpost_rules = OutpostRules.load_default()
 	_load_villages()
@@ -907,6 +942,7 @@ func begin_online(answer: Dictionary) -> void:
 	horde_points = 0
 	horde_state = {}
 	horde_board = {}
+	war_board = {}
 	is_admin = false
 	admin_view = {}
 	protected_until = 0.0
@@ -914,6 +950,11 @@ func begin_online(answer: Dictionary) -> void:
 		pvp = get_node("/root/GameData").load_json("res://data/pvp.json")
 	if aid_rules.is_empty():
 		aid_rules = get_node("/root/GameData").load_json("res://data/aid.json")
+	if war_rules.is_empty():
+		war_rules = get_node("/root/GameData").load_json("res://data/wars.json")
+	if market_rules.is_empty():
+		market_rules = get_node("/root/GameData").load_json("res://data/market.json")
+	market = {}
 	_world_timer = WORLD_POLL
 	apply_server(answer)
 	get_node("/root/Online").order({"action": "alliance"})
@@ -995,10 +1036,13 @@ func apply_server(answer: Dictionary) -> void:
 			aid_news.emit(village_text(report))
 		elif report.get("kind", "") == "gift":
 			aid_news.emit(gift_text(report))
+		elif report.get("kind", "") == "market":
+			aid_news.emit(market_text(report))
 		else:
 			attack_resolved.emit(_server_report(report))
 	if camps_moved:
 		barons_changed.emit()
+	_announce_achievements()
 	changed.emit()
 	marches_changed.emit()
 
@@ -1058,6 +1102,8 @@ func _process_online(delta: float) -> void:
 			outpost_castle().advance_to(now())
 		quest_book.roll_day(player_castle, now())
 		gear_rules.sync(player_castle)
+		achievements.note(player_castle, true)
+		_announce_achievements()
 		changed.emit()
 	# Ask the server for news now and then, and as soon as an army is due
 	# to fight or come home.
@@ -1555,6 +1601,21 @@ func claim_horde_prize() -> String:
 func ask_horde_board() -> void:
 	## Asks the server for the Ember Horde's ranking; it arrives with horde_board_changed.
 	get_node("/root/Online").order({"action": "horde_board"})
+
+
+func ask_war_board() -> void:
+	## Asks the server for the alliance war's standings; they arrive with war_board_changed.
+	get_node("/root/Online").order({"action": "war_board"})
+
+
+func claim_war_prize() -> String:
+	## Asks the server for your prize for your alliance's place in the last war season.
+	var prize: Dictionary = war_board.get("prize", {})
+	if not bool(prize.get("can_claim", false)):
+		return String(prize.get("why", "There's no prize to claim."))
+	get_node("/root/Online").order({"action": "claim_war_prize"})
+	ask_war_board()
+	return ""
 
 
 func castellan_effects(castle: CastleState) -> Dictionary:
@@ -2093,6 +2154,62 @@ func claim_quest(kind: String, index := 0) -> String:
 	return ""
 
 
+func claim_achievement(id: String) -> String:
+	## Claims the next earned reward of an achievement. Online the server
+	## gives it too, and its answer replaces the castle.
+	var why := achievements.claim(player_castle, id, online)
+	if why != "":
+		return why
+	if online:
+		get_node("/root/Online").order({"action": "claim_achievement", "id": id})
+	else:
+		save_game()
+	changed.emit()
+	return ""
+
+
+func set_title(key: String) -> String:
+	## Shows an earned title with your name ("id:tier"), or none for "".
+	var why := achievements.set_title(player_castle, key)
+	if why != "":
+		return why
+	if online:
+		get_node("/root/Online").order({"action": "set_title", "title": key})
+	else:
+		save_game()
+	changed.emit()
+	return ""
+
+
+func my_title() -> String:
+	## The title your castle shows ("the Builder"), or "".
+	return achievements.shown_title(player_castle) if achievements != null and player_castle != null else ""
+
+
+func title_of(player: Dictionary) -> String:
+	## Another player's title, from the server's list ("" for none).
+	return achievements.title_text(String(player.get("title", ""))) if achievements != null else ""
+
+
+func _announce_achievements() -> void:
+	## Tells the news about tiers earned since the last look.
+	var tiers: Dictionary = player_castle.achievements.tiers
+	if _known_tiers == null:
+		_known_tiers = tiers.duplicate()
+		return
+	var parts: PackedStringArray = []
+	for id: String in tiers:
+		var had := int(_known_tiers.get(id, 0))
+		var def := achievements.get_def(id)
+		for t in range(had + 1, int(tiers[id]) + 1):
+			parts.append("%s (%s)" % [def.get("name", id), achievements.tier_names[t - 1] if t <= achievements.tier_names.size() else str(t)])
+	_known_tiers = tiers.duplicate()
+	if parts.size() > 2:
+		achievement_news.emit("%d achievement tiers earned! Press Y to claim the rewards and pick your title." % parts.size())
+	elif not parts.is_empty():
+		achievement_news.emit("Achievement earned: %s. Press Y to claim the reward and pick your title." % ", ".join(parts))
+
+
 func ask_event_board() -> void:
 	## Asks the server for the event leaderboard; it arrives with event_board_changed.
 	get_node("/root/Online").order({"action": "event_board"})
@@ -2274,6 +2391,116 @@ func _amounts(d: Dictionary, units := false) -> String:
 	return ", ".join(parts) if not parts.is_empty() else "nothing"
 
 
+# --- Online: the market --------------------------------------------------------------
+
+func ask_market() -> void:
+	## Asks the server for the market's offers; they arrive with market_changed.
+	get_node("/root/Online").order({"action": "market"})
+
+
+func set_market(view: Dictionary, error: String) -> void:
+	## The server's answer to a market order.
+	if not online:
+		return
+	market = view
+	market_changed.emit(error)
+
+
+func market_lot_limit() -> int:
+	## How much one offer can give from your castle.
+	return int(market_rules.get("lot_per_keep_level", 1000)) * maxi(1, player_castle.keep_level())
+
+
+func market_proceeds(want_amount: int) -> int:
+	## What you get when an offer wanting this much sells, after the market's cut.
+	return want_amount - ceili(want_amount * float(market_rules.get("fee", 0.0)))
+
+
+func check_offer(give: String, give_amount: int, want: String, want_amount: int) -> String:
+	## Why this offer can't go up at the market ("" if it can). The server checks again.
+	var unlock := int(market_rules.get("unlock_keep", 1))
+	if player_castle.keep_level() < unlock:
+		return "The market opens at keep level %d." % unlock
+	var goods: Array = market_rules.get("goods", [])
+	if not goods.has(give) or not goods.has(want):
+		return "Choose what to trade."
+	if give == want:
+		return "Trade one good for another."
+	if give_amount <= 0 or want_amount <= 0:
+		return "Choose how much."
+	if give_amount > floori(float(player_castle.resources.get(give, 0.0))):
+		return "You don't have that much %s." % give
+	if give_amount > market_lot_limit():
+		return "One offer gives at most %d." % market_lot_limit()
+	var lo := float(market_rules.get("min_rate", 0.5))
+	var hi := float(market_rules.get("max_rate", 2.0))
+	var rate := float(want_amount) / give_amount
+	if rate < lo - 1e-9 or rate > hi + 1e-9:
+		return "Ask between %s and %s %s for each %s." % [_rate_text(lo), _rate_text(hi), want, give]
+	if market.get("mine", []).size() >= int(market_rules.get("max_offers", 5)):
+		return "You can have at most %d offers up at once." % int(market_rules.get("max_offers", 5))
+	return ""
+
+
+func post_offer(give: String, give_amount: int, want: String, want_amount: int) -> String:
+	## Puts an offer up at the market; the goods leave your storage here straight away.
+	var why := check_offer(give, give_amount, want, want_amount)
+	if why != "":
+		return why
+	player_castle.resources[give] = float(player_castle.resources[give]) - give_amount
+	get_node("/root/Online").order({"action": "post_offer", "give": give, "give_amount": give_amount,
+			"want": want, "want_amount": want_amount})
+	changed.emit()
+	return ""
+
+
+func check_buy(offer: Dictionary) -> String:
+	## Why you can't buy this offer ("" if you can).
+	var unlock := int(market_rules.get("unlock_keep", 1))
+	if player_castle.keep_level() < unlock:
+		return "The market opens at keep level %d." % unlock
+	if floori(float(player_castle.resources.get(offer.want, 0.0))) < int(offer.want_amount):
+		return "You don't have enough %s." % offer.want
+	if float(player_castle.resources.get(offer.give, 0.0)) + int(offer.give_amount) > player_castle.storage_capacity():
+		return "Your storage has no room for that much %s." % offer.give
+	return ""
+
+
+func buy_offer(offer: Dictionary) -> String:
+	## Buys a whole offer: you pay what it wants and get its goods at once.
+	var why := check_buy(offer)
+	if why != "":
+		return why
+	get_node("/root/Online").order({"action": "buy_offer", "id": int(offer.id)})
+	return ""
+
+
+func cancel_offer(id: int) -> void:
+	## Takes your offer down; its goods come back to your storage.
+	get_node("/root/Online").order({"action": "cancel_offer", "id": id})
+
+
+func market_text(r: Dictionary) -> String:
+	## A server report about the market as one sentence.
+	var give := "%d %s" % [int(r.get("give_amount", 0)), String(r.get("give", ""))]
+	var want := "%d %s" % [int(r.get("want_amount", 0)), String(r.get("want", ""))]
+	match String(r.get("event", "")):
+		"sold":
+			return "%s bought your %s at the market. You get %d %s after the market's cut." % [String(r.get("name", "")),
+					give, int(r.get("proceeds", 0)), String(r.get("want", ""))]
+		"bought":
+			return "You bought %s from %s for %s." % [give, String(r.get("name", "")), want]
+		"expired":
+			return "Nobody bought your %s for %s; it is back in your storage." % [give, want]
+		"spilled":
+			return "Your storage was full, so %s from the market was lost." % _amounts(r.get("lost", {}))
+	return ""
+
+
+static func _rate_text(x: float) -> String:
+	return str(snappedf(x, 0.01))
+
+
 # --- Online: chat ---------------------------------------------------------------------
 
 func last_chat_id() -> int:
@@ -2329,6 +2556,10 @@ func take_order_result(body: Dictionary, answer: Dictionary) -> void:
 	if body.get("action", "") == "horde_board" and answer.get("result") is Dictionary:
 		horde_board = answer.result
 		horde_board_changed.emit()
+		return
+	if body.get("action", "") == "war_board" and answer.get("result") is Dictionary and answer.result.get("war") is Dictionary:
+		war_board = answer.result.war
+		war_board_changed.emit()
 		return
 	if body.get("action", "") == "view_castle" and answer.get("result") is Dictionary:
 		_show_visit(answer.result)

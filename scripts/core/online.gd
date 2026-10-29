@@ -144,6 +144,8 @@ func _run_queue() -> void:
 			Economy.set_others(answer.players)
 		if answer.get("result") is Dictionary and answer.result.has("alliances"):
 			Economy.set_alliance(answer.result, String(answer.get("error", "")))
+		if answer.get("result") is Dictionary and answer.result.has("offers"):
+			Economy.set_market(answer.result, String(answer.get("error", "")))
 		if answer.get("result") is Dictionary and answer.result.get("admin") is Dictionary:
 			Economy.set_admin(answer.result.admin, String(answer.get("error", "")))
 		elif String(body.get("action", "")).begins_with("admin"):

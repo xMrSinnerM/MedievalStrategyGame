@@ -60,6 +60,7 @@ func _ready() -> void:
 	_claim.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	_claim.pressed.connect(func() -> void:
 		_claim.disabled = true
+		Audio.play("reward")
 		Economy.claim_horde_prize())
 	right.add_child(_claim)
 	Economy.horde_board_changed.connect(_fill_board)

@@ -215,6 +215,7 @@ func show_report(report: Dictionary) -> void:
 		_footer.text += "\nThe siege of %s is lifted." % report.lifted
 	_add_siege_line(report, me == "a")
 	visible = true
+	Audio.battle_result(won)
 
 
 func show_baron_report(report: Dictionary) -> void:

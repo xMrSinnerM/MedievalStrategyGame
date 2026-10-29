@@ -110,6 +110,15 @@ const SVG := {
 		<path d="M18 14 H8 C8 26 14 30 20 30 M46 14 H56 C56 26 50 30 44 30" fill="none" stroke="%s" stroke-width="3"/>
 		<rect x="28" y="40" width="8" height="10" fill="#d19d22" stroke="%s" stroke-width="2.5"/>
 		<rect x="18" y="50" width="28" height="8" rx="2" fill="#8a5a2e" stroke="%s" stroke-width="2.5"/>""",
+	# A merchant's scales, for the market.
+	"market": """
+		<path d="M32 8 V52" stroke="#8a5a2e" stroke-width="4" stroke-linecap="round"/>
+		<path d="M10 16 H54" stroke="%s" stroke-width="4" stroke-linecap="round"/>
+		<path d="M10 16 L4 34 M10 16 L16 34 M54 16 L48 34 M54 16 L60 34" stroke="#c79a52" stroke-width="2" fill="none"/>
+		<path d="M3 34 H17 C17 40 3 40 3 34 Z" fill="#f2c443" stroke="%s" stroke-width="2.5" stroke-linejoin="round"/>
+		<path d="M47 34 H61 C61 40 47 40 47 34 Z" fill="#f2c443" stroke="%s" stroke-width="2.5" stroke-linejoin="round"/>
+		<circle cx="32" cy="10" r="4" fill="#f5c842" stroke="%s" stroke-width="2.5"/>
+		<rect x="20" y="52" width="24" height="7" rx="2" fill="#8a5a2e" stroke="%s" stroke-width="2.5"/>""",
 	# A sealed treaty, for diplomacy.
 	"diplomacy": """
 		<rect x="10" y="10" width="44" height="40" rx="3" fill="#ead8ae" stroke="%s" stroke-width="3"/>

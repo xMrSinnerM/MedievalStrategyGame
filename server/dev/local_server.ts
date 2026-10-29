@@ -9,6 +9,7 @@
 //   START_KEEP=2 START_RESOURCES='{"gold":1000}' node server/dev/local_server.ts   (bigger starting castles)
 //   EVENTS_OFFSET_HOURS=30 node server/dev/local_server.ts         (timed events as if 30 hours later)
 //   ADMINS=me@example.com node server/dev/local_server.ts           (these accounts get the owner's tools)
+//   WAR_DAYS=0.01 node server/dev/local_server.ts                    (alliance war seasons this many days long)
 //   godot --path . -- --online-url=http://127.0.0.1:54321
 
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
@@ -28,10 +29,16 @@ import {
 } from "../../supabase/functions/game/alliances.ts";
 import { chatView, MemoryChatStore, send as sendChat, type Speaker } from "../../supabase/functions/game/chat.ts";
 import { deliver, recall, type Aid, type AidRules } from "../../supabase/functions/game/aid.ts";
+import { goingRates, type MarketReport, type MarketRules, type Offer } from "../../supabase/functions/game/market.ts";
 import { invade } from "../../supabase/functions/game/invasion.ts";
 import { hordeArrives, prizeFor } from "../../supabase/functions/game/horde.ts";
+import {
+  captureEntry, checkClaim, defenceEntry, givePrize, holdDue, holdEntries, lastSeason, seasonAt, standings, warBoard,
+  type WarAlliance, type WarEntry, type WarRules,
+} from "../../supabase/functions/game/wars.ts";
 import { capitalBoost, resolveVillageRaid, type VillageTarget } from "../../supabase/functions/game/villages.ts";
 import type { QuestRules } from "../rules/quests.ts";
+import type { AchievementRules } from "../rules/achievements.ts";
 import {
   adminEvents, checkGift, giftReport, giveCastle, NOT_ADMIN, startEvent, stopEvent, type AdminLogEntry,
 } from "../../supabase/functions/game/admin.ts";
@@ -47,8 +54,13 @@ const PLACES: VillageInfo[] = [...(world.villages ?? []), ...(world.capitals ?? 
 const pvp: PvpRules = json("data/pvp.json");
 const allianceRules: AllianceRules = json("data/alliances.json");
 const aidRules: AidRules = json("data/aid.json");
+const marketRules: MarketRules = json("data/market.json");
 const eventRules0: EventRules = json("data/events.json");
 const questRules: QuestRules = json("data/quests.json");
+const warRules: WarRules = json("data/wars.json");
+// For testing: shorter alliance war seasons.
+if (process.env.WAR_DAYS !== undefined) warRules.days = Number(process.env.WAR_DAYS);
+const achievementRules: AchievementRules = json("data/achievements.json");
 // The calendar with the owner's changes (kept on the shifted clock below).
 let eventRules: EventRules = eventRules0;
 // For testing: run the event calendar this many hours ahead, to see an event on.
@@ -78,12 +90,19 @@ const raids: (Raid & { attacker: string; defender: string | null })[] = [];
 let nextRaid = 1;
 const aid: (Aid & { sender: string; receiver: string; state: "out" | "done" })[] = [];
 let nextAid = 1;
+// Offers at the market, with the same states as the market_offers table (index.ts).
+const offers: (Offer & { seller: string; state: string; buyer: string | null; buyer_name: string; sold_at: number | null })[] = [];
+let nextOffer = 1;
 const store = new MemoryAllianceStore(() => new Map([...players].map(([id, p]) => [id,
   { name: p.name, level: castleLevel(p.castle), might: might(p.castle, pvp) }])));
 const chat = new MemoryChatStore();
 // Who holds each village and capital; `holder` is the owner's account (null for the militia).
 const villages = new Map<string, VillageState & { holder: string | null }>(
   PLACES.map((v) => [v.id, { ...untouched(v.id), holder: null }]));
+// Alliance wars: the war points won, and up to when each capital's holder has had its hold points.
+const warPoints: WarEntry[] = [];
+const scoredAt = new Map<string, number>();
+const warClaimed = new Map<string, number>();
 const ALLIANCE_ORDERS = new Set([
   "alliance", "join_alliance", "accept_invite", "decline_invite", "cancel_request", "leave_alliance", "disband_alliance",
   "invite", "cancel_invite", "kick", "answer_request", "set_role", "alliance_settings",
@@ -228,6 +247,24 @@ function resolveVillageRaids() {
     const out = resolveVillageRaid(rules, info, before, raid, room);
     const captured = out.state.owner !== before.owner;
     villages.set(info.id, { ...out.state, holder: captured ? raid.attacker : holder });
+    if (info.capital && out.attackerReport?.result === "fought") {
+      // The same as warPointsForBattle() in index.ts.
+      const at = raid.arrive;
+      if (captured) {
+        const old = warAlliance(holder);
+        if (old) warPoints.push(...holdEntries(warRules, info, old, Math.max(scoredAt.get(info.id) ?? 0, before.taken_at), at));
+        scoredAt.set(info.id, Math.max(scoredAt.get(info.id) ?? 0, Math.floor(at)));
+        const mine = warAlliance(raid.attacker);
+        const already = mine !== null && warPoints.some((e) => e.kind === "capture" && e.alliance_id === mine.id &&
+          e.capital === info.id && e.season === seasonAt(warRules, at).start);
+        const entry = mine ? captureEntry(warRules, info, mine, at, already) : null;
+        if (entry) warPoints.push(entry);
+      } else if (holder && out.attackerReport.winner === "b") {
+        const mine = warAlliance(holder);
+        const entry = mine ? defenceEntry(warRules, info, mine, at, out.attackerReport.a ?? {}) : null;
+        if (entry) warPoints.push(entry);
+      }
+    }
     if (out.attackerReport) report(raid.attacker, out.attackerReport);
     if (out.ownerReport && holder) report(holder, out.ownerReport);
     if (captured && holder) sendHome(holder, info.id, out.guardHome, raid.arrive);
@@ -246,9 +283,66 @@ function villageOrder(user: string, body: Record<string, unknown>): string {
   const guard = v.guard;
   // A capital's town buildings stay in the town; one still going up is lost.
   const buildings = settled(v, now()).buildings;
+  const info = PLACES.find((p) => p.id === v.id)!;
+  if (abandon && info.capital) {
+    const mine = warAlliance(user);
+    if (mine) warPoints.push(...holdEntries(warRules, info, mine, Math.max(scoredAt.get(v.id) ?? 0, v.taken_at), now()));
+    scoredAt.set(v.id, Math.floor(now()));
+  }
   if (abandon) villages.set(v.id, { ...untouched(v.id), ...(buildings ? { buildings } : {}), holder: null });
   else v.guard = {};
   sendHome(user, v.id, guard, now());
+  return "";
+}
+
+// --- Alliance wars: the same as in index.ts, without the database ----------------
+
+function warAlliance(user: string | null): WarAlliance | null {
+  const m = user === null ? undefined : store.membership.get(user);
+  const a = m === undefined ? undefined : store.alliancesById.get(m.alliance_id);
+  return a === undefined ? null : { id: a.id, name: a.name, tag: a.tag };
+}
+
+function scoreCapitals() {
+  for (const info of world.capitals ?? []) {
+    const v = villages.get(info.id)!;
+    const due = v.holder === null ? null : holdDue(scoredAt.get(info.id) ?? 0, v.taken_at, now());
+    if (due === null) continue;
+    scoredAt.set(info.id, due.to);
+    const mine = warAlliance(v.holder);
+    if (mine) warPoints.push(...holdEntries(warRules, info, mine, due.from, due.to));
+  }
+}
+
+function warMember(user: string) {
+  const m = store.membership.get(user);
+  return { alliance_id: m?.alliance_id ?? null, joined: m?.joined ?? 0, war_claimed: warClaimed.get(user) ?? 0 };
+}
+
+function warView(user: string) {
+  scoreCapitals();
+  const t = now();
+  const capitals = (world.capitals ?? []).map((info) => {
+    const v = villages.get(info.id)!;
+    const m = v.holder === null ? undefined : store.membership.get(v.holder);
+    return { id: info.id, name: info.name, level: info.level, owner: v.owner, alliance_id: m?.alliance_id ?? null,
+      tag: v.holder === null ? "" : tagOf(v.holder) };
+  });
+  return warBoard(warRules, t, standings(warPoints, seasonAt(warRules, t).start), standings(warPoints, lastSeason(warRules, t).start),
+    capitals, players.has(user) ? warMember(user) : null);
+}
+
+function claimWarPrize(user: string): string {
+  const t = now();
+  const last = lastSeason(warRules, t);
+  const me = warMember(user);
+  const prize = checkClaim(warRules, me, standings(warPoints, last.start).find((s) => s.alliance_id === me.alliance_id), t);
+  if (typeof prize === "string") return prize;
+  const p = players.get(user)!;
+  const castle = CastleState.fromDict(rules.buildings, p.castle);
+  givePrize(castle, prize);
+  players.set(user, { ...p, castle: castle.toDict() });
+  warClaimed.set(user, last.start);
   return "";
 }
 
@@ -310,6 +404,40 @@ function report(user: string, r: { at: number }) {
   reports.push({ id: nextReport++, user, at: r.at, report: r });
 }
 
+// --- The market: the same as in index.ts, without the database -------------------
+
+const offerOf = ({ seller: _s, state: _st, buyer: _b, buyer_name: _bn, sold_at: _sa, ...o }: (typeof offers)[number]): Offer => o;
+
+function marketView(user: string) {
+  const t = now();
+  const mine = offers.filter((o) => o.seller === user).reverse();
+  return {
+    offers: offers.filter((o) => o.state === "open" && o.expires > t && o.seller !== user).reverse().slice(0, 200)
+      .map((o) => ({ ...offerOf(o), tag: tagOf(o.seller) })),
+    mine: mine.filter((o) => o.state === "open" && o.expires > t).map(offerOf),
+    sold: mine.filter((o) => o.state === "sold" || o.state === "paid").slice(0, 10)
+      .map((o) => ({ ...offerOf(o), buyer_name: o.buyer_name, sold_at: o.sold_at })),
+    rates: goingRates(offers.filter((o) => o.sold_at !== null).sort((a, b) => b.sold_at! - a.sold_at!).slice(0, 200)),
+  };
+}
+
+function collectMarket(user: string): { income: Record<string, number>; reports: MarketReport[] } {
+  const income: Record<string, number> = {};
+  const out: MarketReport[] = [];
+  for (const o of offers.filter((x) => x.seller === user)) {
+    if (o.state === "sold") {
+      o.state = "paid";
+      income[o.want] = (income[o.want] ?? 0) + o.proceeds;
+    } else if (o.state === "cancelled" || (o.state === "open" && o.expires <= now())) {
+      if (o.state === "open") out.push({ kind: "market", event: "expired", at: o.expires, give: o.give, give_amount: o.give_amount,
+        want: o.want, want_amount: o.want_amount });
+      o.state = "returned";
+      income[o.give] = (income[o.give] ?? 0) + o.give_amount;
+    }
+  }
+  return { income, reports: out };
+}
+
 // The same as resolveAid() in index.ts, without the database.
 function resolveAid(user: string) {
   for (const cart of aid.filter((a) => a.kind === "resources" && a.state === "out" && a.arrive <= now() &&
@@ -342,7 +470,8 @@ function resolveRaids(user: string) {
     if (helpers.length > 0) outcome.defenderReport.helped_by = [...new Set(helpers.map((h) => h.sender_name))];
     report(raid.defender!, outcome.defenderReport);
     report(raid.attacker, outcome.attackerReport);
-    Object.assign(raid, { state: "home", survivors: outcome.survivors, loot: outcome.loot, ...(outcome.lead ? { lead: outcome.lead } : {}) });
+    Object.assign(raid, { state: "home", survivors: outcome.survivors, loot: outcome.loot, won: outcome.attackerReport.winner === "a",
+      ...(outcome.lead ? { lead: outcome.lead } : {}) });
     for (const [i, h] of helpers.entries()) {
       const left = outcome.helpers[i];
       const lost: Record<string, number> = {};
@@ -423,13 +552,13 @@ createServer(async (req, res) => {
     if (body.action === "world") {
       const others = [...players.entries()].filter(([id]) => id !== user)
         .map(([id, p]) => ({ name: p.name, home_x: p.home_x, home_y: p.home_y, level: castleLevel(p.castle),
-          protected: isProtected(p, pvp, now()), tag: tagOf(id), ally: allies(user, id),
+          protected: isProtected(p, pvp, now()), tag: tagOf(id), title: p.castle.achievements?.title ?? "", ally: allies(user, id),
           outpost: p.outpost ? { name: p.outpost.name, x: p.outpost.x, y: p.outpost.y } : null }));
       return send(res, 200, { ok: true, now: now(), error: "", players: others });
     }
     if (body.action === "leaderboard") {
       const all = [...players.entries()].map(([id, p]) => ({ id, name: p.name, level: castleLevel(p.castle),
-        might: might(p.castle, pvp), barons_beaten: p.barons_beaten ?? 0, tag: tagOf(id) }))
+        might: might(p.castle, pvp), barons_beaten: p.barons_beaten ?? 0, tag: tagOf(id), title: p.castle.achievements?.title ?? "" }))
         .sort((a, b) => b.might - a.might || b.barons_beaten - a.barons_beaten || a.name.localeCompare(b.name));
       const strip = ({ id: _id, ...row }: (typeof all)[number]) => row;
       const mine = all.find((r) => r.id === user);
@@ -462,11 +591,13 @@ createServer(async (req, res) => {
         players: all.slice(0, 50).map(strip), me: mine ? strip(mine) : null, rank, total: all.length,
         prize: mine && run?.horde ? prizeFor(run.horde.prizes, rank) ?? null : null } });
     }
+    if (body.action === "war_board") return send(res, 200, { ok: true, now: now(), error: "", result: { war: warView(user) } });
     if (!players.has(user)) return send(res, 200, { ok: false, error: "No castle yet.", needs_join: true });
     if (body.action === "chat" || body.action === "chat_send") {
       const error = body.action === "chat_send" ? await sendChat(chat, speaker(user), body, now()) : "";
       return send(res, 200, { ok: true, now: now(), error, result: await chatView(chat, speaker(user), body.after) });
     }
+    if (body.action === "market") return send(res, 200, { ok: true, now: now(), error: "", result: marketView(user) });
     if (typeof body.action === "string" && ALLIANCE_ORDERS.has(body.action)) {
       const error = await handle(store, allianceRules, user, body, now());
       return send(res, 200, { ok: true, now: now(), error, result: await allianceView(store, allianceRules, user) });
@@ -490,10 +621,36 @@ createServer(async (req, res) => {
       else Object.assign(a!, times);
       body.action = "state";
     }
+    // The same as the market orders in index.ts.
+    const marketOrder = ["post_offer", "buy_offer", "cancel_offer"].includes(String(body.action));
+    let marketError = "";
+    if (body.action === "cancel_offer") {
+      const o = offers.find((x) => x.id === Number(body.id) && x.seller === user && x.state === "open");
+      if (o) o.state = "cancelled";
+      else marketError = "That offer is gone.";
+      body.action = "state";
+    }
+    let bought: (typeof offers)[number] | undefined;
+    if (body.action === "buy_offer") {
+      bought = offers.find((x) => x.id === Number(body.id) && x.state === "open" && x.expires > now());
+      if (bought?.seller === user) marketError = "That's your own offer.";
+      else if (bought === undefined) marketError = "That offer is gone.";
+      if (marketError !== "") {
+        bought = undefined;
+        body.action = "state";
+      }
+    }
     resolveAid(user);
     resolveRaids(user);
     resolveVillageRaids();
+    scoreCapitals();
+    let warError = "";
+    if (body.action === "claim_war_prize") {
+      warError = claimWarPrize(user);
+      body.action = "state";
+    }
     const villageIncome = collectVillages(user);
+    const market = collectMarket(user);
     let villageError = "";
     if (body.action === "recall_guard" || body.action === "abandon_village") {
       villageError = villageOrder(user, body);
@@ -518,10 +675,18 @@ createServer(async (req, res) => {
     }
     const outcome = act(rules, me, body, t,
       { pvp, outpostSpot, target: target?.target, homecomings, alliances: allianceRules, aid: aidRules,
-        events: { rules: eventRules, world, offset: EVENTS_OFFSET }, quests: questRules, village: village?.target, villageIncome,
-        capitalBoost: capitalBoost(rules, allianceCapitals(user).levels, allianceCapitals(user).guilds), fortresses: world.fortresses, hordeRank: hordePlace });
+        events: { rules: eventRules, world, offset: EVENTS_OFFSET }, quests: questRules, achievements: achievementRules, village: village?.target, villageIncome,
+        capitalBoost: capitalBoost(rules, allianceCapitals(user).levels, allianceCapitals(user).guilds), fortresses: world.fortresses, hordeRank: hordePlace,
+        market: { rules: marketRules, open: offers.filter((o) => o.seller === user && o.state === "open" && o.expires > t).length,
+          offer: bought ? offerOf(bought) : undefined }, marketIncome: market.income });
     players.set(user, outcome.state);
-    for (const r of outcome.reports) report(user, r);
+    for (const r of [...outcome.reports, ...market.reports, ...(outcome.marketReports ?? [])]) report(user, r);
+    if (outcome.offer) offers.push({ ...outcome.offer, id: nextOffer++, seller: user, state: "open", buyer: null, buyer_name: "", sold_at: null });
+    if (bought && outcome.error === "") {
+      Object.assign(bought, { state: "sold", buyer: user, buyer_name: outcome.state.name, sold_at: t });
+      report(bought.seller, { kind: "market", event: "sold", at: t, name: outcome.state.name, give: bought.give,
+        give_amount: bought.give_amount, want: bought.want, want_amount: bought.want_amount, proceeds: bought.proceeds } as MarketReport);
+    }
     if (outcome.capitalBuild && village) villages.set(village.target.info.id, { ...outcome.capitalBuild.state, holder: user });
     if (outcome.raid && village) {
       raids.push({ ...outcome.raid, id: nextRaid++, attacker: user, defender: outcome.raid.mission === "attack" ? village.holder : null });
@@ -535,7 +700,8 @@ createServer(async (req, res) => {
       if (outcome.error !== "") await store.remove(founded);
       result = await allianceView(store, allianceRules, user);
     }
-    return send(res, 200, view(user, outcome.state, { error: recalled || villageError || outcome.error, result }));
+    if (marketOrder) result = marketView(user);
+    return send(res, 200, view(user, outcome.state, { error: recalled || villageError || marketError || warError || outcome.error, result }));
   }
   send(res, 404, { msg: "Not found" });
 }).listen(PORT, "127.0.0.1", () => console.log(`Local game server on http://127.0.0.1:${PORT}`));

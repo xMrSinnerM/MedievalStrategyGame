@@ -183,6 +183,7 @@ func _refresh() -> void:
 				"" if cr.per_player == 1 else "s", cr.min_keep])
 		if Economy.online:
 			lines.append("Your alliance holds %d of %d" % [Economy.alliance_capitals(), cr.per_alliance])
+			lines.append("Alliance war: +%d war points an hour for its holder's alliance (K)" % (int(Economy.war_rules.get("hold_per_hour", 0)) * level))
 		if Economy.capital_bonus() > 0.0:
 			lines.append("Capitals give you +%d%% production now" % roundi(Economy.capital_bonus() * 100.0))
 	_details.text = "\n".join(lines)
