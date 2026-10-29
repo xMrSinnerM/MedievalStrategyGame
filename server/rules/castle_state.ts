@@ -219,7 +219,21 @@ export class CastleState {
       const more = this.researchBonus(r);
       if (more !== 0) out[r] *= 1 + more;
     }
+    const mood = this.orderBonus();
+    if (mood !== 0) for (const r of Object.keys(out)) out[r] *= 1 + mood;
     return out;
+  }
+
+  /** The keep and decorations raise it; every other finished building crowds the castle. */
+  publicOrder(): number {
+    let total = 0;
+    for (const b of this.buildings) total += this.rules.order(b.type, b.level);
+    return total;
+  }
+
+  /** How much more (or, below zero, less) the castle produces because of its public order. */
+  orderBonus(): number {
+    return this.rules.orderBonus(this.publicOrder());
   }
 
   upkeepPerHour(): number {

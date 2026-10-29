@@ -149,6 +149,7 @@ for (const run of fixtures.castles) {
             same(castle.quests.picks.map((_, i) => dailyProgress(castle, quests, i)), step.daily, `${where} daily`);
             same(cofferReward(quests, castle.quests.keep, cofferStreak(castle, quests)), step.coffer, `${where} coffer`);
             same(quests.story.map((q) => progress(castle, q.goal)), step.goals, `${where} goals`);
+            same([castle.publicOrder(), castle.netPerHour()], step.order, `${where} public order`);
           }
           break;
         default:

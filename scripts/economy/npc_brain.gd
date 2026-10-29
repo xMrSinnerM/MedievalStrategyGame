@@ -9,10 +9,12 @@ extends RefCounted
 ##   1. the keep, once nothing else can grow without it
 ##   2. a storehouse, when the keep's next level costs more than storage holds
 ##   3. a barracks, from keep level 2
-##   4. the producer of whatever resource comes in slowest
-##   5. the wall, kept no lower than the keep
-##   6. the barracks, kept no lower than the keep
-##   7. the keep anyway
+##   4. a decoration, while public order is below zero
+##   5. the producer of whatever resource comes in slowest
+##   6. a decoration, while public order can still raise production
+##   7. the wall, kept no lower than the keep
+##   8. the barracks, kept no lower than the keep
+##   9. the keep anyway
 ## The first of these the castle can afford right now is started.
 ##
 ## Recruiting: the strongest unlocked unit, paid only from stock above half the
@@ -213,7 +215,12 @@ static func _options(castle: CastleState) -> Array[Dictionary]:
 				out.append({"id": store.id})
 	if keep_level >= 2 and castle.count("barracks") == 0:
 		out.append({"type": "barracks"})
+	var mood := castle.order_bonus()
+	if mood < 0.0:
+		out.append_array(_decorations(castle))
 	out.append_array(producers)
+	if mood >= 0.0 and mood < rules.order_max_bonus:
+		out.append_array(_decorations(castle))
 	var wall := _first(castle, "wall")
 	if not wall.is_empty() and wall.level < keep_level:
 		out.append({"id": wall.id})
@@ -223,6 +230,34 @@ static func _options(castle: CastleState) -> Array[Dictionary]:
 	if not keep_maxed:
 		out.append({"id": keep.id})
 	return out
+
+
+static func _decorations(castle: CastleState) -> Array[Dictionary]:
+	## Decorations to build or upgrade, the most public order per resource first.
+	var rules := castle.rules
+	var keep_level := castle.keep_level()
+	var scored: Array = []
+	for type: String in rules.types:
+		if not rules.is_decoration(type):
+			continue
+		if castle.count(type) < rules.max_count(type, keep_level) and keep_level >= rules.required_keep(type):
+			scored.append([rules.order(type, 1) / _total(rules.cost(type, 1)), {"type": type}])
+		var lowest := _lowest(castle, type)
+		if not lowest.is_empty() and lowest.level > 0 and lowest.level < rules.max_level(type, keep_level):
+			var gain := rules.order(type, lowest.level + 1) - rules.order(type, lowest.level)
+			scored.append([gain / _total(rules.cost(type, lowest.level + 1)), {"id": lowest.id}])
+	scored.sort_custom(func(a: Array, b: Array) -> bool: return a[0] > b[0])
+	var out: Array[Dictionary] = []
+	for pair: Array in scored:
+		out.append(pair[1])
+	return out
+
+
+static func _total(cost: Dictionary) -> float:
+	var sum := 0.0
+	for r: String in cost:
+		sum += float(cost[r])
+	return maxf(sum, 1.0)
 
 
 static func _first(castle: CastleState, type: String) -> Dictionary:

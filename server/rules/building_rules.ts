@@ -25,6 +25,10 @@ export class BuildingRules {
   studyCostGrowth = 1.8;
   studyTimeGrowth = 2.0;
   timePerAcademyLevel = 0.94;
+  /** Public order: production change per point, and its limits. */
+  orderPerPoint = 0.002;
+  orderMaxBonus = 0.3;
+  orderMaxPenalty = 0.3;
 
   constructor(buildings: Json, units: Json) {
     this.resources = (buildings.resources ?? []).map(String);
@@ -43,6 +47,10 @@ export class BuildingRules {
     this.studyCostGrowth = Number(research.cost_growth ?? 1.8);
     this.studyTimeGrowth = Number(research.time_growth ?? 2.0);
     this.timePerAcademyLevel = Number(research.time_per_academy_level ?? 0.94);
+    const order = buildings.public_order ?? {};
+    this.orderPerPoint = Number(order.per_point ?? 0.002);
+    this.orderMaxBonus = Number(order.max_bonus ?? 0.3);
+    this.orderMaxPenalty = Number(order.max_penalty ?? 0.3);
   }
 
   hasType(type: string): boolean {
@@ -94,6 +102,22 @@ export class BuildingRules {
     const def = this.types[type];
     if (level <= 0 || !("defense" in def)) return 0;
     return Number(def.defense) * Math.pow(Number(def.defense_growth ?? 1.5), level - 1);
+  }
+
+  isDecoration(type: string): boolean {
+    return this.types[type].category === "decoration";
+  }
+
+  /** Public order this building gives (decorations, the keep) or takes away (crowding). */
+  order(type: string, level: number): number {
+    const def = this.types[type];
+    if (level <= 0 || !("order" in def)) return 0;
+    return round(Number(def.order) * Math.pow(Number(def.order_growth ?? 1.0), level - 1));
+  }
+
+  /** How much more (or less, below zero) every resource is produced at this public order. */
+  orderBonus(publicOrder: number): number {
+    return clamp(publicOrder * this.orderPerPoint, -this.orderMaxPenalty, this.orderMaxBonus);
   }
 
   builders(keepLevel: number): number {
