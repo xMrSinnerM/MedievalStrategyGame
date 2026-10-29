@@ -173,6 +173,7 @@ func _on_click(screen_pos: Vector2) -> void:
 	if clicked != null and clicked != player:
 		EventBus.settlement_selected.emit("")
 		EventBus.party_selected.emit(clicked.id)
+		Audio.play("select_party")
 		return
 	EventBus.party_selected.emit("")
 	var hit = GameData.terrain.raycast(cam.project_ray_origin(screen_pos), cam.project_ray_normal(screen_pos))
@@ -183,6 +184,7 @@ func _on_click(screen_pos: Vector2) -> void:
 	if camp != "":
 		EventBus.settlement_selected.emit("")
 		EventBus.baron_selected.emit(camp)
+		Audio.play("select_camp")
 		return
 	EventBus.baron_selected.emit("")
 	var village: String = villages.village_at(target) if villages != null else ""
@@ -190,16 +192,19 @@ func _on_click(screen_pos: Vector2) -> void:
 		EventBus.settlement_selected.emit("")
 		EventBus.player_selected.emit("")
 		EventBus.village_selected.emit(village)
+		Audio.play("select_village")
 		return
 	EventBus.village_selected.emit("")
 	if outposts != null and outposts.outpost_at(target):
 		EventBus.player_selected.emit("")
 		EventBus.settlement_selected.emit(OutpostRules.OUTPOST_ID)
+		Audio.play("select_castle")
 		return
 	var other: Dictionary = players.player_at(target) if players != null else {}
 	if not other.is_empty():
 		EventBus.settlement_selected.emit("")
 		EventBus.player_selected.emit(String(other.name))
+		Audio.play("select_castle")
 		return
 	EventBus.player_selected.emit("")
 	var settlement := _settlement_at(target)
@@ -207,13 +212,16 @@ func _on_click(screen_pos: Vector2) -> void:
 		# Online, the castles are fortresses.
 		EventBus.settlement_selected.emit("")
 		EventBus.baron_selected.emit(String(settlement.id))
+		Audio.play("select_castle")
 		return
 	if settlement.get("type", "") == "castle":
 		EventBus.settlement_selected.emit(settlement.id)
+		Audio.play("select_castle")
 		return
 	if settlement.get("type", "") == "town" and Economy.is_capital(String(settlement.id)):
 		EventBus.settlement_selected.emit("")
 		EventBus.village_selected.emit(String(settlement.id))
+		Audio.play("select_town")
 		return
 	EventBus.settlement_selected.emit("")
 	if player == null:

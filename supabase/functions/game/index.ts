@@ -59,6 +59,9 @@
 // POST { "action": "send_resources", "target": "name", "resources": { wood: n } }   to an ally (data/aid.json)
 // POST { "action": "send_defenders", "target": "name", "army": { unit: count } }
 // POST { "action": "recall_defenders", "id" }
+// POST { "action": "market" }                    open offers at the market, yours, and the going rates (data/market.json)
+// POST { "action": "post_offer", "give": "wood", "give_amount": n, "want": "stone", "want_amount": n }
+// POST { "action": "buy_offer" | "cancel_offer", "id" }
 // POST { "action": "admin" }                     the owner's panel: events, player names, admin log (owner only)
 // POST { "action": "admin_start_event" | "admin_stop_event", "event": "id", "hours": n }   (owner only)
 // POST { "action": "admin_give", "target": "name" | "*", "resources": { wood: n }, "troops": { unit: n } }   (owner only)
@@ -82,6 +85,10 @@
 // (data/capitals.json); every request sets your castle's production boost
 // from the capitals your alliance holds (or you alone, outside one) and
 // their guild halls. A capital's town buildings are columns of its row.
+// Market offers are rows of the market_offers table (market.ts): a buyer
+// takes an offer before paying for it, and every request first brings the
+// proceeds of your sales and the goods of your cancelled or expired offers
+// home. Market orders answer with the market's view as `result`.
 // Fortresses (the old kingdoms' castles) are every player's own camps, like
 // the robber barons' (data/fortresses.json); act() adds them to a player who
 // doesn't have them yet.
@@ -94,6 +101,7 @@ import barons from "../../../data/barons.json" with { type: "json" };
 import pvpData from "../../../data/pvp.json" with { type: "json" };
 import alliancesData from "../../../data/alliances.json" with { type: "json" };
 import aidData from "../../../data/aid.json" with { type: "json" };
+import marketData from "../../../data/market.json" with { type: "json" };
 import eventsData from "../../../data/events.json" with { type: "json" };
 import questsData from "../../../data/quests.json" with { type: "json" };
 import achievementsData from "../../../data/achievements.json" with { type: "json" };
@@ -119,6 +127,7 @@ import { DatabaseAllianceStore } from "./alliance_store.ts";
 import { chatView, send, type Speaker } from "./chat.ts";
 import { DatabaseChatStore } from "./chat_store.ts";
 import { deliver, recall, type Aid, type AidRules } from "./aid.ts";
+import { goingRates, type MarketReport, type MarketRules, type Offer } from "./market.ts";
 import { invade } from "./invasion.ts";
 import { hordeArrives, prizeFor } from "./horde.ts";
 import type { QuestRules } from "../../../server/rules/quests.ts";
@@ -135,6 +144,7 @@ const VILLAGE_COLUMNS = "id, owner, owner_name, guard, taken_at, paid_at, buildi
 const pvp = pvpData as PvpRules;
 const allianceRules = alliancesData as AllianceRules;
 const aidRules = aidData as AidRules;
+const marketRules = marketData as unknown as MarketRules;
 const eventRules = eventsData as EventRules;
 const questRules = questsData as unknown as QuestRules;
 const achievementRules = achievementsData as unknown as AchievementRules;
@@ -155,6 +165,11 @@ const REPORTS_SHOWN = 20;
 const RETRIES = 4;
 const PLAYERS_SHOWN = 500;
 const RANKS_SHOWN = 50;
+const OFFERS_SHOWN = 200;
+/** Seconds after which a purchase still being paid for counts as failed. */
+const STALE_PURCHASE = 120;
+const SALES_COUNTED = 200;
+const MARKET_ORDERS = new Set(["market", "post_offer", "buy_offer", "cancel_offer"]);
 
 // deno-lint-ignore no-explicit-any
 type Row = Record<string, any>;
@@ -527,6 +542,85 @@ async function resolveRaids(userId: string) {
   }
 }
 
+// --- The market (market.ts) ------------------------------------------------------
+
+function offerFromRow(r: Row): Offer {
+  return { id: Number(r.id), seller_name: r.seller_name, give: r.give, give_amount: r.give_amount, want: r.want,
+    want_amount: r.want_amount, proceeds: r.proceeds, posted: r.posted, expires: r.expires };
+}
+
+/** The market as the market screen shows it: everyone else's open offers, yours, your recent sales and the going rates. */
+async function marketView(userId: string) {
+  const t = now();
+  const [{ data: open }, { data: mine }, { data: sales }] = await Promise.all([
+    admin.from("market_offers").select("*, holder:players!market_offers_seller_fkey(alliance:alliances!players_alliance_id_fkey(tag))")
+      .eq("state", "open").gt("expires", t).neq("seller", userId).order("id", { ascending: false }).limit(OFFERS_SHOWN),
+    admin.from("market_offers").select("*").eq("seller", userId).order("id", { ascending: false }).limit(20),
+    admin.from("market_offers").select("give, give_amount, want, want_amount").not("sold_at", "is", null)
+      .order("sold_at", { ascending: false }).limit(SALES_COUNTED),
+  ]);
+  return {
+    offers: (open ?? []).map((r: Row) => ({ ...offerFromRow(r), tag: r.holder?.alliance?.tag ?? "" })),
+    mine: (mine ?? []).filter((r: Row) => r.state === "open" && r.expires > t).map(offerFromRow),
+    sold: (mine ?? []).filter((r: Row) => r.state === "sold" || r.state === "paid").slice(0, 10)
+      .map((r: Row) => ({ ...offerFromRow(r), buyer_name: r.buyer_name ?? "", sold_at: r.sold_at })),
+    rates: goingRates(sales ?? []),
+  };
+}
+
+/** Takes the proceeds of your sales and the goods of your cancelled and expired offers; your castle gets them with this request. */
+async function collectMarket(userId: string): Promise<{ income: Record<string, number>; reports: MarketReport[] }> {
+  const t = now();
+  const { data } = await admin.from("market_offers").select("*").eq("seller", userId).in("state", ["open", "buying", "sold", "cancelled"]);
+  const income: Record<string, number> = {};
+  const reports: MarketReport[] = [];
+  for (const r of (data ?? []) as Row[]) {
+    // A sale whose buyer never finished paying (their request failed) goes back up.
+    if (r.state === "buying") {
+      if (Number(r.sold_at) < t - STALE_PURCHASE) {
+        await admin.from("market_offers").update({ state: "open", buyer: null, sold_at: null }).eq("id", r.id).eq("state", "buying");
+      }
+      continue;
+    }
+    if (r.state === "open" && r.expires > t) continue;
+    // Only if no other request took it meanwhile (or, for an open offer, a buyer).
+    const next = r.state === "sold" ? "paid" : "returned";
+    const { data: took } = await admin.from("market_offers").update({ state: next }).eq("id", r.id).eq("state", r.state).select("id");
+    if (!took || took.length === 0) continue;
+    const [good, amount] = r.state === "sold" ? [r.want, r.proceeds] : [r.give, r.give_amount];
+    income[good] = (income[good] ?? 0) + Number(amount);
+    if (r.state === "open") {
+      reports.push({ kind: "market", event: "expired", at: Number(r.expires), give: r.give, give_amount: r.give_amount,
+        want: r.want, want_amount: r.want_amount });
+    }
+  }
+  return { income, reports };
+}
+
+/** Takes your offer down; its goods come home with this request. The error, or "". */
+async function cancelOffer(userId: string, id: unknown): Promise<string> {
+  const { data } = await admin.from("market_offers").update({ state: "cancelled" })
+    .eq("id", Number(id)).eq("seller", userId).eq("state", "open").select("id");
+  return data && data.length > 0 ? "" : "That offer is gone.";
+}
+
+/** Takes an open offer for this buyer, so nobody else can buy it meanwhile; the offer and its seller, or why not. */
+async function takeOffer(userId: string, id: unknown): Promise<{ offer: Offer; seller: string } | string> {
+  const { data: row } = await admin.from("market_offers").select("*").eq("id", Number(id)).eq("state", "open").maybeSingle();
+  if (!row || row.expires <= now()) return "That offer is gone.";
+  if (row.seller === userId) return "That's your own offer.";
+  const { data: took } = await admin.from("market_offers").update({ state: "buying", buyer: userId, sold_at: now() })
+    .eq("id", row.id).eq("state", "open").select("id");
+  if (!took || took.length === 0) return "Someone else bought it first.";
+  return { offer: offerFromRow(row), seller: row.seller };
+}
+
+/** Puts an offer this buyer took back up, when they couldn't pay for it after all. */
+async function releaseOffer(userId: string, id: number) {
+  await admin.from("market_offers").update({ state: "open", buyer: null, sold_at: null })
+    .eq("id", id).eq("state", "buying").eq("buyer", userId);
+}
+
 /** Calls your defenders home from an ally; the error, or "" when done. */
 async function recallDefenders(userId: string, id: unknown): Promise<string> {
   const { data: row } = await admin.from("aid").select("*").eq("id", Number(id)).eq("sender", userId).eq("kind", "troops")
@@ -818,6 +912,11 @@ Deno.serve(async (req: Request) => {
     return reply({ ok: true, now: now(), error, result: await allianceView(store, allianceRules, userId) });
   }
 
+  if (body.action === "market") {
+    if ((await store.player(userId)) === null) return reply({ ok: false, error: "No castle yet.", needs_join: true });
+    return reply({ ok: true, now: now(), error: "", result: await marketView(userId) });
+  }
+
   // Founding an alliance: create it, then pay for it from the castle below
   // (and take it back if the castle can't pay).
   let founded: number | null = null;
@@ -838,11 +937,19 @@ Deno.serve(async (req: Request) => {
     body = { action: "state" };
   }
 
+  // Taking an offer down changes no castle until its goods are collected below.
+  let marketError = "";
+  if (body.action === "cancel_offer") {
+    marketError = await cancelOffer(userId, body.id);
+    body = { action: "state", market: true };
+  }
+
   await resolveAid(userId);
   await resolveRaids(userId);
   await resolveVillageRaids();
   // What your villages made: taken before anything can change who holds them.
   const villageIncome = await collectVillages(userId);
+  const market = await collectMarket(userId);
   let villageError = "";
   if (body.action === "recall_guard" || body.action === "abandon_village") {
     villageError = await villageOrder(userId, body);
@@ -857,6 +964,22 @@ Deno.serve(async (req: Request) => {
   let target: { target: Target; row: Row } | null = null;
   if (["attack_player", "spy", "send_resources", "send_defenders"].includes(String(body.action))) {
     target = await findTarget(body.target, userId);
+  }
+
+  // Buying: take the offer first, so that two buyers can't both have it; it goes back up if you can't pay.
+  let bought: { offer: Offer; seller: string } | null = null;
+  if (body.action === "buy_offer") {
+    const took = await takeOffer(userId, body.id);
+    if (typeof took === "string") {
+      marketError = took;
+      body = { action: "state", market: true };
+    } else bought = took;
+  }
+  let openOffers = 0;
+  if (body.action === "post_offer") {
+    const { count } = await admin.from("market_offers").select("id", { count: "exact", head: true })
+      .eq("seller", userId).eq("state", "open").gt("expires", now());
+    openOffers = count ?? 0;
   }
 
   // Armies back from attacking players; take them so no other request adds them too.
@@ -879,6 +1002,7 @@ Deno.serve(async (req: Request) => {
     if (error) return reply({ ok: false, error: "The server couldn't load your castle." }, 500);
     if (!row) {
       if (founded !== null) await store.remove(founded);
+      if (bought !== null) await releaseOffer(userId, bought.offer.id);
       return reply({ ok: false, error: "No castle yet.", needs_join: true });
     }
     const { version, ...stored } = row as PlayerState & { version: number };
@@ -897,18 +1021,39 @@ Deno.serve(async (req: Request) => {
     }
     const outcome = act(rules, stored, body, t, { pvp, outpostSpot, target: target?.target, homecomings, alliances: allianceRules, aid: aidRules,
       events: { rules: calendar, world: world as World }, quests: questRules, achievements: achievementRules, village: village?.target, villageIncome,
-      capitalBoost: boost, fortresses: (world as World).fortresses, hordeRank: hordePlace });
+      capitalBoost: boost, fortresses: (world as World).fortresses, hordeRank: hordePlace,
+      market: { rules: marketRules, open: openOffers, offer: bought?.offer }, marketIncome: market.income });
     // Save only if nobody else changed the row meanwhile; otherwise start over.
     const { data: saved, error: saveError } = await admin.from("players")
       .update({ ...outcome.state, ...publicColumns(outcome.state), version: version + 1, updated_at: new Date().toISOString() })
       .eq("user_id", userId).eq("version", version).select("version");
     if (saveError) {
       if (founded !== null) await store.remove(founded);
+      if (bought !== null) await releaseOffer(userId, bought.offer.id);
       return reply({ ok: false, error: "The server couldn't save your castle." }, 500);
     }
     if (!saved || saved.length === 0) continue;
-    await saveReports(userId, outcome.reports);
+    await saveReports(userId, [...outcome.reports, ...market.reports, ...(outcome.marketReports ?? [])]);
     let result = outcome.result ?? null;
+    if (outcome.offer) {
+      const o = outcome.offer;
+      const { error: offerError } = await admin.from("market_offers").insert({ seller: userId, ...o });
+      if (offerError) {
+        const refunded = await refund(userId, { [o.give]: o.give_amount });
+        return reply(await view(userId, refunded ?? outcome.state, { error: "The market couldn't take your offer, try again.",
+          result: await marketView(userId) }));
+      }
+    }
+    if (bought !== null) {
+      if (outcome.error !== "") await releaseOffer(userId, bought.offer.id);
+      else {
+        const o = bought.offer;
+        await admin.from("market_offers").update({ state: "sold", buyer_name: outcome.state.name }).eq("id", o.id).eq("state", "buying");
+        await saveReports(bought.seller, [{ kind: "market", event: "sold", at: t, name: outcome.state.name, give: o.give,
+          give_amount: o.give_amount, want: o.want, want_amount: o.want_amount, proceeds: o.proceeds }]);
+      }
+    }
+    if (MARKET_ORDERS.has(String(body.action)) || body.market === true) result = await marketView(userId);
     if (outcome.raid && village) {
       const r = outcome.raid;
       await admin.from("raids").insert({
@@ -949,8 +1094,9 @@ Deno.serve(async (req: Request) => {
       if (outcome.error !== "") await store.remove(founded);
       result = await allianceView(store, allianceRules, userId);
     }
-    return reply(await view(userId, outcome.state, { error: recalled || villageError || outcome.error, result }));
+    return reply(await view(userId, outcome.state, { error: recalled || villageError || marketError || outcome.error, result }));
   }
   if (founded !== null) await store.remove(founded);
+  if (bought !== null) await releaseOffer(userId, bought.offer.id);
   return reply({ ok: false, error: "The server is busy, try again." }, 503);
 });

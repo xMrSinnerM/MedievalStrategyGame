@@ -47,6 +47,7 @@ func _initialize() -> void:
 	test_research()
 	test_research_in_battle()
 	test_achievements()
+	test_notices()
 	print("%d checks, %d failed" % [checks, failures])
 	quit(1 if failures > 0 else 0)
 
@@ -1453,3 +1454,53 @@ func test_achievements() -> void:
 	check(eco.claim_achievement("keep") == "", "the economy claims it")
 	check(eco.set_title("keep:1") == "" and eco.my_title() == "the Landed", "and shows the title")
 	eco.free()
+
+
+func test_notices() -> void:
+	# Finished work is found by comparing a castle before and after.
+	var c := scholar()
+	var b := with_barracks()
+	var id := c.place("farm", Vector2i(18, 0), T0)
+	check(c.upgrade(1, T0), "the keep goes up")
+	check(c.start_research("forestry", T0), "a study starts")
+	var before := NoticeRules.snapshot(c)
+	check(NoticeRules.changes(rules, before, NoticeRules.snapshot(c), true).is_empty(), "nothing finished, nothing to tell")
+	c.advance_to(T0 + 1_000_000.0)
+	var told := NoticeRules.changes(rules, before, NoticeRules.snapshot(c), true)
+	var texts := told.map(func(n: Dictionary) -> String: return n.text)
+	check(texts.has("Your new Farm is built"), "a new building: %s" % [texts])
+	check(texts.has("Keep reached level 4"), "an upgrade: %s" % [texts])
+	check(texts.has("Forestry reached level 1"), "a study: %s" % [texts])
+	check(NoticeRules.changes(rules, NoticeRules.snapshot(c), NoticeRules.snapshot(c), true).is_empty(), "and only once")
+	# A cancelled build is not news.
+	check(c.upgrade(id, c.last_update), "the farm goes up")
+	before = NoticeRules.snapshot(c)
+	check(c.cancel(id, c.last_update), "and is cancelled")
+	check(NoticeRules.changes(rules, before, NoticeRules.snapshot(c), true).is_empty(), "cancelling tells nothing")
+	# Soldiers: one notice when a batch is done, none for a cancelled one.
+	var t := T0 + 60.0
+	check(b.recruit("spearman", 2, t) and b.recruit("spearman", 3, t), "two batches queued")
+	before = NoticeRules.snapshot(b)
+	b.advance_to(t + 45.0)
+	told = NoticeRules.changes(rules, before, NoticeRules.snapshot(b), false)
+	check(told.size() == 1 and told[0].text == "Test: Your Spearmen have finished training", "the first batch is ready: %s" % [told])
+	before = NoticeRules.snapshot(b)
+	check(b.cancel_training(0, t + 45.0), "the second is cancelled")
+	check(NoticeRules.changes(rules, before, NoticeRules.snapshot(b), false).is_empty(), "cancelled soldiers tell nothing")
+	# The server's copy of the same castle gives the same keys.
+	check(b.recruit("spearman", 1, t + 50.0), "one more")
+	before = NoticeRules.snapshot(b)
+	var server := CastleState.from_dict(rules, JSON.parse_string(JSON.stringify(b.to_dict())))
+	b.advance_to(t + 100.0)
+	server.advance_to(t + 100.0)
+	check(NoticeRules.changes(rules, before, NoticeRules.snapshot(b), true)[0].key
+			== NoticeRules.changes(rules, before, NoticeRules.snapshot(server), true)[0].key, "the same key either way")
+	# The desktop commands.
+	var win := NoticeRules.desktop_command("Windows", "Attack!", "Bob's army <arrives> in 5:00")
+	check(win[0] == "powershell.exe" and win[1].has("-EncodedCommand"), "Windows uses a PowerShell toast")
+	var script: String = Marshalls.base64_to_raw(win[1][-1]).get_string_from_utf16()
+	check(script.contains("Bob&apos;s army &lt;arrives&gt; in 5:00"), "the text is escaped for XML and PowerShell: %s" % script)
+	check(NoticeRules.desktop_command("Linux", "A", "B") == ["notify-send", ["--app-name=Medieval Strategy", "A", "B"]], "Linux uses notify-send")
+	var mac := NoticeRules.desktop_command("macOS", "Say \"hi\"", "x")
+	check(mac[0] == "osascript" and mac[1][1] == "display notification \"x\" with title \"Say \\\"hi\\\"\"", "macOS: %s" % [mac])
+	check(NoticeRules.desktop_command("Web", "A", "B").is_empty(), "nothing elsewhere")

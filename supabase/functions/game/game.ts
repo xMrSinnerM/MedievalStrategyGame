@@ -11,6 +11,7 @@ import { advanceMarches, sendAttack, type Army, type March, type Report } from "
 import { godotHash, type Dict } from "../../../server/rules/util.ts";
 import type { AllianceRules } from "./alliances.ts";
 import { checkShipment, type Aid, type AidRules } from "./aid.ts";
+import { checkBuy, checkOffer, proceedsFor, receive, type MarketReport, type MarketRules, type Offer } from "./market.ts";
 import { lastInvasion, type EventRules } from "../../../server/rules/events.ts";
 import { claimReward, eventPoints, invade, rewardTiers } from "./invasion.ts";
 import { buy, claimPrize, emptyHorde, hordeArrives, hordeScore, playerRun, type HordeState } from "./horde.ts";
@@ -165,6 +166,10 @@ export interface Context {
   capitalBoost?: Dict;
   /** For "claim_horde_prize": your rank among the players of your last Ember Horde (index.ts counts it). */
   hordeRank?: number;
+  /** The market (data/market.json), with how many offers you have up and, for "buy_offer", the offer named. */
+  market?: { rules: MarketRules; open?: number; offer?: Offer };
+  /** Proceeds of your sales and goods back from your offers since the last request (market.ts). */
+  marketIncome?: Dict;
 }
 
 export interface World {
@@ -207,6 +212,10 @@ export interface Outcome {
   aid?: Omit<Aid, "id">;
   /** For "build_capital": the capital's state with the building going up, and what it cost, for index.ts to store. */
   capitalBuild?: { state: VillageState; cost: Dict };
+  /** For "post_offer": the offer put up at the market, for index.ts to store. */
+  offer?: Omit<Offer, "id">;
+  /** Market news for you: what you bought, what your storage couldn't hold. */
+  marketReports?: MarketReport[];
 }
 
 export const NAME_RULE = /^[\p{L}\p{N}][\p{L}\p{N} _'-]{1,18}[\p{L}\p{N}]$/u;
@@ -342,6 +351,11 @@ export function act(rules: Rules, given: PlayerState, req: Request, now: number,
   }
   castle.advanceTo(now);
   if (ctx.villageIncome) unload(castle, ctx.villageIncome);
+  const marketReports: MarketReport[] = [];
+  if (ctx.marketIncome) {
+    const lost = receive(castle, ctx.marketIncome);
+    if (Object.keys(lost).length > 0) marketReports.push({ kind: "market", event: "spilled", at: now, lost });
+  }
   rules.gear.sync(castle);
   if (ctx.quests) rollDay(castle, ctx.quests, now);
   if (ctx.achievements) note(castle, ctx.achievements, true);
@@ -350,6 +364,7 @@ export function act(rules: Rules, given: PlayerState, req: Request, now: number,
   let raid: Omit<Raid, "id"> | undefined;
   let aid: Omit<Aid, "id"> | undefined;
   let capitalBuild: Outcome["capitalBuild"];
+  let offer: Omit<Offer, "id"> | undefined;
   let protectedUntil = stored.protected_until ?? 0;
   let claimed = stored.event_claimed ?? 0;
   switch (req.action) {
@@ -614,6 +629,29 @@ export function act(rules: Rules, given: PlayerState, req: Request, now: number,
       error = claimPrize(castle, horde, score.horde_points ?? 0, run, ctx.hordeRank ?? 0, now);
       break;
     }
+    case "post_offer": {
+      // The goods leave your castle for the market; index.ts puts the offer up.
+      const m = ctx.market;
+      error = m ? checkOffer(castle, m.rules, req, m.open ?? 0) : "Unknown order.";
+      if (error !== "" || m === undefined) break;
+      castle.resources[req.give] -= req.give_amount;
+      offer = { seller_name: stored.name, give: req.give, give_amount: req.give_amount, want: req.want,
+        want_amount: req.want_amount, proceeds: proceedsFor(m.rules, req.want_amount), posted: now,
+        expires: now + m.rules.offer_hours * 3600 };
+      break;
+    }
+    case "buy_offer": {
+      // index.ts has already taken the offer for you; pay for it and unload the goods.
+      const m = ctx.market;
+      error = m ? checkBuy(castle, m.rules, m.offer, stored.name, now) : "Unknown order.";
+      if (error !== "" || m?.offer === undefined) break;
+      const o = m.offer;
+      castle.resources[o.want] -= o.want_amount;
+      castle.resources[o.give] += o.give_amount;
+      marketReports.push({ kind: "market", event: "bought", at: now, name: o.seller_name, give: o.give, give_amount: o.give_amount,
+        want: o.want, want_amount: o.want_amount });
+      break;
+    }
     case "claim_quest":
       error = ctx.quests ? claimQuest(castle, ctx.quests, req.kind, req.index, now) : "Unknown order.";
       break;
@@ -648,6 +686,8 @@ export function act(rules: Rules, given: PlayerState, req: Request, now: number,
     raid,
     aid,
     ...(capitalBuild ? { capitalBuild } : {}),
+    ...(offer ? { offer } : {}),
+    ...(marketReports.length > 0 ? { marketReports } : {}),
   };
 }
 

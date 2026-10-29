@@ -100,8 +100,23 @@ to the title screen, quit). Castles keep growing on the clock while paused,
 just as when the game is closed.
 
 Settings (fullscreen, vertical sync, shadows, ambient occlusion, 3D
-resolution and interface size) apply at once and are kept in
+resolution, interface size and notices) apply at once and are kept in
 `user://settings.cfg` by the `Settings` autoload.
+
+### Notices
+
+Small cards pop up in the bottom-right corner, on the map and in the castle,
+when something happens: another player's army sets out for your castle or
+village (with when it arrives), a lord besieges or storms one of your castles,
+you were attacked, a battle you sent an army to was fought, or a building,
+study, batch of soldiers or siege tools is finished. Click a card to dismiss
+it. While the game window is in the background the same notices also go to the
+desktop (a Windows toast through PowerShell, `notify-send` on Linux, a macOS
+notification) and the taskbar flashes. Both can be switched off in Settings.
+The `Notices` autoload shows them; `NoticeRules` works out what finished by
+comparing your castles before and after each economy tick, and the same event
+is only told once even when the server's answer repeats it. Nothing reaches you
+while the game is closed.
 
 ### Look
 
@@ -762,6 +777,23 @@ Allied defenders in your own castle show when you click it, and a battle
 report says when they fought for you. Helping costs only what you send, so
 it can't be bought.
 
+### Market
+
+Press T (or the Market button) to trade wood, stone and food with any other
+player, from keep level 2. **Buy** lists everyone's offers, cheapest first,
+and can show only one good; buying takes the whole offer, you pay what it
+asks and the goods are in your storage at once (if it has room). **Sell**
+puts your own offer up: what you give and what you want for it. The goods
+leave your castle and wait at the market for up to 48 hours; if nobody buys
+them, or you take the offer down under **Your offers**, they come back. When
+it sells you get the price minus the market's 5% cut with your next visit
+(what your storage can't hold then is lost), and a message tells you who
+bought it. One offer gives at most 1000 per keep level, you can have 5 up at
+once, and every price lies between 0.5 and 2 of the good you want for each
+one you give, so the market can't be used to hand an account resources for
+nothing. Recent trades show the going rates. The numbers are in
+`data/market.json`.
+
 ### Timed events
 
 Online, a banner at the bottom of the map shows the event that's on and how
@@ -816,7 +848,8 @@ from the game: owners are added by hand in the database (see
 data/        JSON: terrain config, factions, settlements, roads, parties, buildings, units, player
 world/       heightmap, biome mask, rivers
 assets/      fonts (SIL OFL), kaykit (KayKit Medieval Hexagon and Adventurers packs, CC0),
-             ui/buildings (building pictures rendered from the kit models)
+             ui/buildings (building pictures rendered from the kit models),
+             audio (music and sounds from 0 A.D., CC BY-SA 3.0, and Kenney, CC0)
 scenes/      main.tscn -> world_map/world_map.tscn and castle/castle_view.tscn
 scripts/
   core/      main (switches map and castle), GameData, EventBus and Economy autoloads, map style
@@ -940,6 +973,28 @@ the owner's colour.
 The pictures on the castle's build bar and building panel are rendered from
 the same models by `tools/bake_portraits.tscn` (run it again after changing
 `CastleModels`). The main menu's Credits screen lists every pack used.
+
+## Music and sound
+
+The `Audio` autoload (`scripts/core/audio.gd`) plays a shuffled playlist for
+the title screen, the world map and the castle, and battle music while the
+attack screen is open, crossfading when you switch. The map and the castle
+each have a looping ambience (birdsong, a busy castle yard). Effects: every
+button clicks; picking a castle, camp, village or building has its own sound;
+placing, upgrading and cancelling buildings, training soldiers and starting
+research make a sound, and so do buildings and studies finishing; armies
+march off with a horn; battle reports open with clashing swords and a fanfare
+or a lament; an alarm sounds when your castle is besieged or (online) another
+player's army sets out for it; and a chime marks a chat message.
+
+Volume, music, sound effects and ambience each have a slider in Settings.
+
+The music, the ambience and most effects are from 0 A.D. by Wildfire Games
+(music by Omri Lahav), under CC BY-SA 3.0; the building placement sounds are
+from Kenney (CC0). `assets/audio/CREDITS.md` lists every file and where it
+comes from. To add a sound, drop an .ogg into `assets/audio/sfx/` and give it
+a name in `Audio.EFFECTS`; to add music, put it in `assets/audio/music/` and
+list it in `Audio.MUSIC`.
 Other CC0 packs that would fit:
 
 - Castles and walls: Kenney Castle Kit

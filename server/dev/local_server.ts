@@ -28,6 +28,7 @@ import {
 } from "../../supabase/functions/game/alliances.ts";
 import { chatView, MemoryChatStore, send as sendChat, type Speaker } from "../../supabase/functions/game/chat.ts";
 import { deliver, recall, type Aid, type AidRules } from "../../supabase/functions/game/aid.ts";
+import { goingRates, type MarketReport, type MarketRules, type Offer } from "../../supabase/functions/game/market.ts";
 import { invade } from "../../supabase/functions/game/invasion.ts";
 import { hordeArrives, prizeFor } from "../../supabase/functions/game/horde.ts";
 import { capitalBoost, resolveVillageRaid, type VillageTarget } from "../../supabase/functions/game/villages.ts";
@@ -48,6 +49,7 @@ const PLACES: VillageInfo[] = [...(world.villages ?? []), ...(world.capitals ?? 
 const pvp: PvpRules = json("data/pvp.json");
 const allianceRules: AllianceRules = json("data/alliances.json");
 const aidRules: AidRules = json("data/aid.json");
+const marketRules: MarketRules = json("data/market.json");
 const eventRules0: EventRules = json("data/events.json");
 const questRules: QuestRules = json("data/quests.json");
 const achievementRules: AchievementRules = json("data/achievements.json");
@@ -80,6 +82,9 @@ const raids: (Raid & { attacker: string; defender: string | null })[] = [];
 let nextRaid = 1;
 const aid: (Aid & { sender: string; receiver: string; state: "out" | "done" })[] = [];
 let nextAid = 1;
+// Offers at the market, with the same states as the market_offers table (index.ts).
+const offers: (Offer & { seller: string; state: string; buyer: string | null; buyer_name: string; sold_at: number | null })[] = [];
+let nextOffer = 1;
 const store = new MemoryAllianceStore(() => new Map([...players].map(([id, p]) => [id,
   { name: p.name, level: castleLevel(p.castle), might: might(p.castle, pvp) }])));
 const chat = new MemoryChatStore();
@@ -312,6 +317,40 @@ function report(user: string, r: { at: number }) {
   reports.push({ id: nextReport++, user, at: r.at, report: r });
 }
 
+// --- The market: the same as in index.ts, without the database -------------------
+
+const offerOf = ({ seller: _s, state: _st, buyer: _b, buyer_name: _bn, sold_at: _sa, ...o }: (typeof offers)[number]): Offer => o;
+
+function marketView(user: string) {
+  const t = now();
+  const mine = offers.filter((o) => o.seller === user).reverse();
+  return {
+    offers: offers.filter((o) => o.state === "open" && o.expires > t && o.seller !== user).reverse().slice(0, 200)
+      .map((o) => ({ ...offerOf(o), tag: tagOf(o.seller) })),
+    mine: mine.filter((o) => o.state === "open" && o.expires > t).map(offerOf),
+    sold: mine.filter((o) => o.state === "sold" || o.state === "paid").slice(0, 10)
+      .map((o) => ({ ...offerOf(o), buyer_name: o.buyer_name, sold_at: o.sold_at })),
+    rates: goingRates(offers.filter((o) => o.sold_at !== null).sort((a, b) => b.sold_at! - a.sold_at!).slice(0, 200)),
+  };
+}
+
+function collectMarket(user: string): { income: Record<string, number>; reports: MarketReport[] } {
+  const income: Record<string, number> = {};
+  const out: MarketReport[] = [];
+  for (const o of offers.filter((x) => x.seller === user)) {
+    if (o.state === "sold") {
+      o.state = "paid";
+      income[o.want] = (income[o.want] ?? 0) + o.proceeds;
+    } else if (o.state === "cancelled" || (o.state === "open" && o.expires <= now())) {
+      if (o.state === "open") out.push({ kind: "market", event: "expired", at: o.expires, give: o.give, give_amount: o.give_amount,
+        want: o.want, want_amount: o.want_amount });
+      o.state = "returned";
+      income[o.give] = (income[o.give] ?? 0) + o.give_amount;
+    }
+  }
+  return { income, reports: out };
+}
+
 // The same as resolveAid() in index.ts, without the database.
 function resolveAid(user: string) {
   for (const cart of aid.filter((a) => a.kind === "resources" && a.state === "out" && a.arrive <= now() &&
@@ -470,6 +509,7 @@ createServer(async (req, res) => {
       const error = body.action === "chat_send" ? await sendChat(chat, speaker(user), body, now()) : "";
       return send(res, 200, { ok: true, now: now(), error, result: await chatView(chat, speaker(user), body.after) });
     }
+    if (body.action === "market") return send(res, 200, { ok: true, now: now(), error: "", result: marketView(user) });
     if (typeof body.action === "string" && ALLIANCE_ORDERS.has(body.action)) {
       const error = await handle(store, allianceRules, user, body, now());
       return send(res, 200, { ok: true, now: now(), error, result: await allianceView(store, allianceRules, user) });
@@ -493,10 +533,30 @@ createServer(async (req, res) => {
       else Object.assign(a!, times);
       body.action = "state";
     }
+    // The same as the market orders in index.ts.
+    const marketOrder = ["post_offer", "buy_offer", "cancel_offer"].includes(String(body.action));
+    let marketError = "";
+    if (body.action === "cancel_offer") {
+      const o = offers.find((x) => x.id === Number(body.id) && x.seller === user && x.state === "open");
+      if (o) o.state = "cancelled";
+      else marketError = "That offer is gone.";
+      body.action = "state";
+    }
+    let bought: (typeof offers)[number] | undefined;
+    if (body.action === "buy_offer") {
+      bought = offers.find((x) => x.id === Number(body.id) && x.state === "open" && x.expires > now());
+      if (bought?.seller === user) marketError = "That's your own offer.";
+      else if (bought === undefined) marketError = "That offer is gone.";
+      if (marketError !== "") {
+        bought = undefined;
+        body.action = "state";
+      }
+    }
     resolveAid(user);
     resolveRaids(user);
     resolveVillageRaids();
     const villageIncome = collectVillages(user);
+    const market = collectMarket(user);
     let villageError = "";
     if (body.action === "recall_guard" || body.action === "abandon_village") {
       villageError = villageOrder(user, body);
@@ -522,9 +582,17 @@ createServer(async (req, res) => {
     const outcome = act(rules, me, body, t,
       { pvp, outpostSpot, target: target?.target, homecomings, alliances: allianceRules, aid: aidRules,
         events: { rules: eventRules, world, offset: EVENTS_OFFSET }, quests: questRules, achievements: achievementRules, village: village?.target, villageIncome,
-        capitalBoost: capitalBoost(rules, allianceCapitals(user).levels, allianceCapitals(user).guilds), fortresses: world.fortresses, hordeRank: hordePlace });
+        capitalBoost: capitalBoost(rules, allianceCapitals(user).levels, allianceCapitals(user).guilds), fortresses: world.fortresses, hordeRank: hordePlace,
+        market: { rules: marketRules, open: offers.filter((o) => o.seller === user && o.state === "open" && o.expires > t).length,
+          offer: bought ? offerOf(bought) : undefined }, marketIncome: market.income });
     players.set(user, outcome.state);
-    for (const r of outcome.reports) report(user, r);
+    for (const r of [...outcome.reports, ...market.reports, ...(outcome.marketReports ?? [])]) report(user, r);
+    if (outcome.offer) offers.push({ ...outcome.offer, id: nextOffer++, seller: user, state: "open", buyer: null, buyer_name: "", sold_at: null });
+    if (bought && outcome.error === "") {
+      Object.assign(bought, { state: "sold", buyer: user, buyer_name: outcome.state.name, sold_at: t });
+      report(bought.seller, { kind: "market", event: "sold", at: t, name: outcome.state.name, give: bought.give,
+        give_amount: bought.give_amount, want: bought.want, want_amount: bought.want_amount, proceeds: bought.proceeds } as MarketReport);
+    }
     if (outcome.capitalBuild && village) villages.set(village.target.info.id, { ...outcome.capitalBuild.state, holder: user });
     if (outcome.raid && village) {
       raids.push({ ...outcome.raid, id: nextRaid++, attacker: user, defender: outcome.raid.mission === "attack" ? village.holder : null });
@@ -538,7 +606,8 @@ createServer(async (req, res) => {
       if (outcome.error !== "") await store.remove(founded);
       result = await allianceView(store, allianceRules, user);
     }
-    return send(res, 200, view(user, outcome.state, { error: recalled || villageError || outcome.error, result }));
+    if (marketOrder) result = marketView(user);
+    return send(res, 200, view(user, outcome.state, { error: recalled || villageError || marketError || outcome.error, result }));
   }
   send(res, 404, { msg: "Not found" });
 }).listen(PORT, "127.0.0.1", () => console.log(`Local game server on http://127.0.0.1:${PORT}`));

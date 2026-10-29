@@ -155,6 +155,7 @@ func _claim(kind: String, index: int) -> void:
 		"chest":
 			reward = book.coffer_reward(int(castle.quests.keep), book.coffer_streak(castle))
 	var why := Economy.claim_quest(kind, index)
+	Audio.play("reward" if why == "" else "denied")
 	_status.add_theme_color_override("font_color", DONE if why == "" else Color(1.0, 0.55, 0.4))
 	_status.text = "Received: %s" % Economy.reward_text(reward) if why == "" else why
 	_signature = ""
