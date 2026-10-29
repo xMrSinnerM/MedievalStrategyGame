@@ -19,6 +19,8 @@ const DEFAULTS := {
 	"music_volume": 0.6,
 	"effects_volume": 0.8,
 	"ambience_volume": 0.6,
+	"notices": true,        ## cards for attacks and finished work (Notices)
+	"desktop_notices": true,   ## the same on the desktop while the game is in the background
 }
 
 var values := DEFAULTS.duplicate()

@@ -100,8 +100,23 @@ to the title screen, quit). Castles keep growing on the clock while paused,
 just as when the game is closed.
 
 Settings (fullscreen, vertical sync, shadows, ambient occlusion, 3D
-resolution and interface size) apply at once and are kept in
+resolution, interface size and notices) apply at once and are kept in
 `user://settings.cfg` by the `Settings` autoload.
+
+### Notices
+
+Small cards pop up in the bottom-right corner, on the map and in the castle,
+when something happens: another player's army sets out for your castle or
+village (with when it arrives), a lord besieges or storms one of your castles,
+you were attacked, a battle you sent an army to was fought, or a building,
+study, batch of soldiers or siege tools is finished. Click a card to dismiss
+it. While the game window is in the background the same notices also go to the
+desktop (a Windows toast through PowerShell, `notify-send` on Linux, a macOS
+notification) and the taskbar flashes. Both can be switched off in Settings.
+The `Notices` autoload shows them; `NoticeRules` works out what finished by
+comparing your castles before and after each economy tick, and the same event
+is only told once even when the server's answer repeats it. Nothing reaches you
+while the game is closed.
 
 ### Look
 
