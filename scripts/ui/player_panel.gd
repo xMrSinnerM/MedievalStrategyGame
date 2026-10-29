@@ -134,6 +134,9 @@ func _refresh() -> void:
 	_title.text = ("[%s] " % tag if tag != "" else "") + player_name
 	_picture.show_place(InfoPicture.faction_place("castle", player_name))
 	_level.text = "Player castle, level %d" % int(p.get("level", 1))
+	var title := Economy.title_of(p)
+	if title != "":
+		_level.text = "%s\n%s" % [Achievements.with_title(player_name, title), _level.text]
 	var lines: PackedStringArray = []
 	var shielded: bool = p.get("protected", false)
 	var small := Economy.too_small(int(p.get("level", 1)))

@@ -92,7 +92,7 @@ func castle_run(run: int) -> Dictionary:
 	var castle := CastleState.create_new(rules, "c%d" % run, "Castle %d" % run, "player", T0)
 	var t := T0
 	var steps: Array = []
-	var types := ["woodcutter", "quarry", "farm", "house", "barracks", "storehouse", "keep", "wall", "workshop"]
+	var types := ["woodcutter", "quarry", "farm", "house", "barracks", "storehouse", "keep", "wall", "workshop", "banner", "garden", "well"]
 	var tool_ids := rules.tools.keys()
 	var units := rules.units.keys()
 	for i in 220:
@@ -186,6 +186,7 @@ func castle_run(run: int) -> Dictionary:
 				step.daily.append(quest_book.daily_progress(castle, k))
 			step["coffer"] = quest_book.coffer_reward(int(castle.quests.keep), quest_book.coffer_streak(castle))
 			step["goals"] = quest_book.story.map(func(g: Dictionary) -> Array: return quest_book.progress(castle, g.goal))
+			step["order"] = [castle.public_order(), castle.net_per_hour()]
 		step["state"] = castle.to_dict()
 		steps.append(step)
 	return {"id": castle.id, "name": castle.castle_name, "t0": T0, "steps": steps}
@@ -456,7 +457,7 @@ func outpost_run() -> Dictionary:
 	checks["spot"] = outposts.check_found(main, false, "stone", null)
 	checks["ok"] = outposts.check_found(main, false, "stone", [1.0, 1.0])
 	var outpost := outposts.found(main, "stone", t)
-	var types := ["woodcutter", "quarry", "farm", "house", "barracks", "storehouse", "keep", "wall", "workshop"]
+	var types := ["woodcutter", "quarry", "farm", "house", "barracks", "storehouse", "keep", "wall", "workshop", "banner", "garden", "well"]
 	var steps: Array = []
 	var carts: Array = []
 	var next_cart := 1

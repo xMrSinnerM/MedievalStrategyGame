@@ -11,10 +11,12 @@ import { advanceMarches, sendAttack, type Army, type March, type Report } from "
 import { godotHash, type Dict } from "../../../server/rules/util.ts";
 import type { AllianceRules } from "./alliances.ts";
 import { checkShipment, type Aid, type AidRules } from "./aid.ts";
+import { checkBuy, checkOffer, proceedsFor, receive, type MarketReport, type MarketRules, type Offer } from "./market.ts";
 import { lastInvasion, type EventRules } from "../../../server/rules/events.ts";
 import { claimReward, eventPoints, invade, rewardTiers } from "./invasion.ts";
 import { buy, claimPrize, emptyHorde, hordeArrives, hordeScore, playerRun, type HordeState } from "./horde.ts";
 import { claimQuest, rollDay, type QuestRules } from "../../../server/rules/quests.ts";
+import { claimAchievement, note, setTitle, type AchievementRules } from "../../../server/rules/achievements.ts";
 import type { GearRules, Lead } from "../../../server/rules/gear.ts";
 import { deliverCarts, OUTPOST_ID, unload, type Cart, type OutpostData } from "../../../server/rules/outposts.ts";
 import { rulesFor, type VillageInfo, type VillageState } from "../../../server/rules/villages.ts";
@@ -86,6 +88,8 @@ export interface Raid {
   state: "out" | "fighting" | "home" | "done";
   survivors: Dict;
   loot: Dict;
+  /** Set once an attack on a player's castle is fought: whether the attackers won. */
+  won?: boolean;
 }
 
 /** Another player an order is aimed at, as index.ts found them. */
@@ -132,6 +136,8 @@ export interface Homecoming {
   loot: Dict;
   /** The commander who led the army, with the xp the battle earned. */
   lead?: Lead;
+  /** The army won its battle against another player's castle. */
+  won?: boolean;
 }
 
 /** What act() needs besides the player: other players and armies coming home. */
@@ -146,6 +152,8 @@ export interface Context {
   events?: { rules: EventRules; world: World; offset?: number };
   /** The story quests and daily tasks (data/quests.json). */
   quests?: QuestRules;
+  /** Achievements and titles (data/achievements.json). */
+  achievements?: AchievementRules;
   /** For "found_outpost": the free spot nearest your home, or null when there is none. */
   outpostSpot?: [number, number] | null;
   /** For "attack_village", "station" and "build_capital": the village (or capital) named. */
@@ -158,6 +166,10 @@ export interface Context {
   capitalBoost?: Dict;
   /** For "claim_horde_prize": your rank among the players of your last Ember Horde (index.ts counts it). */
   hordeRank?: number;
+  /** The market (data/market.json), with how many offers you have up and, for "buy_offer", the offer named. */
+  market?: { rules: MarketRules; open?: number; offer?: Offer };
+  /** Proceeds of your sales and goods back from your offers since the last request (market.ts). */
+  marketIncome?: Dict;
 }
 
 export interface World {
@@ -200,6 +212,10 @@ export interface Outcome {
   aid?: Omit<Aid, "id">;
   /** For "build_capital": the capital's state with the building going up, and what it cost, for index.ts to store. */
   capitalBuild?: { state: VillageState; cost: Dict };
+  /** For "post_offer": the offer put up at the market, for index.ts to store. */
+  offer?: Omit<Offer, "id">;
+  /** Market news for you: what you bought, what your storage couldn't hold. */
+  marketReports?: MarketReport[];
 }
 
 export const NAME_RULE = /^[\p{L}\p{N}][\p{L}\p{N} _'-]{1,18}[\p{L}\p{N}]$/u;
@@ -335,13 +351,20 @@ export function act(rules: Rules, given: PlayerState, req: Request, now: number,
   }
   castle.advanceTo(now);
   if (ctx.villageIncome) unload(castle, ctx.villageIncome);
+  const marketReports: MarketReport[] = [];
+  if (ctx.marketIncome) {
+    const lost = receive(castle, ctx.marketIncome);
+    if (Object.keys(lost).length > 0) marketReports.push({ kind: "market", event: "spilled", at: now, lost });
+  }
   rules.gear.sync(castle);
   if (ctx.quests) rollDay(castle, ctx.quests, now);
+  if (ctx.achievements) note(castle, ctx.achievements, true);
   let error = "";
   let result: unknown = undefined;
   let raid: Omit<Raid, "id"> | undefined;
   let aid: Omit<Aid, "id"> | undefined;
   let capitalBuild: Outcome["capitalBuild"];
+  let offer: Omit<Offer, "id"> | undefined;
   let protectedUntil = stored.protected_until ?? 0;
   let claimed = stored.event_claimed ?? 0;
   switch (req.action) {
@@ -606,12 +629,43 @@ export function act(rules: Rules, given: PlayerState, req: Request, now: number,
       error = claimPrize(castle, horde, score.horde_points ?? 0, run, ctx.hordeRank ?? 0, now);
       break;
     }
+    case "post_offer": {
+      // The goods leave your castle for the market; index.ts puts the offer up.
+      const m = ctx.market;
+      error = m ? checkOffer(castle, m.rules, req, m.open ?? 0) : "Unknown order.";
+      if (error !== "" || m === undefined) break;
+      castle.resources[req.give] -= req.give_amount;
+      offer = { seller_name: stored.name, give: req.give, give_amount: req.give_amount, want: req.want,
+        want_amount: req.want_amount, proceeds: proceedsFor(m.rules, req.want_amount), posted: now,
+        expires: now + m.rules.offer_hours * 3600 };
+      break;
+    }
+    case "buy_offer": {
+      // index.ts has already taken the offer for you; pay for it and unload the goods.
+      const m = ctx.market;
+      error = m ? checkBuy(castle, m.rules, m.offer, stored.name, now) : "Unknown order.";
+      if (error !== "" || m?.offer === undefined) break;
+      const o = m.offer;
+      castle.resources[o.want] -= o.want_amount;
+      castle.resources[o.give] += o.give_amount;
+      marketReports.push({ kind: "market", event: "bought", at: now, name: o.seller_name, give: o.give, give_amount: o.give_amount,
+        want: o.want, want_amount: o.want_amount });
+      break;
+    }
     case "claim_quest":
       error = ctx.quests ? claimQuest(castle, ctx.quests, req.kind, req.index, now) : "Unknown order.";
+      break;
+    case "claim_achievement":
+      error = ctx.achievements ? claimAchievement(castle, ctx.achievements, req.id, true) : "Unknown order.";
+      break;
+    case "set_title":
+      error = ctx.achievements ? setTitle(castle, ctx.achievements, req.title) : "Unknown order.";
       break;
     default:
       error = "Unknown order.";
   }
+  // Tiers reached before and after the order are earned for good, even if the count falls again later.
+  if (ctx.achievements) note(castle, ctx.achievements, true);
   return {
     state: {
       ...stored,
@@ -632,6 +686,8 @@ export function act(rules: Rules, given: PlayerState, req: Request, now: number,
     raid,
     aid,
     ...(capitalBuild ? { capitalBuild } : {}),
+    ...(offer ? { offer } : {}),
+    ...(marketReports.length > 0 ? { marketReports } : {}),
   };
 }
 
@@ -654,6 +710,7 @@ function checkArmy(castle: CastleState, army: Dict): string {
 function comeHomeFromRaid(gear: GearRules, castle: CastleState, raid: Homecoming): void {
   castle.advanceTo(raid.back);
   if (raid.lead?.xp && raid.lead.id > 0) gear.addXp(castle, raid.lead.id, raid.lead.xp);
+  if (raid.won) castle.stats.pvp_won += 1;
   for (const unit of Object.keys(raid.survivors)) {
     if (castle.rules.hasUnit(unit)) castle.troops[unit] = (castle.troops[unit] ?? 0) + raid.survivors[unit];
   }
@@ -707,6 +764,7 @@ export function fightRaid(rules: Rules, pvp: PvpRules, stored: PlayerState, raid
   const result = siege(rules.buildings, raid.waves ?? autoWaves(raid.army), defenders, castle.layout, raid.id * 7919 + godotHash(raid.defender_name),
     wall, { a: raid.tools ?? {}, b: castle.defenceTools, lead_a: raid.lead?.fx ?? {}, lead_b: rules.gear.castellanEffects(castle) });
   if (result.tools) castle.loseDefenceTools(result.tools.lost);
+  if (result.winner === "b") castle.stats.pvp_held += 1;
   const before = { ...castle.troops };
   for (const unit of Object.keys(result.b)) shareLosses(groups, unit, result.b[unit].lost);
   const healed = castle.heal(before);

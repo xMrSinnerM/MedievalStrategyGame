@@ -1,0 +1,11 @@
+{
+	"_comment": "The market online: players trade wood, stone and food with each other. A seller posts an offer (give some of one good, want some of another); the goods leave their castle and wait at the market until a buyer takes the whole offer, the seller cancels it, or it runs out after offer_hours (then they come back). The buyer pays what the offer wants and gets the goods at once, if their storage has room for them. The seller gets what the buyer paid minus the market's cut (fee, rounded up), with their next request; what their storage can't hold then is lost. Both need keep level unlock_keep. One offer gives at most lot_per_keep_level times the seller's keep level, a player has at most max_offers open at once, and every offer's price (wanted per given) lies between min_rate and max_rate, so the market can't be used to hand resources to another account for nothing.",
+	"goods": ["wood", "stone", "food"],
+	"unlock_keep": 2,
+	"lot_per_keep_level": 1000,
+	"max_offers": 5,
+	"min_rate": 0.5,
+	"max_rate": 2.0,
+	"fee": 0.05,
+	"offer_hours": 48
+}

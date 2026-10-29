@@ -21,6 +21,7 @@ var _coffer: Label
 var _coffer_claim: Button
 var _status: Label
 var _signature := ""
+var achievements: Control   ## the achievements panel, opened from the header; set by the HUD
 
 
 func _ready() -> void:
@@ -37,6 +38,15 @@ func _ready() -> void:
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(title)
+	var open_achievements := Button.new()
+	open_achievements.text = "Achievements (Y)"
+	open_achievements.focus_mode = Control.FOCUS_NONE
+	open_achievements.add_theme_font_size_override("font_size", 15)
+	open_achievements.pressed.connect(func() -> void:
+		if achievements != null:
+			close_panel()
+			achievements.open_panel())
+	head.add_child(open_achievements)
 	var close := Button.new()
 	close.text = "×"
 	close.focus_mode = Control.FOCUS_NONE
@@ -147,6 +157,7 @@ func _claim(kind: String, index: int) -> void:
 		"chest":
 			reward = book.coffer_reward(int(castle.quests.keep), book.coffer_streak(castle))
 	var why := Economy.claim_quest(kind, index)
+	Audio.play("reward" if why == "" else "denied")
 	_status.add_theme_color_override("font_color", DONE if why == "" else Color(1.0, 0.55, 0.4))
 	_status.text = "Received: %s" % Economy.reward_text(reward) if why == "" else why
 	_signature = ""

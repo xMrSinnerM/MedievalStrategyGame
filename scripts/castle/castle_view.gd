@@ -110,6 +110,7 @@ func start_placing(type: String) -> void:
 	var reason := castle.check_build(type)
 	if reason != "":
 		message.emit(reason)
+		Audio.play("denied")
 		return
 	placing_type = type
 	select(-1)
@@ -132,7 +133,9 @@ func upgrade_selected() -> void:
 	var reason := castle.check_upgrade(selected)
 	if reason != "" or not castle.upgrade(selected, Economy.now()):
 		message.emit(reason if reason != "" else "Can't upgrade that now")
+		Audio.play("denied")
 		return
+	Audio.play("place")
 	_tell_server({"action": "upgrade", "id": selected})
 	_after_order()
 
@@ -144,6 +147,7 @@ func cancel_selected() -> void:
 	var was_new: bool = not b.is_empty() and b.level == 0
 	if castle.cancel(selected, Economy.now()):
 		_tell_server({"action": "cancel", "id": selected})
+		Audio.play("remove")
 		message.emit("Construction cancelled, %d%% of the cost refunded" % int(CastleState.CANCEL_REFUND * 100.0))
 		if was_new:
 			select(-1)
@@ -156,7 +160,9 @@ func recruit(unit: String, amount: int) -> void:
 	var reason := castle.check_recruit(unit, amount)
 	if reason != "" or not castle.recruit(unit, amount, Economy.now()):
 		message.emit(reason if reason != "" else "Can't train them now")
+		Audio.play("denied")
 		return
+	Audio.play("recruit")
 	_tell_server({"action": "recruit", "unit": unit, "amount": amount})
 	Economy.changed.emit()
 
@@ -174,7 +180,9 @@ func craft(tool: String, amount: int) -> void:
 	var reason := castle.check_craft(tool, amount)
 	if reason != "" or not castle.craft(tool, amount, Economy.now()):
 		message.emit(reason if reason != "" else "Can't build them now")
+		Audio.play("denied")
 		return
+	Audio.play("place")
 	_tell_server({"action": "craft", "tool": tool, "amount": amount})
 	Economy.changed.emit()
 
@@ -192,7 +200,9 @@ func research(study: String) -> void:
 	var reason := castle.check_research(study)
 	if reason != "" or not castle.start_research(study, Economy.now()):
 		message.emit(reason if reason != "" else "Can't research that now")
+		Audio.play("denied")
 		return
+	Audio.play("research")
 	_tell_server({"action": "research", "study": study})
 	message.emit("The scholars begin on %s" % castle.rules.study_name(study))
 	Economy.changed.emit()
@@ -262,7 +272,9 @@ func _click(screen_pos: Vector2) -> void:
 			var reason := castle.check_place(placing_type, cell)
 			if reason != "":
 				message.emit(reason)
+				Audio.play("denied")
 				return
+			Audio.play("place")
 			var id := castle.place(placing_type, cell, Economy.now())
 			_tell_server({"action": "place", "type": placing_type, "cell": [cell.x, cell.y]})
 			_set_mode(Mode.SELECT)
@@ -272,13 +284,20 @@ func _click(screen_pos: Vector2) -> void:
 			var cell := _footprint_cell(placing_type, point)
 			if not castle.move(selected, cell):
 				message.emit("There's no room there")
+				Audio.play("denied")
 				return
+			Audio.play("place")
 			_tell_server({"action": "move", "id": selected, "cell": [cell.x, cell.y]})
 			_set_mode(Mode.SELECT)
 			_after_order()
 			select(selected)
 		_:
-			select(building_at(point))
+			var id := building_at(point)
+			if id >= 0 and id != selected:
+				var b := castle.get_building(id)
+				if Audio.has_effect("select_" + String(b.get("type", ""))):
+					Audio.play("select_" + String(b.type))
+			select(id)
 
 
 func _tell_server(order: Dictionary) -> void:

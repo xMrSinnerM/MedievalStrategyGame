@@ -25,6 +25,9 @@ var branches: Dictionary = {}    ## research branch id -> name
 var study_cost_growth := 1.8
 var study_time_growth := 2.0
 var time_per_academy_level := 0.94
+var order_per_point := 0.002    ## production change per point of public order
+var order_max_bonus := 0.3
+var order_max_penalty := 0.3
 
 
 static func load_default() -> BuildingRules:
@@ -55,6 +58,10 @@ func load_from(data: Dictionary) -> void:
 	study_cost_growth = float(research.get("cost_growth", 1.8))
 	study_time_growth = float(research.get("time_growth", 2.0))
 	time_per_academy_level = float(research.get("time_per_academy_level", 0.94))
+	var order: Dictionary = data.get("public_order", {})
+	order_per_point = float(order.get("per_point", 0.002))
+	order_max_bonus = float(order.get("max_bonus", 0.3))
+	order_max_penalty = float(order.get("max_penalty", 0.3))
 
 
 func load_units(data: Dictionary) -> void:
@@ -129,6 +136,24 @@ func defense(type: String, level: int) -> float:
 	if level <= 0 or not def.has("defense"):
 		return 0.0
 	return float(def.defense) * pow(float(def.get("defense_growth", 1.5)), level - 1)
+
+
+func is_decoration(type: String) -> bool:
+	return types[type].get("category", "") == "decoration"
+
+
+func order(type: String, level: int) -> float:
+	## Public order this building gives (decorations, the keep) or takes away
+	## (everything else crowds the castle). Nothing while first being built.
+	var def: Dictionary = types[type]
+	if level <= 0 or not def.has("order"):
+		return 0.0
+	return roundf(float(def.order) * pow(float(def.get("order_growth", 1.0)), level - 1))
+
+
+func order_bonus(public_order: float) -> float:
+	## How much more (or less, below zero) every resource is produced at this public order.
+	return clampf(public_order * order_per_point, -order_max_penalty, order_max_bonus)
 
 
 func builders(keep_level: int) -> int:

@@ -64,6 +64,10 @@ func _ready() -> void:
 	custom_minimum_size = Vector2(1000, 0)
 	visible = false
 	add_to_group("tutorial_window")
+	# Battle music while the attack screen is open.
+	visibility_changed.connect(func() -> void: Audio.set_battle(is_visible_in_tree()))
+	tree_exiting.connect(func() -> void: Audio.set_battle(false))
+	tree_entered.connect(func() -> void: Audio.set_battle(visible))
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 12)
 	add_child(box)
@@ -941,6 +945,7 @@ func _send_army() -> void:
 		_note.visible = true
 		return
 	close_panel()
+	Audio.play("march")
 	if _village != "":
 		EventBus.village_selected.emit("")
 	elif _player != "":

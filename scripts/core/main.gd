@@ -32,6 +32,7 @@ func _ready() -> void:
 	tutorial.main = self
 	add_child(tutorial)
 	pause_menu.tutorial_requested.connect(tutorial.replay)
+	Audio.set_mood("menu")
 
 
 func in_game() -> bool:
@@ -50,6 +51,7 @@ func start_game(slot: int, new_game: bool) -> void:
 	add_child(world_map)
 	main_menu.visible = false
 	tutorial.begin(new_game)
+	Audio.set_mood("map")
 
 
 func start_online(answer: Dictionary) -> void:
@@ -65,6 +67,7 @@ func start_online(answer: Dictionary) -> void:
 	add_child(world_map)
 	main_menu.visible = false
 	tutorial.begin(false)
+	Audio.set_mood("map")
 
 
 func show_main_menu() -> void:
@@ -76,6 +79,7 @@ func show_main_menu() -> void:
 	_free_screens()
 	main_menu.refresh()
 	main_menu.visible = true
+	Audio.set_mood("menu")
 
 
 func show_castle(castle_id: String) -> void:
@@ -102,6 +106,7 @@ func _open_castle(castle: CastleState, glimpse: bool) -> void:
 	if not castle_view.is_inside_tree():
 		add_child(castle_view)
 	castle_view.open(castle, glimpse)
+	Audio.set_mood("castle")
 
 
 func show_world_map() -> void:
@@ -111,6 +116,7 @@ func show_world_map() -> void:
 		remove_child(castle_view)
 	if not world_map.is_inside_tree():
 		add_child(world_map)
+	Audio.set_mood("map")
 
 
 func _unhandled_input(event: InputEvent) -> void:

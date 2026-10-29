@@ -11,6 +11,9 @@ const T0 := 1_000_000.0
 
 func _initialize() -> void:
 	rules = BuildingRules.load_default()
+	# Most tests check plain production numbers, so public order leaves
+	# production alone here; test_public_order uses the real rules.
+	rules.order_per_point = 0.0
 	test_new_castle()
 	test_production_and_cap()
 	test_construction()
@@ -46,6 +49,9 @@ func _initialize() -> void:
 	test_looking_around()
 	test_research()
 	test_research_in_battle()
+	test_public_order()
+	test_achievements()
+	test_notices()
 	print("%d checks, %d failed" % [checks, failures])
 	quit(1 if failures > 0 else 0)
 
@@ -1387,3 +1393,159 @@ func test_research_in_battle() -> void:
 	eco.delete_slot(1)
 	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://test_saves"))
 	eco.free()
+
+
+func test_public_order() -> void:
+	var real := BuildingRules.load_default()
+	var c := CastleState.create_new(real, "order", "Order", "player", T0)
+	# A new castle: the keep's order, less a woodcutter and a farm crowding it.
+	var start_order := real.order("keep", 1) + real.order("woodcutter", 1) + real.order("farm", 1)
+	near(c.public_order(), start_order, "a new castle's public order")
+	check(start_order > 0.0, "a new castle starts content (%d)" % start_order)
+	near(c.production_per_hour().wood, 40.0 * (1.0 + start_order * real.order_per_point), "content townsfolk produce a little more")
+	check(real.is_decoration("banner") and not real.is_decoration("house"), "banners are decorations, houses aren't")
+	check(real.order("house", 1) < 0.0 and real.order("house", 5) == real.order("house", 1), "a house crowds the castle the same at any level")
+	check(real.order("garden", 2) > real.order("garden", 1), "a better garden pleases more")
+	near(real.order_bonus(10000.0), real.order_max_bonus, "the bonus has a ceiling")
+	near(real.order_bonus(-10000.0), -real.order_max_penalty, "and so does the penalty")
+	# Building a decoration: nothing until it is finished.
+	c.resources = {"wood": 5000.0, "stone": 5000.0, "food": 5000.0, "gold": 5000.0}
+	var banner := c.place("banner", Vector2i(0, 0), T0)
+	check(banner > 0, "a banner pole placed")
+	near(c.public_order(), start_order, "a decoration counts only once built")
+	c.advance_to(T0 + real.build_time("banner", 1))
+	near(c.public_order(), start_order + real.order("banner", 1), "the finished banner raises public order")
+	check(c.check_build("tavern") == "Needs keep level 4", "a tavern needs keep level 4")
+	# A crowded castle produces less.
+	for k in 8:
+		c._add_building("house", 1, Vector2i(2 * k, 20))
+	check(c.public_order() < 0.0, "eight more houses crowd the castle (%d)" % c.public_order())
+	near(c.order_bonus(), c.public_order() * real.order_per_point, "and lower production")
+	var wood: float = c.production_per_hour().wood
+	var plain := 40.0
+	check(wood < plain, "a crowded castle cuts less wood (%.1f/h)" % wood)
+	# The NPC lords decorate a crowded castle first.
+	var npc := CastleState.create_new(real, "npc", "NPC", "aldmere", T0)
+	for k in 8:
+		npc._add_building("house", 1, Vector2i(2 * k, 20))
+	var order := NpcBrain.choose(npc)
+	var type: String = order.get("type", npc.get_building(int(order.get("id", -1))).get("type", ""))
+	check(real.is_decoration(type), "an NPC with an unhappy castle builds a decoration (%s)" % type)
+	# Saved castles keep their decorations.
+	var copy := CastleState.from_dict(real, JSON.parse_string(JSON.stringify(c.to_dict())))
+	near(copy.public_order(), c.public_order(), "public order survives a save")
+
+
+func test_achievements() -> void:
+	var book := Achievements.load_default()
+	check(book.list.size() == 13 and book.rewards.size() == 3 and book.points.size() == 3, "13 achievements in 3 tiers")
+	for def: Dictionary in book.list:
+		check(def.needs.size() == 3 and def.titles.size() == 3, "%s has 3 tiers and 3 titles" % def.id)
+		check(int(def.needs[0]) < int(def.needs[1]) and int(def.needs[1]) < int(def.needs[2]), "%s grows tier by tier" % def.id)
+	check(book.shown(false).size() == 11 and book.shown(true).size() == 13, "the player-versus-player ones only online")
+	var c := fresh()
+	check(book.note(c, false).is_empty(), "a new castle has earned nothing")
+	check(book.check_claim(c, "keep") == "You haven't earned that yet.", "nothing to claim yet")
+	check(book.check_claim(c, "nope") == "There's no such achievement.", "unknown achievement")
+	check(book.set_title(c, "keep:1") == "You haven't earned that title yet.", "no title before it's earned")
+	check(book.set_title(c, "keep:9") == "There's no such title.", "no such tier")
+	# The keep reaches level 4: two tiers at once.
+	for b in c.buildings:
+		if b.type == "keep":
+			b.level = 4
+	check(book.note(c, false) == [["keep", 1], ["keep", 2]], "keep level 4 earns bronze and silver")
+	check(book.score(c) == 35, "10 + 25 points")
+	var wood: float = c.resources.wood
+	c.resources.stone = c.storage_capacity()
+	check(book.claim(c, "keep", false) == "", "bronze can be claimed")
+	near(c.resources.wood, wood + 300.0, "its reward")
+	near(c.resources.stone, c.storage_capacity() + 300.0, "in full, past the cap")
+	check(book.claim(c, "keep", false) == "", "then silver")
+	check(book.claim(c, "keep", false) == "You already have that reward.", "each reward once")
+	check(book.set_title(c, "keep:2") == "" and book.shown_title(c) == "the Castellan", "an earned title can be shown")
+	check(Achievements.with_title("Valentin", "the Castellan") == "Valentin the Castellan", "names with titles")
+	check(Achievements.with_title("Valentin", "Baron-Breaker") == "Valentin, Baron-Breaker", "titles without 'the'")
+	# A count that falls again keeps what it earned.
+	c.troops["spearman"] = 60
+	check(book.note(c, false) == [["garrison", 1]], "50 soldiers at home")
+	c.troops["spearman"] = 0
+	book.note(c, false)
+	check(book.earned(c, "garrison") == 1 and book.claim(c, "garrison", false) == "", "still earned when they've left")
+	# Online-only ones count online, from the castle's stats.
+	c.stats.pvp_won = 10
+	check(book.note(c, false).is_empty(), "offline, battles against players don't count")
+	check(book.note(c, true) == [["conqueror", 1], ["conqueror", 2]], "online they do")
+	# Saved with the castle; old saves have earned nothing.
+	var saved := CastleState.from_dict(rules, JSON.parse_string(JSON.stringify(c.to_dict())))
+	check(saved.achievements.tiers.get("keep", 0) == 2 and saved.achievements.claimed.get("keep", 0) == 2
+		and saved.achievements.title == "keep:2" and int(saved.stats.pvp_won) == 10, "achievements are saved")
+	var old := c.to_dict()
+	old.erase("achievements")
+	check(CastleState.from_dict(rules, old).achievements.tiers.is_empty(), "old saves have earned nothing yet")
+	check(book.set_title(c, "") == "" and book.shown_title(c) == "", "the title can be taken off")
+	# Offline, the economy claims, sets the title and saves.
+	var eco = load("res://scripts/core/economy.gd").new()
+	eco.save_dir = "user://test_saves"
+	eco.begin_new(1)
+	check(eco.claim_achievement("keep") != "", "nothing to claim in a new game")
+	for b in eco.player_castle.buildings:
+		if b.type == "keep":
+			b.level = 2
+	var news := []
+	eco.achievement_news.connect(func(text: String) -> void: news.append(text))
+	eco.achievements.note(eco.player_castle, false)
+	eco._announce_achievements()
+	check(news.size() == 1 and news[0].contains("Lord of the Keep (Bronze)"), "the news tells of it: %s" % [news])
+	check(eco.claim_achievement("keep") == "", "the economy claims it")
+	check(eco.set_title("keep:1") == "" and eco.my_title() == "the Landed", "and shows the title")
+	eco.free()
+
+
+func test_notices() -> void:
+	# Finished work is found by comparing a castle before and after.
+	var c := scholar()
+	var b := with_barracks()
+	var id := c.place("farm", Vector2i(18, 0), T0)
+	check(c.upgrade(1, T0), "the keep goes up")
+	check(c.start_research("forestry", T0), "a study starts")
+	var before := NoticeRules.snapshot(c)
+	check(NoticeRules.changes(rules, before, NoticeRules.snapshot(c), true).is_empty(), "nothing finished, nothing to tell")
+	c.advance_to(T0 + 1_000_000.0)
+	var told := NoticeRules.changes(rules, before, NoticeRules.snapshot(c), true)
+	var texts := told.map(func(n: Dictionary) -> String: return n.text)
+	check(texts.has("Your new Farm is built"), "a new building: %s" % [texts])
+	check(texts.has("Keep reached level 4"), "an upgrade: %s" % [texts])
+	check(texts.has("Forestry reached level 1"), "a study: %s" % [texts])
+	check(NoticeRules.changes(rules, NoticeRules.snapshot(c), NoticeRules.snapshot(c), true).is_empty(), "and only once")
+	# A cancelled build is not news.
+	check(c.upgrade(id, c.last_update), "the farm goes up")
+	before = NoticeRules.snapshot(c)
+	check(c.cancel(id, c.last_update), "and is cancelled")
+	check(NoticeRules.changes(rules, before, NoticeRules.snapshot(c), true).is_empty(), "cancelling tells nothing")
+	# Soldiers: one notice when a batch is done, none for a cancelled one.
+	var t := T0 + 60.0
+	check(b.recruit("spearman", 2, t) and b.recruit("spearman", 3, t), "two batches queued")
+	before = NoticeRules.snapshot(b)
+	b.advance_to(t + 45.0)
+	told = NoticeRules.changes(rules, before, NoticeRules.snapshot(b), false)
+	check(told.size() == 1 and told[0].text == "Test: Your Spearmen have finished training", "the first batch is ready: %s" % [told])
+	before = NoticeRules.snapshot(b)
+	check(b.cancel_training(0, t + 45.0), "the second is cancelled")
+	check(NoticeRules.changes(rules, before, NoticeRules.snapshot(b), false).is_empty(), "cancelled soldiers tell nothing")
+	# The server's copy of the same castle gives the same keys.
+	check(b.recruit("spearman", 1, t + 50.0), "one more")
+	before = NoticeRules.snapshot(b)
+	var server := CastleState.from_dict(rules, JSON.parse_string(JSON.stringify(b.to_dict())))
+	b.advance_to(t + 100.0)
+	server.advance_to(t + 100.0)
+	check(NoticeRules.changes(rules, before, NoticeRules.snapshot(b), true)[0].key
+			== NoticeRules.changes(rules, before, NoticeRules.snapshot(server), true)[0].key, "the same key either way")
+	# The desktop commands.
+	var win := NoticeRules.desktop_command("Windows", "Attack!", "Bob's army <arrives> in 5:00")
+	check(win[0] == "powershell.exe" and win[1].has("-EncodedCommand"), "Windows uses a PowerShell toast")
+	var script: String = Marshalls.base64_to_raw(win[1][-1]).get_string_from_utf16()
+	check(script.contains("Bob&apos;s army &lt;arrives&gt; in 5:00"), "the text is escaped for XML and PowerShell: %s" % script)
+	check(NoticeRules.desktop_command("Linux", "A", "B") == ["notify-send", ["--app-name=Medieval Strategy", "A", "B"]], "Linux uses notify-send")
+	var mac := NoticeRules.desktop_command("macOS", "Say \"hi\"", "x")
+	check(mac[0] == "osascript" and mac[1][1] == "display notification \"x\" with title \"Say \\\"hi\\\"\"", "macOS: %s" % [mac])
+	check(NoticeRules.desktop_command("Web", "A", "B").is_empty(), "nothing elsewhere")

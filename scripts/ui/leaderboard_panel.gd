@@ -102,7 +102,7 @@ func _fill() -> void:
 		var color := ME if String(p.name) == my_name else MenuStyle.TEXT
 		_grid.add_child(_cell(str(rank), color, 16, true))
 		var tag := String(p.get("tag", ""))
-		var who := _cell(("[%s] " % tag if tag != "" else "") + String(p.name), color, 16, false)
+		var who := _cell(("[%s] " % tag if tag != "" else "") + Achievements.with_title(String(p.name), Economy.title_of(p)), color, 16, false)
 		who.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		_grid.add_child(who)
 		_grid.add_child(_cell(str(int(p.get("level", 1))), color, 16, true))

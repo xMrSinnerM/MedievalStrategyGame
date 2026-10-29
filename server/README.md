@@ -126,11 +126,38 @@ index.ts, ties share a place). `horde_board` lists the most horde points,
 the asking player's rank and the prize it earns. Migration
 `20261026120000_ember_horde.sql` adds the columns.
 
+Alliance wars (`supabase/functions/game/wars.ts`, `data/wars.json`) run in
+weekly seasons (Monday 00:00 UTC to the next). Alliances win war points with
+the capitals, as rows of `war_points` (season, alliance, capital, kind,
+points): every request first gives each capital's holder's alliance its
+`hold` points up to the start of the hour (`scoreCapitals()` in index.ts;
+`villages.scored_at` is up to when, moved only by the request that counts
+it), taking a capital gives `capture` points once per capital, alliance and
+season, and holding one against another player gives `defence` points for
+the attackers who fell. The view `war_standings` adds them up per season and
+alliance. `war_board` answers with this season's and the last season's
+standings, who holds each capital, the player's alliance and the prize they
+can claim; `claim_war_prize` gives every member of a ranked alliance its
+prize for the last season once (`players.war_claimed`), if they were in the
+alliance before that season ended. Migration
+`20261029120000_alliance_wars.sql` adds the table, view and columns. The
+local server's `WAR_DAYS` makes seasons shorter for testing.
+
 Quests (`server/rules/quests.ts`, `data/quests.json`) live in the castle's
 own JSON (`quests`, with lifetime counts in `stats`), so they need no column
 of their own. Every request starts a new day's daily tasks once the UTC day
 turns, and `claim_quest` gives the story quest's, a daily task's or the
 coffer's reward when it is done.
+
+Achievements (`server/rules/achievements.ts`, `data/achievements.json`) live
+in the castle's JSON as well (`achievements`: tiers earned, tiers claimed and
+the title shown). Every request notes the tiers reached, before and after its
+order; `claim_achievement` gives an achievement's next earned reward and
+`set_title` shows an earned title ("id:tier", or "" for none). `world` and
+`leaderboard` list each player's `title` (read from the castle JSON). The
+castle's `stats` count battles won against players' castles (`pvp_won`, when
+the army is home, from the `won` column of `raids`, migration
+`20261026150000_raid_won.sql`) and attacks held off (`pvp_held`).
 
 Siege tools are in the castle's JSON too (`tools` in store, `crafting`, and
 `defence_tools` posted on the walls). Orders: `craft` and `cancel_crafting`

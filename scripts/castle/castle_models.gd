@@ -58,6 +58,36 @@ static func build(type: String, level: int, size: Vector2i, constructing: bool, 
 			_put(kit, "crate_open", Vector3(2.0, 0, 2.1), 1.4)
 			if level >= 5:
 				_put(kit, "building_tower_A_blue", Vector3(2.2, 0, -1.9), 1.3 + 0.05 * level)
+		"banner":
+			# Turned so the cloth faces the camera's usual angle.
+			_put(kit, "flag_blue", Vector3(-0.2, 0, -0.2), 6.0 + 0.3 * level, PI * 0.5)
+			_put(kit, "rock_single_A", Vector3(-0.2, 0, -0.2), 0.9)
+			if level >= 3:
+				_put(kit, "bucket_water", Vector3(0.55, 0, 0.55), 1.6)
+		"garden":
+			# Leafy beds around a round little tree, fenced along the front.
+			_put(kit, "tree_single_B", Vector3(0, 0, -0.4), 1.5 + 0.08 * level)
+			for spot: Vector3 in [Vector3(-1.1, 0, -1.1), Vector3(1.1, 0, -1.1), Vector3(-1.1, 0, 0.8), Vector3(1.1, 0, 0.8)]:
+				_put(kit, "waterplant_A" if spot.x < 0.0 else "waterplant_B", spot, 4.0)
+			_put_s(kit, "fence_wood_straight", Vector3(0, 0, 1.3), PI * 0.5, Vector3(1.4, 1.4, 1.7))
+			if level >= 3:
+				_put(kit, "waterplant_C", Vector3(0, 0, 0.8), 4.0)
+		"well":
+			_put(kit, "building_well_blue", Vector3(-0.2, 0, -0.2), 3.2 + 0.12 * level)
+			_put(kit, "bucket_water", Vector3(1.3, 0, 1.2), 2.0)
+			if level >= 3:
+				_put(kit, "barrel", Vector3(-1.3, 0, 1.3), 1.8)
+		"grove":
+			_put(kit, "trees_A_medium", Vector3(-0.3, 0, -0.4), 3.4 + 0.12 * level)
+			_put(kit, "tree_single_B", Vector3(-2.0, 0, 1.9), 2.8)
+			_put(kit, "rock_single_C", Vector3(1.9, 0, 1.8), 1.8)
+			if level >= 3:
+				_put(kit, "tree_single_A", Vector3(2.0, 0, -1.9), 2.6)
+		"tavern":
+			_put(kit, "building_tavern_blue", Vector3(0, 0, -0.4), 3.4 + 0.06 * level)
+			_put(kit, "barrel", Vector3(-2.2, 0, 2.1), 1.4)
+			_put(kit, "barrel", Vector3(-1.4, 0, 2.4), 1.3)
+			_put(kit, "crate_A_small", Vector3(2.1, 0, 2.1), 1.3)
 		_:
 			_put(kit, "crate_A_big", Vector3.ZERO, 2.0)
 	if constructing:
