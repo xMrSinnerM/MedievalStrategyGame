@@ -1,0 +1,118 @@
+{
+	"_comment": "Achievements. Each has three tiers; a tier is earned for good once its `needs` is reached (even if the count falls again later, like soldiers at home), and then gives its title to pick and its reward to claim. `measure`: levels (all building levels added up), keep (keep level), stat:<name> (a lifetime count: trained, spent, barons, looted, pvp_won, pvp_held), story (story quests done), streak (days in a row the Steward's Coffer was opened), research (all study levels added up), commander (highest commander level), soldiers (in the garrison). `online` ones only count in the online game. `rewards` and `points` are per tier and the same for every achievement; rewards are given in full, even past the storage cap. Nothing here can be bought.",
+	"points": [10, 25, 50],
+	"tier_names": ["Bronze", "Silver", "Gold"],
+	"rewards": [
+		{"resources": {"wood": 300, "stone": 300, "food": 200}},
+		{"resources": {"wood": 1500, "stone": 1500, "food": 1000, "gold": 300}},
+		{"resources": {"wood": 5000, "stone": 5000, "food": 4000, "gold": 1500}}
+	],
+	"list": [
+		{
+			"id": "builder",
+			"name": "Master Builder",
+			"text": "Building levels, all added up",
+			"measure": "levels",
+			"needs": [25, 100, 250],
+			"titles": ["the Builder", "the Mason", "the Architect"]
+		},
+		{
+			"id": "keep",
+			"name": "Lord of the Keep",
+			"text": "Keep level",
+			"measure": "keep",
+			"needs": [2, 4, 5],
+			"titles": ["the Landed", "the Castellan", "the High Lord"]
+		},
+		{
+			"id": "drill",
+			"name": "Drillmaster",
+			"text": "Soldiers trained",
+			"measure": "stat:trained",
+			"needs": [100, 1000, 4000],
+			"titles": ["the Recruiter", "the Drillmaster", "the Marshal"]
+		},
+		{
+			"id": "garrison",
+			"name": "Full Barracks",
+			"text": "Soldiers at home at once",
+			"measure": "soldiers",
+			"needs": [50, 150, 300],
+			"titles": ["the Guardian", "the Shield", "the Unyielding"]
+		},
+		{
+			"id": "barons",
+			"name": "Baron Hunter",
+			"text": "Robber baron camps beaten",
+			"measure": "stat:barons",
+			"needs": [5, 40, 150],
+			"titles": ["the Bold", "Baron-Breaker", "Scourge of Barons"]
+		},
+		{
+			"id": "plunder",
+			"name": "Plunderer",
+			"text": "Loot brought home",
+			"measure": "stat:looted",
+			"needs": [2000, 25000, 100000],
+			"titles": ["the Raider", "the Plunderer", "the Gilded"]
+		},
+		{
+			"id": "treasury",
+			"name": "Patron of the Realm",
+			"text": "Resources spent",
+			"measure": "stat:spent",
+			"needs": [20000, 500000, 5000000],
+			"titles": ["the Prosperous", "the Wealthy", "the Magnificent"]
+		},
+		{
+			"id": "story",
+			"name": "The Steward's Trust",
+			"text": "Story quests done",
+			"measure": "story",
+			"needs": [10, 20, 30],
+			"titles": ["the Steadfast", "the Trusted", "Bane of the Black Baron"]
+		},
+		{
+			"id": "coffer",
+			"name": "Every Day",
+			"text": "Days in a row the Steward's Coffer was opened",
+			"measure": "streak",
+			"needs": [2, 4, 7],
+			"titles": ["the Diligent", "the Tireless", "the Unfailing"]
+		},
+		{
+			"id": "scholar",
+			"name": "Scholar",
+			"text": "Study levels in the academy, all added up",
+			"measure": "research",
+			"needs": [5, 25, 60],
+			"titles": ["the Learned", "the Scholar", "the Sage"]
+		},
+		{
+			"id": "commander",
+			"name": "Veteran Commander",
+			"text": "Highest commander level",
+			"measure": "commander",
+			"needs": [3, 6, 10],
+			"titles": ["the Captain", "the Knight-Captain", "the Champion"]
+		},
+		{
+			"id": "conqueror",
+			"name": "Conqueror",
+			"text": "Battles won against other players' castles",
+			"measure": "stat:pvp_won",
+			"needs": [1, 10, 50],
+			"titles": ["the Challenger", "the Conqueror", "the Dread"],
+			"online": true
+		},
+		{
+			"id": "bulwark",
+			"name": "Bulwark",
+			"text": "Attacks by other players held off",
+			"measure": "stat:pvp_held",
+			"needs": [1, 10, 50],
+			"titles": ["the Stalwart", "the Unbreakable", "the Bulwark"],
+			"online": true
+		}
+	]
+}

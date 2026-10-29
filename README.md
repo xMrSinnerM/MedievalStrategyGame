@@ -462,6 +462,33 @@ spent less refunds, barons beaten, loot brought home), so `QuestBook`
 (`scripts/economy/quest_book.gd`) and the server's `server/rules/quests.ts`
 give the same answers (checked by the server fixtures).
 
+## Achievements and titles
+
+Press **Y** (or **Achievements** at the top of the quest screen) for 13
+lifetime achievements, each in three tiers (bronze, silver, gold): building
+levels, keep level, soldiers trained, soldiers at home at once, robber baron
+camps beaten, loot brought home, resources spent, story quests, the coffer
+streak, study levels, your best commander's level and, online only, battles
+won against other players' castles and attacks on yours held off.
+
+A tier is earned for good the moment you reach it, even if the count falls
+again later (your soldiers march out, a coffer streak breaks). Each tier
+gives a reward to claim (300 wood, 300 stone and 200 food for bronze, up to
+5,000 wood, 5,000 stone, 4,000 food and 1,500 gold for gold), given in full
+even past the storage cap, and achievement points (10, 25, 50) shown on the
+quest box. Nothing here can be bought.
+
+Every tier also gives a **title**, such as *the Builder*, *Baron-Breaker* or
+*Bane of the Black Baron*. Pick one at the top of the achievements screen and
+it stands under your castle's name on the map and on its card; online, other
+players see it on your castle, on your player card and on the leaderboard.
+
+The numbers live in `data/achievements.json`. `Achievements`
+(`scripts/economy/achievements.gd`) and the server's
+`server/rules/achievements.ts` read progress from the castle the same way the
+quests do. Online, the server notes the tiers reached on every request and
+handles the `claim_achievement` and `set_title` orders.
+
 ## Siege workshop
 
 Build a **Siege Workshop** (3x3, wood 160, stone 120, gold 40) and click it

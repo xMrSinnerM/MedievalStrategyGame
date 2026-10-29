@@ -16,6 +16,7 @@ import { lastInvasion, type EventRules } from "../../../server/rules/events.ts";
 import { claimReward, eventPoints, invade, rewardTiers } from "./invasion.ts";
 import { buy, claimPrize, emptyHorde, hordeArrives, hordeScore, playerRun, type HordeState } from "./horde.ts";
 import { claimQuest, rollDay, type QuestRules } from "../../../server/rules/quests.ts";
+import { claimAchievement, note, setTitle, type AchievementRules } from "../../../server/rules/achievements.ts";
 import type { GearRules, Lead } from "../../../server/rules/gear.ts";
 import { deliverCarts, OUTPOST_ID, unload, type Cart, type OutpostData } from "../../../server/rules/outposts.ts";
 import { rulesFor, type VillageInfo, type VillageState } from "../../../server/rules/villages.ts";
@@ -87,6 +88,8 @@ export interface Raid {
   state: "out" | "fighting" | "home" | "done";
   survivors: Dict;
   loot: Dict;
+  /** Set once an attack on a player's castle is fought: whether the attackers won. */
+  won?: boolean;
 }
 
 /** Another player an order is aimed at, as index.ts found them. */
@@ -133,6 +136,8 @@ export interface Homecoming {
   loot: Dict;
   /** The commander who led the army, with the xp the battle earned. */
   lead?: Lead;
+  /** The army won its battle against another player's castle. */
+  won?: boolean;
 }
 
 /** What act() needs besides the player: other players and armies coming home. */
@@ -147,6 +152,8 @@ export interface Context {
   events?: { rules: EventRules; world: World; offset?: number };
   /** The story quests and daily tasks (data/quests.json). */
   quests?: QuestRules;
+  /** Achievements and titles (data/achievements.json). */
+  achievements?: AchievementRules;
   /** For "found_outpost": the free spot nearest your home, or null when there is none. */
   outpostSpot?: [number, number] | null;
   /** For "attack_village", "station" and "build_capital": the village (or capital) named. */
@@ -351,6 +358,7 @@ export function act(rules: Rules, given: PlayerState, req: Request, now: number,
   }
   rules.gear.sync(castle);
   if (ctx.quests) rollDay(castle, ctx.quests, now);
+  if (ctx.achievements) note(castle, ctx.achievements, true);
   let error = "";
   let result: unknown = undefined;
   let raid: Omit<Raid, "id"> | undefined;
@@ -647,9 +655,17 @@ export function act(rules: Rules, given: PlayerState, req: Request, now: number,
     case "claim_quest":
       error = ctx.quests ? claimQuest(castle, ctx.quests, req.kind, req.index, now) : "Unknown order.";
       break;
+    case "claim_achievement":
+      error = ctx.achievements ? claimAchievement(castle, ctx.achievements, req.id, true) : "Unknown order.";
+      break;
+    case "set_title":
+      error = ctx.achievements ? setTitle(castle, ctx.achievements, req.title) : "Unknown order.";
+      break;
     default:
       error = "Unknown order.";
   }
+  // Tiers reached before and after the order are earned for good, even if the count falls again later.
+  if (ctx.achievements) note(castle, ctx.achievements, true);
   return {
     state: {
       ...stored,
@@ -694,6 +710,7 @@ function checkArmy(castle: CastleState, army: Dict): string {
 function comeHomeFromRaid(gear: GearRules, castle: CastleState, raid: Homecoming): void {
   castle.advanceTo(raid.back);
   if (raid.lead?.xp && raid.lead.id > 0) gear.addXp(castle, raid.lead.id, raid.lead.xp);
+  if (raid.won) castle.stats.pvp_won += 1;
   for (const unit of Object.keys(raid.survivors)) {
     if (castle.rules.hasUnit(unit)) castle.troops[unit] = (castle.troops[unit] ?? 0) + raid.survivors[unit];
   }
@@ -747,6 +764,7 @@ export function fightRaid(rules: Rules, pvp: PvpRules, stored: PlayerState, raid
   const result = siege(rules.buildings, raid.waves ?? autoWaves(raid.army), defenders, castle.layout, raid.id * 7919 + godotHash(raid.defender_name),
     wall, { a: raid.tools ?? {}, b: castle.defenceTools, lead_a: raid.lead?.fx ?? {}, lead_b: rules.gear.castellanEffects(castle) });
   if (result.tools) castle.loseDefenceTools(result.tools.lost);
+  if (result.winner === "b") castle.stats.pvp_held += 1;
   const before = { ...castle.troops };
   for (const unit of Object.keys(result.b)) shareLosses(groups, unit, result.b[unit].lost);
   const healed = castle.heal(before);

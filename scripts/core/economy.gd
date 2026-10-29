@@ -44,6 +44,8 @@ signal admin_changed(error: String)
 signal outpost_changed
 ## Who holds the resource villages changed (or, online, the server sent them again).
 signal villages_changed
+## Achievement tiers your castle has just earned, as a line for the news.
+signal achievement_news(text: String)
 ## Online: the server sent the market (see `market`); error is "" unless an order was refused.
 signal market_changed(error: String)
 
@@ -76,6 +78,10 @@ var diplomacy: Diplomacy
 var baron_rules: BaronRules
 ## The story quests and daily tasks (data/quests.json).
 var quest_book: QuestBook
+## Achievements and titles (data/achievements.json).
+var achievements: Achievements
+## The achievement tiers already announced (null: take the next ones silently).
+var _known_tiers: Variant = null
 ## Commanders and gear (data/gear.json).
 var gear_rules: GearRules
 var outpost_rules: OutpostRules
@@ -232,12 +238,14 @@ func ensure_loaded() -> void:
 	rules = BuildingRules.load_default()
 	baron_rules = BaronRules.load_default()
 	quest_book = QuestBook.load_default()
+	achievements = Achievements.load_default()
 	gear_rules = GearRules.load_default()
 	outpost_rules = OutpostRules.load_default()
 	_load_villages()
 	if not load_game():
 		new_game()
 	gear_rules.sync(player_castle)
+	_known_tiers = player_castle.achievements.tiers.duplicate()
 
 
 func save_path(n := -1) -> String:
@@ -300,6 +308,7 @@ func begin_new(n := 1) -> void:
 	rules = BuildingRules.load_default()
 	baron_rules = BaronRules.load_default()
 	quest_book = QuestBook.load_default()
+	achievements = Achievements.load_default()
 	gear_rules = GearRules.load_default()
 	outpost_rules = OutpostRules.load_default()
 	_load_villages()
@@ -307,6 +316,7 @@ func begin_new(n := 1) -> void:
 	_loaded = true
 	new_game()
 	gear_rules.sync(player_castle)
+	_known_tiers = player_castle.achievements.tiers.duplicate()
 
 
 func begin_load(n := 1) -> void:
@@ -314,6 +324,7 @@ func begin_load(n := 1) -> void:
 	rules = BuildingRules.load_default()
 	baron_rules = BaronRules.load_default()
 	quest_book = QuestBook.load_default()
+	achievements = Achievements.load_default()
 	gear_rules = GearRules.load_default()
 	outpost_rules = OutpostRules.load_default()
 	_load_villages()
@@ -322,6 +333,7 @@ func begin_load(n := 1) -> void:
 	if not load_game():
 		new_game()
 	gear_rules.sync(player_castle)
+	_known_tiers = player_castle.achievements.tiers.duplicate()
 
 
 func _move_old_save() -> void:
@@ -851,6 +863,8 @@ func _process(delta: float) -> void:
 		_collect_villages(t)
 		quest_book.roll_day(player_castle, t)
 		gear_rules.sync(player_castle)
+		achievements.note(player_castle, false)
+		_announce_achievements()
 		changed.emit()
 	_diplomacy_timer += delta
 	if _diplomacy_timer >= DIPLOMACY_TICK and diplomacy != null:
@@ -876,6 +890,8 @@ func begin_online(answer: Dictionary) -> void:
 	rules = BuildingRules.load_default()
 	baron_rules = BaronRules.load_default()
 	quest_book = QuestBook.load_default()
+	achievements = Achievements.load_default()
+	_known_tiers = null
 	gear_rules = GearRules.load_default()
 	outpost_rules = OutpostRules.load_default()
 	_load_villages()
@@ -1015,6 +1031,7 @@ func apply_server(answer: Dictionary) -> void:
 			attack_resolved.emit(_server_report(report))
 	if camps_moved:
 		barons_changed.emit()
+	_announce_achievements()
 	changed.emit()
 	marches_changed.emit()
 
@@ -1074,6 +1091,8 @@ func _process_online(delta: float) -> void:
 			outpost_castle().advance_to(now())
 		quest_book.roll_day(player_castle, now())
 		gear_rules.sync(player_castle)
+		achievements.note(player_castle, true)
+		_announce_achievements()
 		changed.emit()
 	# Ask the server for news now and then, and as soon as an army is due
 	# to fight or come home.
@@ -2107,6 +2126,62 @@ func claim_quest(kind: String, index := 0) -> String:
 		save_game()
 	changed.emit()
 	return ""
+
+
+func claim_achievement(id: String) -> String:
+	## Claims the next earned reward of an achievement. Online the server
+	## gives it too, and its answer replaces the castle.
+	var why := achievements.claim(player_castle, id, online)
+	if why != "":
+		return why
+	if online:
+		get_node("/root/Online").order({"action": "claim_achievement", "id": id})
+	else:
+		save_game()
+	changed.emit()
+	return ""
+
+
+func set_title(key: String) -> String:
+	## Shows an earned title with your name ("id:tier"), or none for "".
+	var why := achievements.set_title(player_castle, key)
+	if why != "":
+		return why
+	if online:
+		get_node("/root/Online").order({"action": "set_title", "title": key})
+	else:
+		save_game()
+	changed.emit()
+	return ""
+
+
+func my_title() -> String:
+	## The title your castle shows ("the Builder"), or "".
+	return achievements.shown_title(player_castle) if achievements != null and player_castle != null else ""
+
+
+func title_of(player: Dictionary) -> String:
+	## Another player's title, from the server's list ("" for none).
+	return achievements.title_text(String(player.get("title", ""))) if achievements != null else ""
+
+
+func _announce_achievements() -> void:
+	## Tells the news about tiers earned since the last look.
+	var tiers: Dictionary = player_castle.achievements.tiers
+	if _known_tiers == null:
+		_known_tiers = tiers.duplicate()
+		return
+	var parts: PackedStringArray = []
+	for id: String in tiers:
+		var had := int(_known_tiers.get(id, 0))
+		var def := achievements.get_def(id)
+		for t in range(had + 1, int(tiers[id]) + 1):
+			parts.append("%s (%s)" % [def.get("name", id), achievements.tier_names[t - 1] if t <= achievements.tier_names.size() else str(t)])
+	_known_tiers = tiers.duplicate()
+	if parts.size() > 2:
+		achievement_news.emit("%d achievement tiers earned! Press Y to claim the rewards and pick your title." % parts.size())
+	elif not parts.is_empty():
+		achievement_news.emit("Achievement earned: %s. Press Y to claim the reward and pick your title." % ", ".join(parts))
 
 
 func ask_event_board() -> void:

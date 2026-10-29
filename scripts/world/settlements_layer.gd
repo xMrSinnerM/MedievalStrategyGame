@@ -1,8 +1,8 @@
 extends Node3D
 ## Places every settlement from data/settlements.json and a bridge wherever a
 ## road crosses a river (found by RoadNetwork). Towns are capitals: their
-## labels say who holds them. The villages are resource villages, drawn by
-## villages_layer.gd.
+## labels say who holds them, and your own castle's label carries your title.
+## The villages are resource villages, drawn by villages_layer.gd.
 
 const BRIDGE_STONE := Color(0.6, 0.56, 0.5)
 const BRIDGE_DECK := Color(0.45, 0.34, 0.24)
@@ -14,6 +14,7 @@ const LABEL_OTHER := Color(1.0, 0.62, 0.5)
 var settlements: Array[Settlement] = []
 var bridge_count := 0
 var _zoom_t := 0.0
+var _title_shown := ""
 
 
 func build() -> void:
@@ -27,7 +28,9 @@ func build() -> void:
 	_build_bridges()
 	EventBus.camera_zoom_changed.connect(_on_zoom_changed)
 	Economy.villages_changed.connect(_show_holders)
+	Economy.changed.connect(_show_title)
 	_show_holders()
+	_show_title()
 
 
 func rebuild(settlement_id: String) -> void:
@@ -43,6 +46,8 @@ func rebuild(settlement_id: String) -> void:
 		settlements[i] = s
 		old.queue_free()
 		_show_holders()
+		_title_shown = "?"
+		_show_title()
 		return
 
 
@@ -68,6 +73,17 @@ func _show_holders() -> void:
 			s.set_holder(("[%s] " % tag if tag != "" else "") + owner, LABEL_ALLY if state.get("ally", false) else LABEL_OTHER)
 		else:
 			s.set_holder("", LABEL)
+
+
+func _show_title() -> void:
+	## Writes the title you picked (Achievements) under your castle's name.
+	var title := Economy.my_title()
+	if title == _title_shown:
+		return
+	_title_shown = title
+	for s in settlements:
+		if s.id == Economy.MAIN_CASTLE:
+			s.set_holder(title, LABEL_MINE)
 
 
 func _on_zoom_changed(zoom_t: float) -> void:

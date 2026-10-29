@@ -46,6 +46,7 @@ func _initialize() -> void:
 	test_looking_around()
 	test_research()
 	test_research_in_battle()
+	test_achievements()
 	test_notices()
 	print("%d checks, %d failed" % [checks, failures])
 	quit(1 if failures > 0 else 0)
@@ -1387,6 +1388,71 @@ func test_research_in_battle() -> void:
 	check(reports.size() == 1 and reports[0].lead.is_empty(), "and no commander earns xp")
 	eco.delete_slot(1)
 	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://test_saves"))
+	eco.free()
+
+
+func test_achievements() -> void:
+	var book := Achievements.load_default()
+	check(book.list.size() == 13 and book.rewards.size() == 3 and book.points.size() == 3, "13 achievements in 3 tiers")
+	for def: Dictionary in book.list:
+		check(def.needs.size() == 3 and def.titles.size() == 3, "%s has 3 tiers and 3 titles" % def.id)
+		check(int(def.needs[0]) < int(def.needs[1]) and int(def.needs[1]) < int(def.needs[2]), "%s grows tier by tier" % def.id)
+	check(book.shown(false).size() == 11 and book.shown(true).size() == 13, "the player-versus-player ones only online")
+	var c := fresh()
+	check(book.note(c, false).is_empty(), "a new castle has earned nothing")
+	check(book.check_claim(c, "keep") == "You haven't earned that yet.", "nothing to claim yet")
+	check(book.check_claim(c, "nope") == "There's no such achievement.", "unknown achievement")
+	check(book.set_title(c, "keep:1") == "You haven't earned that title yet.", "no title before it's earned")
+	check(book.set_title(c, "keep:9") == "There's no such title.", "no such tier")
+	# The keep reaches level 4: two tiers at once.
+	for b in c.buildings:
+		if b.type == "keep":
+			b.level = 4
+	check(book.note(c, false) == [["keep", 1], ["keep", 2]], "keep level 4 earns bronze and silver")
+	check(book.score(c) == 35, "10 + 25 points")
+	var wood: float = c.resources.wood
+	c.resources.stone = c.storage_capacity()
+	check(book.claim(c, "keep", false) == "", "bronze can be claimed")
+	near(c.resources.wood, wood + 300.0, "its reward")
+	near(c.resources.stone, c.storage_capacity() + 300.0, "in full, past the cap")
+	check(book.claim(c, "keep", false) == "", "then silver")
+	check(book.claim(c, "keep", false) == "You already have that reward.", "each reward once")
+	check(book.set_title(c, "keep:2") == "" and book.shown_title(c) == "the Castellan", "an earned title can be shown")
+	check(Achievements.with_title("Valentin", "the Castellan") == "Valentin the Castellan", "names with titles")
+	check(Achievements.with_title("Valentin", "Baron-Breaker") == "Valentin, Baron-Breaker", "titles without 'the'")
+	# A count that falls again keeps what it earned.
+	c.troops["spearman"] = 60
+	check(book.note(c, false) == [["garrison", 1]], "50 soldiers at home")
+	c.troops["spearman"] = 0
+	book.note(c, false)
+	check(book.earned(c, "garrison") == 1 and book.claim(c, "garrison", false) == "", "still earned when they've left")
+	# Online-only ones count online, from the castle's stats.
+	c.stats.pvp_won = 10
+	check(book.note(c, false).is_empty(), "offline, battles against players don't count")
+	check(book.note(c, true) == [["conqueror", 1], ["conqueror", 2]], "online they do")
+	# Saved with the castle; old saves have earned nothing.
+	var saved := CastleState.from_dict(rules, JSON.parse_string(JSON.stringify(c.to_dict())))
+	check(saved.achievements.tiers.get("keep", 0) == 2 and saved.achievements.claimed.get("keep", 0) == 2
+		and saved.achievements.title == "keep:2" and int(saved.stats.pvp_won) == 10, "achievements are saved")
+	var old := c.to_dict()
+	old.erase("achievements")
+	check(CastleState.from_dict(rules, old).achievements.tiers.is_empty(), "old saves have earned nothing yet")
+	check(book.set_title(c, "") == "" and book.shown_title(c) == "", "the title can be taken off")
+	# Offline, the economy claims, sets the title and saves.
+	var eco = load("res://scripts/core/economy.gd").new()
+	eco.save_dir = "user://test_saves"
+	eco.begin_new(1)
+	check(eco.claim_achievement("keep") != "", "nothing to claim in a new game")
+	for b in eco.player_castle.buildings:
+		if b.type == "keep":
+			b.level = 2
+	var news := []
+	eco.achievement_news.connect(func(text: String) -> void: news.append(text))
+	eco.achievements.note(eco.player_castle, false)
+	eco._announce_achievements()
+	check(news.size() == 1 and news[0].contains("Lord of the Keep (Bronze)"), "the news tells of it: %s" % [news])
+	check(eco.claim_achievement("keep") == "", "the economy claims it")
+	check(eco.set_title("keep:1") == "" and eco.my_title() == "the Landed", "and shows the title")
 	eco.free()
 
 

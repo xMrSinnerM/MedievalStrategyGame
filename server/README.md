@@ -132,6 +132,16 @@ of their own. Every request starts a new day's daily tasks once the UTC day
 turns, and `claim_quest` gives the story quest's, a daily task's or the
 coffer's reward when it is done.
 
+Achievements (`server/rules/achievements.ts`, `data/achievements.json`) live
+in the castle's JSON as well (`achievements`: tiers earned, tiers claimed and
+the title shown). Every request notes the tiers reached, before and after its
+order; `claim_achievement` gives an achievement's next earned reward and
+`set_title` shows an earned title ("id:tier", or "" for none). `world` and
+`leaderboard` list each player's `title` (read from the castle JSON). The
+castle's `stats` count battles won against players' castles (`pvp_won`, when
+the army is home, from the `won` column of `raids`, migration
+`20261026150000_raid_won.sql`) and attacks held off (`pvp_held`).
+
 Siege tools are in the castle's JSON too (`tools` in store, `crafting`, and
 `defence_tools` posted on the walls). Orders: `craft` and `cancel_crafting`
 for the workshop, `set_tools` for defence tools; `attack` and
