@@ -43,6 +43,7 @@ func _ready() -> void:
 	var alliance := preload("res://scripts/ui/alliance_panel.gd").new()
 	var events := preload("res://scripts/ui/event_panel.gd").new()
 	var war := preload("res://scripts/ui/war_panel.gd").new()
+	var market := preload("res://scripts/ui/market_panel.gd").new()
 	var quests := preload("res://scripts/ui/quest_panel.gd").new()
 	row.add_child(_bar_button("Quests (J)", "quests", quests.toggle))
 	var commanders := preload("res://scripts/ui/commanders_panel.gd").new()
@@ -56,6 +57,7 @@ func _ready() -> void:
 		row.add_child(_alliance_button)
 		row.add_child(_bar_button("Events (V)", "events", events.toggle))
 		row.add_child(_bar_button("War (K)", "battle", war.toggle))
+		row.add_child(_bar_button("Market (T)", "market", market.toggle))
 		var owner := preload("res://scripts/ui/admin_panel.gd").new()
 		_owner_panel = owner
 		var owner_button := _bar_button("Owner (O)", "owner", owner.toggle)
@@ -74,8 +76,11 @@ func _ready() -> void:
 	_controls = MapControls.new()
 	_controls.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	left.add_child(_controls)
+	var achievements := preload("res://scripts/ui/achievements_panel.gd").new()
+	quests.achievements = achievements
 	var tracker := preload("res://scripts/ui/quest_tracker.gd").new()
 	tracker.panel = quests
+	tracker.achievements = achievements
 	tracker.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	left.add_child(tracker)
 	# Right: the minimap, with the card of whatever you clicked under it.
@@ -124,10 +129,19 @@ func _ready() -> void:
 	war.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	war.grow_vertical = Control.GROW_DIRECTION_BOTH
 	add_child(war)
+	if Economy.online:
+		market.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+		market.grow_horizontal = Control.GROW_DIRECTION_BOTH
+		market.grow_vertical = Control.GROW_DIRECTION_BOTH
+		add_child(market)
 	quests.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 	quests.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	quests.grow_vertical = Control.GROW_DIRECTION_BOTH
 	add_child(quests)
+	achievements.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	achievements.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	achievements.grow_vertical = Control.GROW_DIRECTION_BOTH
+	add_child(achievements)
 	commanders.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 	commanders.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	commanders.grow_vertical = Control.GROW_DIRECTION_BOTH
@@ -187,11 +201,14 @@ func _ready() -> void:
 	add_child(_news)
 	EventBus.battle_fought.connect(_on_battle)
 	Online.order_failed.connect(func(message: String) -> void:
-		if not is_inside_tree() or not visible or alliance.visible or (chat != null and chat.is_open()):
+		if not is_inside_tree() or not visible or alliance.visible or market.visible or (chat != null and chat.is_open()):
 			return
 		_news.text = "The server refused that: " + message if message != "" else "The server didn't answer."
 		_news_left = NEWS_TIME)
 	Economy.diplomacy_changed.connect(_on_diplomacy)
+	Economy.achievement_news.connect(func(text: String) -> void:
+		_news.text = text
+		_news_left = NEWS_TIME * 1.5)
 	if Economy.online:
 		var banner := PanelContainer.new()
 		banner.add_theme_stylebox_override("panel", MenuStyle.panel(0.8, 10))
@@ -276,10 +293,10 @@ func _process(delta: float) -> void:
 		var shield := ""
 		if Economy.is_protected():
 			shield = "\nBeginner protection: %s left (ends if you attack a player)" % _hours(Economy.protected_until - Economy.now())
-		_controls.keys = "Click: pick your castle, another player's, a robber baron camp, a village or a town\nC: your castle   L: leaderboard   G: alliance   V: events   K: alliance war   J: quests   H: commanders   P: outpost   B: villages   Enter: chat" + ("   O: owner tools" if Economy.is_admin else "") + "\nWASD / drag: pan   Q E / right-drag: rotate   wheel: zoom\nM: parchment map   N: minimap   Home: recentre   F1: hide   Esc: menu"
+		_controls.keys = "Click: pick your castle, another player's, a robber baron camp, a village or a town\nC: your castle   L: leaderboard   G: alliance   V: events   T: market   K: alliance war   J: quests   Y: achievements   H: commanders   P: outpost   B: villages   Enter: chat" + ("   O: owner tools" if Economy.is_admin else "") + "\nWASD / drag: pan   Q E / right-drag: rotate   wheel: zoom\nM: parchment map   N: minimap   Home: recentre   F1: hide   Esc: menu"
 		_controls.show_status("Online as %s" % Online.email + shield, _zoom_t)
 		return
-	_controls.keys = "Click: travel there, or pick a castle, town, party or village\nF: find your party   C: your castle   K: diplomacy   J: quests   H: commanders   P: outpost   B: villages\nWASD / drag: pan   Q E / right-drag: rotate   wheel: zoom\nM: parchment map   N: minimap   Home: recentre   F1: hide   Esc: menu"
+	_controls.keys = "Click: travel there, or pick a castle, town, party or village\nF: find your party   C: your castle   K: diplomacy   J: quests   Y: achievements   H: commanders   P: outpost   B: villages\nWASD / drag: pan   Q E / right-drag: rotate   wheel: zoom\nM: parchment map   N: minimap   Home: recentre   F1: hide   Esc: menu"
 	_controls.show_status("Your party: %s" % _party_status if _party_status != "" else "", _zoom_t)
 
 
