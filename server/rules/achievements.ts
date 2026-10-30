@@ -131,6 +131,12 @@ export function setTitle(castle: CastleState, rules: AchievementRules, key: unkn
     castle.achievements.title = "";
     return "";
   }
+  if (typeof key === "string" && key.startsWith("season:")) {
+    // Season titles (seasons.ts) are the ones the castle has won.
+    if (!castle.season.honours.includes(key)) return "You haven't earned that title yet.";
+    castle.achievements.title = key;
+    return "";
+  }
   if (titleText(rules, key) === "") return "There's no such title.";
   const [id, tier] = (key as string).split(":");
   if (earned(castle, id) < Number(tier)) return "You haven't earned that title yet.";

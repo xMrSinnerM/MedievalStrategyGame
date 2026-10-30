@@ -106,6 +106,19 @@ export function newLoginLog(): LoginLog {
   return { last: -1, streak: 0, total: 0 };
 }
 
+/** Seasons (seasons.ts): the month counted, the stats it counts from, track rewards claimed, last season's renown and season titles won. */
+export interface SeasonLog {
+  key: number;
+  base: Dict;
+  track: number;
+  last: { key: number; points: number; claimed: boolean } | Record<string, never>;
+  honours: string[];
+}
+
+export function newSeasonLog(): SeasonLog {
+  return { key: -1, base: {}, track: 0, last: {}, honours: [] };
+}
+
 export function newQuestLog(): QuestLog {
   return { story: 0, day: -1, keep: 1, picks: [], base: {}, claimed: [], chest: false, streak: 0, chest_day: -1 };
 }
@@ -128,6 +141,7 @@ export interface CastleData {
   quests: QuestLog;
   achievements: AchievementLog;
   login: LoginLog;
+  season: SeasonLog;
   tools: Dict;
   crafting: Craft[];
   defence_tools: Tools;
@@ -165,6 +179,8 @@ export class CastleState {
   achievements: AchievementLog = newAchievementLog();
   /** The Royal Gift for coming back each day (login.ts). */
   login: LoginLog = newLoginLog();
+  /** Renown this month and the season titles won (seasons.ts). */
+  season: SeasonLog = newSeasonLog();
   /** Siege tools in store, the workshop's queue, and the defence tools posted on each wall. */
   tools: Dict = {};
   crafting: Craft[] = [];
@@ -734,6 +750,7 @@ export class CastleState {
       quests: structuredClone(this.quests),
       achievements: structuredClone(this.achievements),
       login: { ...this.login },
+      season: structuredClone(this.season),
       tools: { ...this.tools },
       crafting: this.crafting.map((c) => ({ ...c })),
       defence_tools: structuredClone(this.defenceTools),
@@ -805,6 +822,16 @@ export class CastleState {
     const gift = data.login ?? {};
     castle.login = { last: Math.trunc(Number(gift.last ?? -1)), streak: Math.trunc(Number(gift.streak ?? 0)),
       total: Math.trunc(Number(gift.total ?? 0)) };
+    // Castles saved before seasons start counting in the season they're next played in.
+    const sea = data.season ?? {};
+    const sbase: Dict = {};
+    for (const k of Object.keys(sea.base ?? {})) sbase[k] = Number(sea.base[k]);
+    const l = sea.last ?? {};
+    castle.season = {
+      key: Math.trunc(Number(sea.key ?? -1)), base: sbase, track: Math.trunc(Number(sea.track ?? 0)),
+      last: "key" in l ? { key: Math.trunc(Number(l.key)), points: Math.trunc(Number(l.points ?? 0)), claimed: Boolean(l.claimed ?? false) } : {},
+      honours: (sea.honours ?? []).filter((h: unknown) => typeof h === "string"),
+    };
     for (const tool of Object.keys(data.tools ?? {})) {
       const n = Math.trunc(Number(data.tools[tool]));
       if (rules.hasTool(tool) && n > 0) castle.tools[tool] = n;

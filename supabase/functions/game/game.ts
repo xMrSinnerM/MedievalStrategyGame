@@ -18,6 +18,7 @@ import { buy, claimPrize, emptyHorde, hordeArrives, hordeScore, playerRun, type 
 import { claimQuest, rollDay, type QuestRules } from "../../../server/rules/quests.ts";
 import { claimAchievement, note, setTitle, type AchievementRules } from "../../../server/rules/achievements.ts";
 import { claimLogin, type LoginRules } from "../../../server/rules/login.ts";
+import { claimPrize as claimSeasonPrize, claimTrack, rollSeason, type SeasonRules } from "../../../server/rules/seasons.ts";
 import type { GearRules, Lead } from "../../../server/rules/gear.ts";
 import { deliverCarts, OUTPOST_ID, unload, type Cart, type OutpostData } from "../../../server/rules/outposts.ts";
 import { rulesFor, type VillageInfo, type VillageState } from "../../../server/rules/villages.ts";
@@ -157,6 +158,10 @@ export interface Context {
   achievements?: AchievementRules;
   /** The Royal Gift for coming back each day (data/login.json). */
   login?: LoginRules;
+  /** Seasons: renown each month and its prizes (data/seasons.json). */
+  seasons?: SeasonRules;
+  /** For "claim_season_prize": your place and your alliance's in last season's ranking (0: none). */
+  seasonPlace?: { player: number; alliance: number };
   /** For "found_outpost": the free spot nearest your home, or null when there is none. */
   outpostSpot?: [number, number] | null;
   /** For "attack_village", "station" and "build_capital": the village (or capital) named. */
@@ -361,6 +366,7 @@ export function act(rules: Rules, given: PlayerState, req: Request, now: number,
   }
   rules.gear.sync(castle);
   if (ctx.quests) rollDay(castle, ctx.quests, now);
+  if (ctx.seasons) rollSeason(castle, ctx.seasons, now);
   if (ctx.achievements) note(castle, ctx.achievements, true);
   let error = "";
   let result: unknown = undefined;
@@ -657,6 +663,13 @@ export function act(rules: Rules, given: PlayerState, req: Request, now: number,
     }
     case "claim_quest":
       error = ctx.quests ? claimQuest(castle, ctx.quests, req.kind, req.index, now) : "Unknown order.";
+      break;
+    case "claim_season":
+      error = ctx.seasons ? claimTrack(castle, ctx.seasons, now) : "Unknown order.";
+      break;
+    case "claim_season_prize":
+      error = ctx.seasons ? claimSeasonPrize(castle, ctx.seasons, ctx.seasonPlace?.player ?? 0, ctx.seasonPlace?.alliance ?? 0, now)
+        : "Unknown order.";
       break;
     case "claim_login":
       error = ctx.login ? claimLogin(castle, ctx.login, now) : "Unknown order.";
