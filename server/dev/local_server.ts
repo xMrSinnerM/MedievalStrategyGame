@@ -1,7 +1,8 @@
 // A stand-in for the Supabase project, for trying the online game without
 // the internet: the same sign-up/sign-in endpoints as Supabase Auth and the
 // same game function (game.ts), keeping players in memory. Accounts are
-// confirmed at once and nothing is saved when it stops.
+// confirmed at once and nothing is saved when it stops. Password reset codes
+// are printed here instead of emailed.
 //
 //   node server/dev/local_server.ts            (listens on port 54321)
 //   START_TROOPS='{"spearman":60}' node server/dev/local_server.ts   (castles start with soldiers)
@@ -13,7 +14,7 @@
 //   godot --path . -- --online-url=http://127.0.0.1:54321
 
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { randomUUID } from "node:crypto";
+import { randomInt, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { makeRules } from "../rules/load.ts";
 import { nearestSpot } from "../rules/outposts.ts";
@@ -83,6 +84,8 @@ const users = new Map<string, { id: string; password: string }>();
 const isAdmin = (user: string) => [...users].some(([email, u]) => u.id === user && ADMINS.has(email));
 const tokens = new Map<string, { user: string; expires: number }>();
 const refreshTokens = new Map<string, string>();
+// Password reset codes by email; the real server emails them, this one prints them.
+const resetCodes = new Map<string, { code: string; expires: number }>();
 const players = new Map<string, PlayerState>();
 const reports: { id: number; user: string; at: number; report: unknown }[] = [];
 let nextReport = 1;
@@ -498,7 +501,8 @@ function findTarget(name: unknown, me: string): { target: Target; user: string }
 
 createServer(async (req, res) => {
   const url = new URL(req.url ?? "/", `http://localhost:${PORT}`);
-  if (req.method !== "POST") return send(res, 405, { error: "Use POST." });
+  const setPassword = req.method === "PUT" && url.pathname === "/auth/v1/user";
+  if (req.method !== "POST" && !setPassword) return send(res, 405, { error: "Use POST." });
   const body = await readBody(req);
   if (body === null) return send(res, 400, { msg: "Bad request." });
 
@@ -523,6 +527,35 @@ createServer(async (req, res) => {
       refreshTokens.delete(String(body.refresh_token));
       return send(res, 200, session(email));
     }
+  }
+  if (url.pathname === "/auth/v1/recover") {
+    // Like Supabase: always 200, so nobody learns which emails have accounts.
+    const email = String(body.email ?? "").toLowerCase();
+    if (users.has(email)) {
+      const code = String(randomInt(0, 1_000_000)).padStart(6, "0");
+      resetCodes.set(email, { code, expires: now() + 3600 });
+      console.log(`Password reset code for ${email}: ${code}`);
+    }
+    return send(res, 200, {});
+  }
+  if (url.pathname === "/auth/v1/verify" && body.type === "recovery") {
+    const email = String(body.email ?? "").toLowerCase();
+    const reset = resetCodes.get(email);
+    if (reset === undefined || reset.expires < now() || reset.code !== String(body.token ?? "").trim()) {
+      return send(res, 403, { error_code: "otp_expired", msg: "Token has expired or is invalid" });
+    }
+    resetCodes.delete(email);
+    return send(res, 200, session(email));
+  }
+  if (setPassword) {
+    const auth = tokens.get((req.headers.authorization ?? "").replace(/^Bearer\s+/i, ""));
+    if (auth === undefined || auth.expires < now()) return send(res, 401, { code: 401, message: "Invalid JWT" });
+    const password = String(body.password ?? "");
+    if (password.length < 6) return send(res, 422, { error_code: "weak_password", msg: "Password should be at least 6 characters." });
+    const [email, user] = [...users].find(([, u]) => u.id === auth.user)!;
+    if (user.password === password) return send(res, 422, { error_code: "same_password", msg: "New password should be different from the old password." });
+    user.password = password;
+    return send(res, 200, { id: user.id, email });
   }
   if (url.pathname === "/functions/v1/game") {
     const token = (req.headers.authorization ?? "").replace(/^Bearer\s+/i, "");
