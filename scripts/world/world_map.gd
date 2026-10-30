@@ -14,6 +14,7 @@ var barons: Node3D
 var players: Node3D
 var outposts: Node3D
 var villages: Node3D
+var encounters: Node3D
 
 
 func _ready() -> void:
@@ -47,7 +48,12 @@ func _ready() -> void:
 	villages.name = "Villages"
 	add_child(villages)
 	villages.build()
+	encounters = preload("res://scripts/world/encounters_layer.gd").new()
+	encounters.name = "Encounters"
+	add_child(encounters)
+	encounters.build()
 	parties.barons = barons
+	parties.encounters = encounters
 	parties.villages = villages
 	parties.players = players
 	parties.outposts = outposts

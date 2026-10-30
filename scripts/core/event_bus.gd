@@ -47,6 +47,8 @@ signal player_selected(player_name: String)
 signal help_screen_requested(player_name: String, kind: String)
 ## A resource village was clicked on the map (its id; "" clears the selection).
 signal village_selected(village_id: String)
+## A random encounter was clicked on the map (its id; "" clears the selection).
+signal encounter_selected(encounter_id: String)
 ## Asks the world map's camera to look at this map position.
 signal map_focus_requested(map_pos: Vector2)
 ## Opens the town buildings window of a capital (its village id).

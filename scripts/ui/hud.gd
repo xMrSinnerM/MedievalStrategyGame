@@ -114,6 +114,7 @@ func _ready() -> void:
 	if Economy.online:
 		cards.append(preload("res://scripts/ui/player_panel.gd").new())
 	cards.append(preload("res://scripts/ui/party_panel.gd").new())
+	cards.append(preload("res://scripts/ui/encounter_panel.gd").new())
 	for card in cards:
 		card.size_flags_horizontal = Control.SIZE_SHRINK_END
 		right.add_child(card)
