@@ -21,6 +21,7 @@ func _ready() -> void:
 	box.add_theme_constant_override("separation", 10)
 	add_child(box)
 	var head := HBoxContainer.new()
+	set_meta("window_head", head)
 	box.add_child(head)
 	var title := MenuStyle.title("Outpost", 30)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -111,7 +112,9 @@ func _build_found(o: OutpostRules) -> void:
 			14, MenuStyle.MUTED)
 	about.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	about.custom_minimum_size = Vector2(960, 0)
+	about.visible = not has_meta("in_window")   ## the window shows it under "?"
 	_body.add_child(about)
+	set_meta("window_help", about)
 	var cost: PackedStringArray = []
 	for r: String in o.cost:
 		cost.append("%d %s" % [int(o.cost[r]), r])

@@ -41,6 +41,7 @@ func _ready() -> void:
 	close.focus_mode = Control.FOCUS_NONE
 	close.pressed.connect(close_panel)
 	head.add_child(close)
+	set_meta("window_head", close)   ## in a GameWindow, its close button does this
 	_tabs = HBoxContainer.new()
 	_tabs.add_theme_constant_override("separation", 8)
 	box.add_child(_tabs)
@@ -137,6 +138,7 @@ func _fill() -> void:
 		child.queue_free()
 	var mine := Economy.my_alliance()
 	_title.text = "Alliance" if mine.is_empty() else "[%s] %s" % [mine.tag, mine.name]
+	_title.visible = not mine.is_empty() or not has_meta("in_window")   ## the window already says "Alliance"
 	_mine_tab.text = "Your alliance" if not mine.is_empty() else "Join or found"
 	_mine_tab.button_pressed = not _showing_list
 	_list_tab.button_pressed = _showing_list

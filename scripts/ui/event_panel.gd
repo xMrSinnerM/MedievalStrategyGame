@@ -28,6 +28,7 @@ func _ready() -> void:
 	box.add_theme_constant_override("separation", 10)
 	add_child(box)
 	var head := HBoxContainer.new()
+	set_meta("window_head", head)
 	box.add_child(head)
 	var title := MenuStyle.title("Events", 30)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -85,7 +86,9 @@ func _ready() -> void:
 	buttons.alignment = BoxContainer.ALIGNMENT_CENTER
 	buttons.add_theme_constant_override("separation", 12)
 	buttons.add_child(MenuStyle.button("Refresh", _ask_boards, 180.0))
-	buttons.add_child(MenuStyle.button("Close", close_panel, 180.0))
+	var close_button := MenuStyle.button("Close", close_panel, 180.0)
+	buttons.add_child(close_button)
+	set_meta("window_close", close_button)   ## in a GameWindow its own close button does this
 	box.add_child(buttons)
 	Economy.event_board_changed.connect(_fill_board)
 	Economy.changed.connect(func() -> void:

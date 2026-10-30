@@ -47,6 +47,7 @@ func _ready() -> void:
 	close.add_theme_font_size_override("font_size", 20)
 	close.pressed.connect(close_panel)
 	head.add_child(close)
+	set_meta("window_head", close)   ## in a GameWindow, its close button does this
 
 	# The building going up.
 	_now_box = PanelContainer.new()

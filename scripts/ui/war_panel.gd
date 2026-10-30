@@ -30,6 +30,7 @@ func _ready() -> void:
 	box.add_theme_constant_override("separation", 10)
 	add_child(box)
 	var head := HBoxContainer.new()
+	set_meta("window_head", head)
 	box.add_child(head)
 	var title := MenuStyle.title("Alliance War", 30)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -47,6 +48,7 @@ func _ready() -> void:
 	_rule.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_rule.custom_minimum_size = Vector2(880, 0)
 	box.add_child(_rule)
+	set_meta("window_help", _rule)
 	box.add_child(HSeparator.new())
 	var columns := HBoxContainer.new()
 	columns.add_theme_constant_override("separation", 36)
@@ -109,7 +111,9 @@ func _ready() -> void:
 	buttons.alignment = BoxContainer.ALIGNMENT_CENTER
 	buttons.add_theme_constant_override("separation", 12)
 	buttons.add_child(MenuStyle.button("Refresh", Economy.ask_war_board, 180.0))
-	buttons.add_child(MenuStyle.button("Close", close_panel, 180.0))
+	var close_button := MenuStyle.button("Close", close_panel, 180.0)
+	buttons.add_child(close_button)
+	set_meta("window_close", close_button)   ## in a GameWindow its own close button does this
 	box.add_child(buttons)
 	Economy.war_board_changed.connect(_fill)
 

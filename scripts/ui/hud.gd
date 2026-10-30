@@ -1,8 +1,9 @@
 extends CanvasLayer
-## The world map's HUD: a resource bar along the top with the main buttons,
-## controls, what your party is doing, zoom level and frame rate, plus the
-## castle and party panels, battle reports and news of battles between lords.
-## F1 hides it.
+## The world map's HUD: a bar along the top with your resources, the timed
+## event and the way to your castle; map tools and your quests top left; the
+## minimap and the card of what you clicked top right; and a dock bottom right
+## that opens the windows (quests, commanders, your lands, alliance, market,
+## events). Also battle reports and news of battles between lords. F1 hides it.
 
 const NEWS_TIME := 7.0
 const ChatBox := preload("res://scripts/ui/chat_box.gd")
@@ -11,10 +12,9 @@ const TOP := 66.0                ## panels start below the resource bar
 var _controls: MapControls
 var _resources: ResourceBar
 var _alliance_button: Button
-var _bar_row: FlowContainer      ## the main buttons, see _fit_bar_buttons
-var _bar_level := 0              ## 0 full names, 1 names without keys, 2 icons only
-var _key_hint := RegEx.create_from_string("\\s*\\([^)]{1,3}\\)")
-var _bar_fit_queued := false
+var _quests_button: Button
+var _quest_book_check := 0.0
+var _status: Label               ## your party, or beginner protection online
 var _owner_panel: Control
 var _zoom_t := 0.0
 var _party_status := ""
@@ -23,6 +23,7 @@ var _news_left := 0.0
 var _alert: Label
 var _event: Label                ## online: the timed event on now, or the next one
 var _sieges := {}                ## castle id -> {"besieger", "until"} for sieges of your castles
+var _windows: Array[GameWindow] = []
 
 
 func _ready() -> void:
@@ -40,67 +41,55 @@ func _ready() -> void:
 	_resources.show_builders = false
 	_resources.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	top.add_child(_resources)
-	## The buttons fill the rest of the bar. When their names don't fit they
-	## show only their icons (names in tooltips), and if even that is too wide
-	## they wrap to a second row instead of running off the screen.
-	var row := HFlowContainer.new()
-	row.alignment = FlowContainer.ALIGNMENT_END
-	row.last_wrap_alignment = FlowContainer.LAST_WRAP_ALIGNMENT_END
-	row.add_theme_constant_override("h_separation", 10)
-	row.add_theme_constant_override("v_separation", 4)
-	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	row.resized.connect(_fit_bar_buttons)
-	top.add_child(row)
-	_bar_row = row
-	var diplomacy := preload("res://scripts/ui/diplomacy_panel.gd").new()
-	var leaderboard := preload("res://scripts/ui/leaderboard_panel.gd").new()
-	var alliance := preload("res://scripts/ui/alliance_panel.gd").new()
-	var events := preload("res://scripts/ui/event_panel.gd").new()
-	var war := preload("res://scripts/ui/war_panel.gd").new()
-	var market := preload("res://scripts/ui/market_panel.gd").new()
-	var quests := preload("res://scripts/ui/quest_panel.gd").new()
-	row.add_child(_bar_button("Quests (J)", "quests", quests.toggle))
-	var commanders := preload("res://scripts/ui/commanders_panel.gd").new()
-	row.add_child(_bar_button("Commanders (H)", "commanders", commanders.toggle))
-	var outpost := preload("res://scripts/ui/outpost_panel.gd").new()
-	row.add_child(_bar_button("Outpost (P)", "outpost", outpost.toggle))
-	var villages := preload("res://scripts/ui/villages_panel.gd").new()
-	row.add_child(_bar_button("Villages (B)", "villages", villages.toggle))
+	var gap := Control.new()
+	gap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	top.add_child(gap)
 	if Economy.online:
-		_alliance_button = _bar_button("Alliance (G)", "alliance", alliance.toggle)
-		row.add_child(_alliance_button)
-		row.add_child(_bar_button("Events (V)", "events", events.toggle))
-		row.add_child(_bar_button("War (K)", "battle", war.toggle))
-		row.add_child(_bar_button("Market (T)", "market", market.toggle))
-		var owner := preload("res://scripts/ui/admin_panel.gd").new()
-		_owner_panel = owner
-		var owner_button := _bar_button("Owner (O)", "owner", owner.toggle)
-		owner_button.visible = Economy.is_admin
-		Economy.admin_changed.connect(func(_e: String) -> void: owner_button.visible = Economy.is_admin)
-		row.add_child(owner_button)
-		row.add_child(_bar_button("Leaderboard (L)", "leaderboard", leaderboard.toggle))
-	else:
-		row.add_child(_bar_button("Diplomacy (K)", "diplomacy", diplomacy.toggle))
-	var castle_button := _bar_button("Your castle (C)", "might", func() -> void:
-		EventBus.castle_requested.emit(Economy.player_castle.id))
+		_event = MenuStyle.label("", 15, MenuStyle.MUTED)
+		_event.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		_event.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		_event.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		_event.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		_event.mouse_filter = Control.MOUSE_FILTER_PASS
+		top.add_child(_event)
+	var castle_button := Button.new()
+	castle_button.text = "Your castle"
+	castle_button.tooltip_text = "Your castle (C)"
+	castle_button.icon = Icons.get_icon("might", 22)
+	castle_button.focus_mode = Control.FOCUS_NONE
+	castle_button.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	GameTheme.primary(castle_button)
+	castle_button.pressed.connect(func() -> void: EventBus.castle_requested.emit(Economy.player_castle.id))
 	castle_button.add_to_group("tutorial_castle_button")
-	row.add_child(castle_button)
-	var left := VBoxContainer.new()
-	left.position = Vector2(12, TOP + 2)
-	left.add_theme_constant_override("separation", 6)
+	top.add_child(castle_button)
+
+	# Top left: the map tools, then your quests and what your party is doing.
+	var left := HBoxContainer.new()
+	left.position = Vector2(12, TOP + 4)
+	left.add_theme_constant_override("separation", 8)
 	add_child(left)
 	_controls = MapControls.new()
-	_controls.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	_controls.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	left.add_child(_controls)
+	var notes := VBoxContainer.new()
+	notes.add_theme_constant_override("separation", 6)
+	left.add_child(notes)
 	var achievements := preload("res://scripts/ui/achievements_panel.gd").new()
+	var quests := preload("res://scripts/ui/quest_panel.gd").new()
 	quests.achievements = achievements
 	var tracker := preload("res://scripts/ui/quest_tracker.gd").new()
 	tracker.panel = quests
 	tracker.add_to_group("tutorial_quest_tracker")
 	tracker.achievements = achievements
 	tracker.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	left.add_child(tracker)
+	notes.add_child(tracker)
+	var status_card := PanelContainer.new()
+	status_card.add_theme_stylebox_override("panel", MenuStyle.panel(0.5, 8))
+	status_card.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	status_card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	notes.add_child(status_card)
+	_status = MenuStyle.label("", 14, MenuStyle.MUTED)
+	status_card.add_child(_status)
 	# Right: the minimap, with the card of whatever you clicked under it.
 	var right := VBoxContainer.new()
 	right.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
@@ -122,66 +111,66 @@ func _ready() -> void:
 	for card in cards:
 		card.size_flags_horizontal = Control.SIZE_SHRINK_END
 		right.add_child(card)
+
 	var report := preload("res://scripts/ui/battle_report.gd").new()
 	report.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 	report.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	report.grow_vertical = Control.GROW_DIRECTION_BOTH
 	add_child(report)
-	diplomacy.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-	diplomacy.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	diplomacy.grow_vertical = Control.GROW_DIRECTION_BOTH
-	add_child(diplomacy)
-	leaderboard.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-	leaderboard.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	leaderboard.grow_vertical = Control.GROW_DIRECTION_BOTH
-	add_child(leaderboard)
-	alliance.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-	alliance.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	alliance.grow_vertical = Control.GROW_DIRECTION_BOTH
-	add_child(alliance)
-	events.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-	events.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	events.grow_vertical = Control.GROW_DIRECTION_BOTH
-	add_child(events)
-	war.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-	war.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	war.grow_vertical = Control.GROW_DIRECTION_BOTH
-	add_child(war)
+
+	# The windows. Each old panel is a page in one of them; related ones
+	# share a window as tabs.
+	var commanders := preload("res://scripts/ui/commanders_panel.gd").new()
+	var villages := preload("res://scripts/ui/villages_panel.gd").new()
+	var outpost := preload("res://scripts/ui/outpost_panel.gd").new()
+	var diplomacy := preload("res://scripts/ui/diplomacy_panel.gd").new()
+	var alliance := preload("res://scripts/ui/alliance_panel.gd").new()
+	var war := preload("res://scripts/ui/war_panel.gd").new()
+	var leaderboard := preload("res://scripts/ui/leaderboard_panel.gd").new()
+	var events := preload("res://scripts/ui/event_panel.gd").new()
+	var market := preload("res://scripts/ui/market_panel.gd").new()
+	var quest_window := _window("Quests", "quests", [quests, "Quests", achievements, "Achievements"])
+	var army_window := _window("Commanders", "commanders", [commanders, ""])
+	var lands_window := _window("Your lands", "villages", [villages, "Villages", outpost, "Outpost"])
+	var alliance_window := _window("Alliance", "alliance", [alliance, "Alliance", war, "War", leaderboard, "Leaderboard"])
+	var diplomacy_window := _window("Diplomacy", "diplomacy", [diplomacy, ""])
+	var events_window := _window("Events", "events", [events, ""])
+	var market_window: GameWindow = null
 	if Economy.online:
-		market.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-		market.grow_horizontal = Control.GROW_DIRECTION_BOTH
-		market.grow_vertical = Control.GROW_DIRECTION_BOTH
-		add_child(market)
-	quests.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-	quests.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	quests.grow_vertical = Control.GROW_DIRECTION_BOTH
-	add_child(quests)
-	achievements.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-	achievements.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	achievements.grow_vertical = Control.GROW_DIRECTION_BOTH
-	add_child(achievements)
-	commanders.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-	commanders.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	commanders.grow_vertical = Control.GROW_DIRECTION_BOTH
-	add_child(commanders)
-	outpost.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-	outpost.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	outpost.grow_vertical = Control.GROW_DIRECTION_BOTH
-	add_child(outpost)
-	villages.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-	villages.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	villages.grow_vertical = Control.GROW_DIRECTION_BOTH
-	add_child(villages)
-	var town := preload("res://scripts/ui/town_panel.gd").new()
-	town.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-	town.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	town.grow_vertical = Control.GROW_DIRECTION_BOTH
-	add_child(town)
-	if _owner_panel != null:
-		_owner_panel.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-		_owner_panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
-		_owner_panel.grow_vertical = Control.GROW_DIRECTION_BOTH
-		add_child(_owner_panel)
+		market_window = _window("Market", "market", [market, ""])
+	_window("Capital", "villages", [preload("res://scripts/ui/town_panel.gd").new(), ""])
+	var owner_window: GameWindow = null
+	if Economy.online:
+		_owner_panel = preload("res://scripts/ui/admin_panel.gd").new()
+		owner_window = _window("Owner tools", "owner", [_owner_panel, ""])
+
+	# Bottom right: the dock that opens them.
+	var dock := PanelContainer.new()
+	dock.add_theme_stylebox_override("panel", GameTheme.panel_box(0.85, 8))
+	dock.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
+	dock.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	dock.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	dock.offset_right = -12
+	dock.offset_bottom = -12
+	add_child(dock)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+	dock.add_child(row)
+	_quests_button = _dock_button("Quests", "quests", "Quests and achievements (J, Y)", quest_window.toggle)
+	row.add_child(_quests_button)
+	row.add_child(_dock_button("Army", "commanders", "Commanders and their gear (H)", army_window.toggle))
+	row.add_child(_dock_button("Lands", "villages", "Your villages, capitals and outpost (B, P)", lands_window.toggle))
+	if Economy.online:
+		_alliance_button = _dock_button("Alliance", "alliance", "Alliance, alliance war and leaderboard (G, K, L)", alliance_window.toggle)
+		row.add_child(_alliance_button)
+		row.add_child(_dock_button("Market", "market", "Market (T)", market_window.toggle))
+		row.add_child(_dock_button("Events", "events", "Events (V)", events_window.toggle))
+		var owner_button := _dock_button("Owner", "owner", "Owner tools (O)", owner_window.toggle)
+		owner_button.visible = Economy.is_admin
+		Economy.admin_changed.connect(func(_e: String) -> void: owner_button.visible = Economy.is_admin)
+		row.add_child(owner_button)
+	else:
+		row.add_child(_dock_button("Diplomacy", "diplomacy", "Diplomacy (K)", diplomacy_window.toggle))
 	if Economy.online:
 		Economy.alliance_changed.connect(func(_error: String) -> void: _update_alliance_button())
 	var chat: ChatBox = null
@@ -214,7 +203,7 @@ func _ready() -> void:
 	_news.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
 	_news.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	_news.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	_news.offset_bottom = -64 if Economy.online else -24
+	_news.offset_bottom = -24
 	_news.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	add_child(_news)
 	EventBus.battle_fought.connect(_on_battle)
@@ -227,19 +216,6 @@ func _ready() -> void:
 	Economy.achievement_news.connect(func(text: String) -> void:
 		_news.text = text
 		_news_left = NEWS_TIME * 1.5)
-	if Economy.online:
-		var banner := PanelContainer.new()
-		banner.add_theme_stylebox_override("panel", MenuStyle.panel(0.8, 10))
-		banner.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
-		banner.grow_horizontal = Control.GROW_DIRECTION_BOTH
-		banner.grow_vertical = Control.GROW_DIRECTION_BEGIN
-		banner.offset_bottom = -12
-		banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		_event = Label.new()
-		_event.add_theme_font_size_override("font_size", 15)
-		_event.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		banner.add_child(_event)
-		add_child(banner)
 	_alert = Label.new()
 	_alert.add_theme_color_override("font_color", Color(1.0, 0.5, 0.38))
 	_alert.add_theme_color_override("font_outline_color", Color(0.12, 0.05, 0.03))
@@ -257,6 +233,9 @@ func _ready() -> void:
 	EventBus.siege_ended.connect(func(castle_id: String) -> void: _sieges.erase(castle_id))
 	EventBus.camera_zoom_changed.connect(func(t: float) -> void: _zoom_t = t)
 	EventBus.party_status_changed.connect(func(text: String) -> void: _party_status = text)
+	# The windows go over everything else, so their shade dims the whole map.
+	for w in _windows:
+		move_child(w, -1)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -307,106 +286,116 @@ func _process(delta: float) -> void:
 	if not visible:
 		return
 	_resources.show_castle(Economy.player_castle, Economy.troops_away() if not Economy.marches.is_empty() or not Economy.aid.is_empty() else 0)
+	_quest_book_check -= delta
+	if _quest_book_check <= 0.0:
+		_quest_book_check = 0.5
+		var book := Economy.quest_book
+		var waiting: bool = (book != null and book.can_claim_anything(Economy.player_castle)) \
+				or (Economy.achievements != null and Economy.achievements.can_claim_anything(Economy.player_castle))
+		_set_badge(_quests_button, "!" if waiting else "")
+	var status := ""
 	if Economy.online:
-		var shield := ""
 		if Economy.is_protected():
-			shield = "\nBeginner protection: %s left (ends if you attack a player)" % _hours(Economy.protected_until - Economy.now())
-		_controls.keys = "Click: pick your castle, another player's, a robber baron camp, a village or a town\nC: your castle   L: leaderboard   G: alliance   V: events   T: market   K: alliance war   J: quests   Y: achievements   H: commanders   P: outpost   B: villages   Enter: chat" + ("   O: owner tools" if Economy.is_admin else "") + "\nWASD / drag: pan   Q E / right-drag: rotate   wheel: zoom\nM: parchment map   N: minimap   Home: recentre   F1: hide   Esc: menu"
-		_controls.show_status("Online as %s" % Online.email + shield, _zoom_t)
-		return
-	_controls.keys = "Click: travel there, or pick a castle, town, party or village\nF: find your party   C: your castle   K: diplomacy   J: quests   Y: achievements   H: commanders   P: outpost   B: villages\nWASD / drag: pan   Q E / right-drag: rotate   wheel: zoom\nM: parchment map   N: minimap   Home: recentre   F1: hide   Esc: menu"
-	_controls.show_status("Your party: %s" % _party_status if _party_status != "" else "", _zoom_t)
+			status = "Beginner protection: %s left (ends if you attack a player)" % _hours(Economy.protected_until - Economy.now())
+		_controls.keys = "Click: pick your castle, another player's, a robber baron camp, a village or a town\nC: your castle   L: leaderboard   G: alliance   V: events   T: market   K: alliance war   J: quests   Y: achievements   H: commanders   P: outpost   B: villages   Enter: chat" + ("   O: owner tools" if Economy.is_admin else "") + "\nWASD / drag: pan   Q E / right-drag: rotate   wheel: zoom\nM: parchment map   N: minimap   Home: recentre   F1: hide   Esc: menu\n\nOnline as " + Online.email
+	else:
+		if _party_status != "":
+			status = "Your party: %s" % _party_status
+		_controls.keys = "Click: travel there, or pick a castle, town, party or village\nF: find your party   C: your castle   K: diplomacy   J: quests   Y: achievements   H: commanders   P: outpost   B: villages\nWASD / drag: pan   Q E / right-drag: rotate   wheel: zoom\nM: parchment map   N: minimap   Home: recentre   F1: hide   Esc: menu"
+	if _status.text != status:
+		_status.text = status
+	_status.get_parent().visible = status != ""
+	_controls.show_status(_zoom_t)
 
 
 func _show_event() -> void:
-	## The banner: the timed event on now and how long it lasts, else the next one.
+	## In the top bar: the timed event on now and how long it lasts (what it
+	## does is in the tooltip), else the next one.
 	var on := Economy.events_on()
-	var banner := _event.get_parent() as Control
 	if not on.is_empty():
 		var e: Dictionary = on[0]
-		_event.text = "%s: %s  Ends in %s" % [e.name, e.description, _days(float(e.end) - Economy.now())]
+		var text := "%s  ·  ends in %s" % [e.name, _days(float(e.end) - Economy.now())]
 		if e.has("invasion"):
-			_event.text += "    Your points: %d" % Economy.invasion_points()
+			text += "  ·  your points: %d" % Economy.invasion_points()
 		elif e.has("horde"):
-			_event.text += "    Horde points: %d    Trophies: %d" % [Economy.my_horde_points(), Economy.war_trophies()]
+			text += "  ·  horde points: %d  ·  trophies: %d" % [Economy.my_horde_points(), Economy.war_trophies()]
+		_event.text = text
+		_event.tooltip_text = "%s: %s" % [e.name, e.description]
 		_event.add_theme_color_override("font_color", MenuStyle.GOLD)
-		banner.visible = true
 		return
 	var next := Economy.next_event()
-	banner.visible = not next.is_empty()
-	if not next.is_empty():
-		_event.text = "Next event: %s in %s" % [next.name, _days(float(next.start) - Economy.now())]
-		_event.add_theme_color_override("font_color", MenuStyle.MUTED)
+	_event.text = "" if next.is_empty() else "Next event: %s in %s" % [next.name, _days(float(next.start) - Economy.now())]
+	_event.tooltip_text = ""
+	_event.add_theme_color_override("font_color", MenuStyle.MUTED)
 
 
 func _update_alliance_button() -> void:
 	## Invitations to you, or players asking to join your alliance, show as a count.
 	var waiting: int = Economy.alliance.get("invites", []).size() + Economy.alliance.get("requests", []).size()
-	if waiting == 0:
-		_set_bar_label(_alliance_button, "Alliance (G)")
-	else:
-		_set_bar_label(_alliance_button, "Alliance (G)  %d new" % waiting, str(waiting))
+	_set_badge(_alliance_button, str(waiting) if waiting > 0 else "")
 
 
-func _bar_button(text: String, icon: String, action: Callable) -> Button:
+func _window(title: String, icon: String, pages: Array) -> GameWindow:
+	## A window holding pages: [panel, tab name, panel, tab name, ...].
+	var w := GameWindow.new(title, icon)
+	for i in range(0, pages.size(), 2):
+		w.add_page(pages[i], pages[i + 1])
+	add_child(w)
+	_windows.append(w)
+	return w
+
+
+func _dock_button(text: String, icon: String, tip: String, action: Callable) -> Button:
+	## A square dock button: a big icon with its name under it, and a red
+	## badge in the corner when something waits there.
 	var b := Button.new()
-	b.icon = Icons.get_icon(icon, 22)
+	b.custom_minimum_size = Vector2(78, 70)
+	b.tooltip_text = tip
 	b.focus_mode = Control.FOCUS_NONE
-	b.add_theme_font_size_override("font_size", 15)
-	b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	b.add_theme_stylebox_override("normal", GameTheme.button_box(Color(0.075, 0.063, 0.05, 0.95), GameTheme.RIM_DIM))
 	b.pressed.connect(action)
-	b.visibility_changed.connect(_queue_fit_bar)
-	_set_bar_label(b, text)
+	var box := VBoxContainer.new()
+	box.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	box.alignment = BoxContainer.ALIGNMENT_CENTER
+	box.add_theme_constant_override("separation", 2)
+	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	b.add_child(box)
+	var picture := Icons.rect(icon, 34)
+	picture.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	picture.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	box.add_child(picture)
+	var caption := MenuStyle.label(text, 14, GameTheme.TEXT)
+	caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(caption)
+	var badge := Label.new()
+	badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	badge.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	var dot := StyleBoxFlat.new()
+	dot.bg_color = Color(0.72, 0.16, 0.12)
+	dot.border_color = GameTheme.GOLD
+	dot.set_border_width_all(1)
+	dot.set_corner_radius_all(10)
+	dot.content_margin_left = 6
+	dot.content_margin_right = 6
+	badge.add_theme_stylebox_override("normal", dot)
+	badge.add_theme_font_size_override("font_size", 13)
+	badge.custom_minimum_size = Vector2(20, 20)
+	badge.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
+	badge.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	badge.offset_top = -6
+	badge.offset_right = 6
+	badge.visible = false
+	b.add_child(badge)
+	b.set_meta("badge", badge)
 	return b
 
 
-## Sets a bar button's name. `short` is what it shows when the bar only has
-## room for icons (for example a count of new invitations).
-func _set_bar_label(b: Button, text: String, short := "") -> void:
-	b.set_meta("label", text)
-	b.set_meta("short", short)
-	_show_bar_label(b)
-	_queue_fit_bar()
-
-
-func _show_bar_label(b: Button, level := _bar_level) -> void:
-	var text: String = b.get_meta("label", "")
-	match level:
-		0: b.text = text
-		1: b.text = _key_hint.sub(text, "", true)
-		_: b.text = b.get_meta("short", "")
-	b.tooltip_text = "" if level == 0 else text
-
-
-func _queue_fit_bar() -> void:
-	if not _bar_fit_queued:
-		_bar_fit_queued = true
-		_fit_bar_buttons.call_deferred()
-
-
-## Shows the buttons' full names when they all fit on one row, then names
-## without the keys, then only icons (the full names stay in the tooltips).
-func _fit_bar_buttons() -> void:
-	_bar_fit_queued = false
-	if _bar_row == null or _bar_row.size.x <= 0.0:
+func _set_badge(b: Button, text: String) -> void:
+	if b == null:
 		return
-	var buttons: Array[Button] = []
-	for b in _bar_row.get_children():
-		if b is Button and b.visible:
-			buttons.append(b)
-	var gap: int = _bar_row.get_theme_constant("h_separation")
-	_bar_level = 2
-	for level in 2:
-		var needed := maxi(0, buttons.size() - 1) * gap
-		for b in buttons:
-			_show_bar_label(b, level)
-			needed += b.get_combined_minimum_size().x
-		if needed <= _bar_row.size.x:
-			_bar_level = level
-			break
-	for b in _bar_row.get_children():
-		if b is Button:
-			_show_bar_label(b)
+	var badge: Label = b.get_meta("badge")
+	badge.text = text
+	badge.visible = text != ""
 
 
 static func _clock(seconds: float) -> String:

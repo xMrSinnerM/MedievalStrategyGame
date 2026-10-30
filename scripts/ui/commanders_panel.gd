@@ -24,6 +24,7 @@ func _ready() -> void:
 	box.add_theme_constant_override("separation", 10)
 	add_child(box)
 	var head := HBoxContainer.new()
+	set_meta("window_head", head)
 	box.add_child(head)
 	var title := MenuStyle.title("Commanders", 30)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -41,6 +42,7 @@ func _ready() -> void:
 	about.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	about.custom_minimum_size = Vector2(1000, 0)
 	box.add_child(about)
+	set_meta("window_help", about)
 	var columns := HBoxContainer.new()
 	columns.add_theme_constant_override("separation", 24)
 	box.add_child(columns)
