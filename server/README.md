@@ -162,6 +162,17 @@ ranking can be read without opening castles. Orders: `claim_season` (the next
 track reward), `claim_season_prize` (last season's prizes, by your place and
 your alliance's, worked out from those columns) and `season_board`.
 
+Alliance tournaments (`supabase/functions/game/tournaments.ts`,
+`data/tournaments.json`) keep each week's bracket in the `tournaments` table
+(migration `20261101120000_tournaments.sql`): its entrants, drawn by the first
+`tournament` request of the week from `alliance_summaries`, and the scores of
+the rounds already over. Castles count their renown in the round on as
+`tourney` in the castle's JSON, and every save writes `tourney_key`,
+`tourney_points`, `last_tourney_key` and `last_tourney_points` for the match
+scores. Orders: `tournament` and `claim_tournament_prize` (sets
+`tourney_claimed`). The local server's `TOURNEY_MINUTES=n` starts a tournament
+10 seconds after it does, with rounds n minutes long.
+
 Achievements (`server/rules/achievements.ts`, `data/achievements.json`) live
 in the castle's JSON as well (`achievements`: tiers earned, tiers claimed and
 the title shown). Every request notes the tiers reached, before and after its

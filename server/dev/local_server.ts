@@ -37,6 +37,10 @@ import {
   captureEntry, checkClaim, defenceEntry, givePrize, holdDue, holdEntries, lastSeason, seasonAt, standings, warBoard,
   type WarAlliance, type WarEntry, type WarRules,
 } from "../../supabase/functions/game/wars.ts";
+import {
+  bracket, checkClaim as checkTourneyClaim, claimableWeek, draw, roundScores, tourneyBoard, tourneyColumns, weekAt,
+  type Entrant, type Round, type TourneyRules,
+} from "../../supabase/functions/game/tournaments.ts";
 import { capitalBoost, resolveVillageRaid, type VillageTarget } from "../../supabase/functions/game/villages.ts";
 import type { QuestRules } from "../rules/quests.ts";
 import type { AchievementRules } from "../rules/achievements.ts";
@@ -65,8 +69,15 @@ const marketRules: MarketRules = json("data/market.json");
 const eventRules0: EventRules = json("data/events.json");
 const questRules: QuestRules = json("data/quests.json");
 const warRules: WarRules = json("data/wars.json");
+const tourneyRules: TourneyRules = json("data/tournaments.json");
 // For testing: shorter alliance war seasons.
 if (process.env.WAR_DAYS !== undefined) warRules.days = Number(process.env.WAR_DAYS);
+// TOURNEY_MINUTES=n: this week's tournament starts 10 seconds after the server does, with rounds n minutes long.
+if (process.env.TOURNEY_MINUTES !== undefined) {
+  tourneyRules.rounds = tourneyRules.rounds.map(() => Number(process.env.TOURNEY_MINUTES) / 60);
+  tourneyRules.day = 1;
+  tourneyRules.hour = (((Date.now() / 1000 + 10 + 3 * 86400) % (7 * 86400)) + 7 * 86400) % (7 * 86400) / 3600;
+}
 const achievementRules: AchievementRules = json("data/achievements.json");
 const loginRules: LoginRules = json("data/login.json");
 const seasonRules: SeasonRules = json("data/seasons.json");
@@ -118,6 +129,9 @@ const villages = new Map<string, VillageState & { holder: string | null }>(
 const warPoints: WarEntry[] = [];
 const scoredAt = new Map<string, number>();
 const warClaimed = new Map<string, number>();
+// Weekly tournaments: each week's entrants and the scores of its rounds that are over; the week whose prize each player took.
+const tournaments = new Map<number, { entrants: Entrant[]; results: Map<number, Map<number, number>> }>();
+const tourneyClaimed = new Map<string, number>();
 const ALLIANCE_ORDERS = new Set([
   "alliance", "join_alliance", "accept_invite", "decline_invite", "cancel_request", "leave_alliance", "disband_alliance",
   "invite", "cancel_invite", "kick", "answer_request", "set_role", "alliance_settings",
@@ -358,6 +372,57 @@ function claimWarPrize(user: string): string {
   givePrize(castle, prize);
   players.set(user, { ...p, castle: castle.toDict() });
   warClaimed.set(user, last.start);
+  return "";
+}
+
+/** A week's bracket at `t`, drawn by the first request of the week; rounds that are over keep their scores. */
+function tournamentRounds(week: number, t: number): { entrants: Entrant[]; rounds: Round[] } {
+  let tour = tournaments.get(week);
+  if (!tour && week === weekAt(tourneyRules, t)) {
+    const counts = new Map<number, { members: number; might: number }>();
+    for (const [id, m] of store.membership) {
+      const c = counts.get(m.alliance_id) ?? { members: 0, might: 0 };
+      c.members++;
+      c.might += players.has(id) ? might(players.get(id)!.castle, pvp) : 0;
+      counts.set(m.alliance_id, c);
+    }
+    const all = [...store.alliancesById.values()].map((a) => ({ id: a.id, name: a.name, tag: a.tag,
+      members: counts.get(a.id)?.members ?? 0, might: counts.get(a.id)?.might ?? 0 }));
+    tour = { entrants: draw(tourneyRules, all), results: new Map() };
+    tournaments.set(week, tour);
+  }
+  if (!tour) return { entrants: [], rounds: [] };
+  const rows = [...players.entries()].map(([id, p]) => ({ alliance_id: store.membership.get(id)?.alliance_id ?? null,
+    alliance_joined: store.membership.get(id)?.joined ?? 0, ...tourneyColumns(CastleState.fromDict(rules.buildings, p.castle), seasonRules) }));
+  const rounds = bracket(tourneyRules, week, tour.entrants, t, (start) => tour!.results.get(start) ?? roundScores(rows, start));
+  for (const r of rounds) if (t >= r.end && !tour.results.has(r.start)) tour.results.set(r.start, roundScores(rows, r.start));
+  return { entrants: tour.entrants, rounds };
+}
+
+function tourneyMember(user: string) {
+  const m = store.membership.get(user);
+  return { alliance_id: m?.alliance_id ?? null, joined: m?.joined ?? 0, claimed: tourneyClaimed.get(user) ?? 0 };
+}
+
+function tournamentView(user: string) {
+  const t = now();
+  const week = weekAt(tourneyRules, t);
+  const { entrants, rounds } = tournamentRounds(week, t);
+  const prizeWeek = claimableWeek(tourneyRules, t);
+  const prize = { week: prizeWeek, rounds: prizeWeek === week ? rounds : tournamentRounds(prizeWeek, t).rounds };
+  return tourneyBoard(tourneyRules, t, week, entrants, rounds, players.has(user) ? tourneyMember(user) : null, prize);
+}
+
+function claimTournamentPrize(user: string): string {
+  const t = now();
+  const week = claimableWeek(tourneyRules, t);
+  const prize = checkTourneyClaim(tourneyRules, tourneyMember(user), week, tournamentRounds(week, t).rounds);
+  if (typeof prize === "string") return prize;
+  const p = players.get(user)!;
+  const castle = CastleState.fromDict(rules.buildings, p.castle);
+  givePrize(castle, prize);
+  players.set(user, { ...p, castle: castle.toDict() });
+  tourneyClaimed.set(user, week);
   return "";
 }
 
@@ -676,6 +741,7 @@ createServer(async (req, res) => {
         players: all.slice(0, 50).map(strip), me: mine ? strip(mine) : null, rank, total: all.length,
         prize: mine && run?.horde ? prizeFor(run.horde.prizes, rank) ?? null : null } });
     }
+    if (body.action === "tournament") return send(res, 200, { ok: true, now: now(), error: "", result: { tournament: tournamentView(user) } });
     if (body.action === "war_board") return send(res, 200, { ok: true, now: now(), error: "", result: { war: warView(user) } });
     if (!players.has(user)) return send(res, 200, { ok: false, error: "No castle yet.", needs_join: true });
     if (body.action === "chat" || body.action === "chat_send") {
@@ -734,6 +800,10 @@ createServer(async (req, res) => {
       warError = claimWarPrize(user);
       body.action = "state";
     }
+    if (body.action === "claim_tournament_prize") {
+      warError = claimTournamentPrize(user);
+      body.action = "state";
+    }
     const villageIncome = collectVillages(user);
     const market = collectMarket(user);
     let villageError = "";
@@ -765,7 +835,7 @@ createServer(async (req, res) => {
     }
     const outcome = act(rules, me, body, t,
       { pvp, outpostSpot, target: target?.target, homecomings, alliances: allianceRules, aid: aidRules,
-        events: { rules: eventRules, world, offset: EVENTS_OFFSET }, quests: questRules, achievements: achievementRules, login: loginRules, seasons: seasonRules, seasonPlace, chests: chestRules, encounters, weather,
+        events: { rules: eventRules, world, offset: EVENTS_OFFSET }, quests: questRules, achievements: achievementRules, login: loginRules, seasons: seasonRules, tourney: tourneyRules, seasonPlace, chests: chestRules, encounters, weather,
         sabotage: sabotageRules, targetCastle: target ? players.get(target.user)?.castle : undefined, village: village?.target, villageIncome,
         capitalBoost: capitalBoost(rules, allianceCapitals(user).levels, allianceCapitals(user).guilds), fortresses: world.fortresses, hordeRank: hordePlace,
         market: { rules: marketRules, open: offers.filter((o) => o.seller === user && o.state === "open" && o.expires > t).length,

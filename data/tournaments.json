@@ -1,0 +1,14 @@
+{
+	"_comment": "Weekly alliance tournaments online: a knockout bracket between alliances. Each week starts on `day` (1 = Monday ... 7 = Sunday) at `hour` UTC, when the bracket is drawn: the `size` mightiest alliances with at least `min_members` members, seeded by might (1 meets the last seed, and so on; missing places are byes). The rounds are `rounds` long one after another, and the bracket takes as many of the last ones as it needs (the final is always the last). In a match, each alliance scores the renown its members earn while it lasts (data/seasons.json `renown`: building, training, beating barons, loot and battles against players), counted only for members who joined before it began. The higher score goes through; a tie goes to the higher seed. Once the final is over, every member who was in an entered alliance when the bracket was drawn claims one prize by how far it got: the first of `prizes` whose `up_to` covers its place (1 the winner, 2 the finalist, 4 the semi-finalists, 8 the quarter-finalists), until the next final ends. Resources fill your storage (what doesn't fit is lost) and soldiers join your garrison. Nothing here can be bought.",
+	"day": 1,
+	"hour": 0,
+	"rounds": [48, 48, 48],
+	"size": 8,
+	"min_members": 1,
+	"prizes": [
+		{ "up_to": 1, "resources": { "wood": 4000, "stone": 4000, "food": 3000, "gold": 2500 }, "troops": { "horseman": 50 } },
+		{ "up_to": 2, "resources": { "wood": 2500, "stone": 2500, "food": 2000, "gold": 1500 }, "troops": { "horseman": 25 } },
+		{ "up_to": 4, "resources": { "wood": 1500, "stone": 1500, "food": 1200, "gold": 800 }, "troops": { "swordsman": 25 } },
+		{ "up_to": 8, "resources": { "wood": 800, "stone": 800, "food": 600, "gold": 400 } }
+	]
+}

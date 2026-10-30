@@ -50,6 +50,14 @@ function snapshot(castle: Counted): Dict {
     pvp_won: s.pvp_won ?? 0, pvp_held: s.pvp_held ?? 0 };
 }
 
+/** Renown over the castle's whole life, from its stats now (tournaments count what it gains). */
+export function lifetimeRenown(castle: { buildings: { level: number }[]; stats: object }, rules: SeasonRules): number {
+  const now = snapshot(castle as Counted);
+  let total = 0;
+  for (const [k, w] of Object.entries(rules.renown)) total += (now[k] ?? 0) * w;
+  return total;
+}
+
 /** Renown earned this season. */
 export function renown(castle: Counted, rules: SeasonRules): number {
   const now = snapshot(castle);

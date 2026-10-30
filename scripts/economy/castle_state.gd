@@ -56,6 +56,10 @@ var encounters := {"done": []}
 ## each target, how many missions it has sent, and until when its own walls
 ## are weakened by someone else's agents, and by how much.
 var sabotage := {"sent": {}, "count": 0, "walls_until": 0.0, "walls_cut": 0.0}
+## Alliance tournaments (online, the server's tournaments.ts): the round
+## counted (its start), the castle's lifetime renown when it began, and the
+## round before and the renown earned in it.
+var tourney := {"key": 0.0, "base": 0.0, "last_key": 0.0, "last_points": 0}
 ## Siege tools in store (tool -> count), the workshop's queue (batches
 ## {tool, remaining, unit_time, next}, like training) and the defence tools
 ## posted on each wall (wall -> {tool: count}, Battle.siege()).
@@ -842,6 +846,7 @@ func copy_from(other: CastleState) -> void:
 	chests = other.chests
 	encounters = other.encounters
 	sabotage = other.sabotage
+	tourney = other.tourney
 	tools = other.tools
 	crafting = other.crafting
 	defence_tools = other.defence_tools
@@ -871,7 +876,7 @@ func to_dict() -> Dictionary:
 		"stats": stats.duplicate(), "quests": quests.duplicate(true), "achievements": achievements.duplicate(true),
 		"login": login.duplicate(), "season": season.duplicate(true),
 		"chests": chests.duplicate(true), "encounters": encounters.duplicate(true),
-		"sabotage": sabotage.duplicate(true),
+		"sabotage": sabotage.duplicate(true), "tourney": tourney.duplicate(),
 		"tools": tools.duplicate(), "crafting": crafting.duplicate(true), "defence_tools": defence_tools.duplicate(true),
 		"armoury": armoury.duplicate(true),
 		"boost": boost.duplicate(), "limits": limits.duplicate(true) if not limits.is_empty() else null,
@@ -984,6 +989,10 @@ static func from_dict(p_rules: BuildingRules, data: Dictionary) -> CastleState:
 		castle.sabotage.count = int(agents.get("count", 0))
 		castle.sabotage.walls_until = float(agents.get("walls_until", 0.0))
 		castle.sabotage.walls_cut = float(agents.get("walls_cut", 0.0))
+	var tr: Variant = data.get("tourney", {})
+	if tr is Dictionary:
+		castle.tourney = {"key": float(tr.get("key", 0.0)), "base": float(tr.get("base", 0.0)),
+			"last_key": float(tr.get("last_key", 0.0)), "last_points": int(tr.get("last_points", 0))}
 	var stock: Dictionary = data.get("tools", {})
 	for tool: String in stock:
 		if p_rules.has_tool(tool) and int(stock[tool]) > 0:

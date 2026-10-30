@@ -604,6 +604,25 @@ the target always gets a report; if the agents are caught, it names you.
 `server/rules/sabotage.ts` share the rules and the dice, so the result is
 the same offline and online. The numbers live in `data/sabotage.json`.
 
+## Alliance tournaments (online)
+
+Every Monday at 00:00 UTC the eight mightiest alliances are drawn into a
+knockout bracket: the best seed meets the last, and missing places are byes.
+The quarter-finals run Monday to Wednesday, the semi-finals Wednesday to
+Friday and the final Friday to Sunday (fewer alliances skip the early
+rounds). In a match each alliance scores the **renown** its members earn
+while it lasts (building, training, beating robber barons, loot and battles
+against players, as in Seasons), counted only for members who joined before
+it began. The higher score goes through; a tie goes to the higher seed.
+
+When the final is over, every member of an entered alliance claims a prize
+for how far it got (winner, finalist, semi-finalist or quarter-finalist)
+from the **Tournament** tab of the Alliance window, until the next final
+ends. The bracket, the scores and the prizes live in
+`supabase/functions/game/tournaments.ts` and `data/tournaments.json`; the
+server keeps each week's bracket in the `tournaments` table, and finished
+rounds keep the scores they ended with.
+
 ## Achievements and titles
 
 Press **Y** (or **Achievements** at the top of the quest screen) for 14

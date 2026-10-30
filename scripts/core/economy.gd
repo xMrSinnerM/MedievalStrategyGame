@@ -45,6 +45,8 @@ signal horde_board_changed
 signal season_board_changed
 ## Online: the server sent the alliance war's standings (see `war_board`).
 signal war_board_changed
+## Online: the server sent this week's alliance tournament (see `tournament`).
+signal tournament_changed
 ## Online: the server sent the game owner's panel (see `admin_view`), or refused an owner's order.
 signal admin_changed(error: String)
 ## your outpost was founded, or carts left or arrived
@@ -236,6 +238,8 @@ var season_board := {}
 ## "alliances"}, "last": {start, end, "alliances"}, "capitals", "mine",
 ## "prize": {prize, claimed, can_claim, why}, "rules"} (data/wars.json).
 var war_board := {}
+## Online: this week's alliance tournament, its bracket and your prize, as the server sent it.
+var tournament := {}
 ## Online: true when your account has the game owner's tools (the server decides).
 var is_admin := false
 ## Online, for the owner: {"events": [{id, name, hours, on, start, end}], "players": [names], "log": [{at, action, details}]}.
@@ -998,6 +1002,7 @@ func begin_online(answer: Dictionary) -> void:
 	horde_state = {}
 	horde_board = {}
 	war_board = {}
+	tournament = {}
 	is_admin = false
 	admin_view = {}
 	protected_until = 0.0
@@ -1698,6 +1703,21 @@ func ask_horde_board() -> void:
 func ask_war_board() -> void:
 	## Asks the server for the alliance war's standings; they arrive with war_board_changed.
 	get_node("/root/Online").order({"action": "war_board"})
+
+
+func ask_tournament() -> void:
+	## Asks the server for this week's alliance tournament; it arrives with tournament_changed.
+	get_node("/root/Online").order({"action": "tournament"})
+
+
+func claim_tournament_prize() -> String:
+	## Asks the server for your prize for how far your alliance got in the last tournament.
+	var prize: Dictionary = tournament.get("prize", {})
+	if not bool(prize.get("can_claim", false)):
+		return String(prize.get("why", "There's no prize to claim."))
+	get_node("/root/Online").order({"action": "claim_tournament_prize"})
+	ask_tournament()
+	return ""
 
 
 func claim_war_prize() -> String:
@@ -2774,6 +2794,10 @@ func take_order_result(body: Dictionary, answer: Dictionary) -> void:
 	if body.get("action", "") == "horde_board" and answer.get("result") is Dictionary:
 		horde_board = answer.result
 		horde_board_changed.emit()
+		return
+	if body.get("action", "") == "tournament" and answer.get("result") is Dictionary and answer.result.get("tournament") is Dictionary:
+		tournament = answer.result.tournament
+		tournament_changed.emit()
 		return
 	if body.get("action", "") == "war_board" and answer.get("result") is Dictionary and answer.result.get("war") is Dictionary:
 		war_board = answer.result.war
