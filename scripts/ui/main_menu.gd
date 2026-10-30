@@ -74,7 +74,8 @@ func _ready() -> void:
 		_online.open()))
 	_buttons.add_child(MenuStyle.menu_button("Settings", func() -> void: _show(_settings)))
 	_buttons.add_child(MenuStyle.menu_button("Credits", func() -> void: _show(_credits)))
-	_buttons.add_child(MenuStyle.menu_button("Quit", func() -> void: get_tree().quit()))
+	if not OS.has_feature("web"):
+		_buttons.add_child(MenuStyle.menu_button("Quit", func() -> void: get_tree().quit()))
 	_loading = MenuStyle.title("Loading the realm...", 22)
 	_loading.visible = false
 	column.add_child(_loading)

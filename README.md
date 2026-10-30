@@ -38,6 +38,25 @@ and castles on their own, and lords at war fight when they meet (see Battles).
 Zoom all the way out and the map turns into a parchment strategic map with
 faction territories, roads and settlement marks.
 
+## Playing in the browser
+
+Every push to `main` builds the browser version and publishes it on GitHub
+Pages at <https://xmrsinnerm.github.io/MedievalStrategyGame/>
+(`.github/workflows/web.yml`; Pages has to be set to "GitHub Actions" under
+Settings > Pages). Pull requests build it too, without publishing.
+
+To export it yourself: install the Godot 4.7.2 export templates, then
+**Project > Export > Web > Export Project** (the preset writes to
+`build/web/`), or run
+`godot --headless --path . --export-release Web build/web/index.html`.
+Serve that folder over http (for example `python3 -m http.server` inside it).
+
+The web build uses the Compatibility renderer and is single-threaded, so it
+needs no special server headers. Saves and the online login live in the
+browser's storage. The `addons/world_export` plugin packs the heightmap into
+every export as plain floats, because exported games have no `.exr` (and the
+browser can't decode one).
+
 ## Editing the world
 
 The world lives in plain files that you can edit:

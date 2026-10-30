@@ -1,0 +1,77 @@
+# Builds the browser version of the game on every pull request and every push
+# to main; pushes to main also publish it on GitHub Pages
+# (https://xmrsinnerm.github.io/MedievalStrategyGame/). Pages must be set to
+# "GitHub Actions" under Settings > Pages for the publish step to work.
+name: Web build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: web-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GODOT_VERSION: 4.7.2
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Godot and its web templates
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/godot
+            ~/.local/share/godot/export_templates
+          key: godot-${{ env.GODOT_VERSION }}-web
+
+      - name: Download Godot and its web templates
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          base=https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable
+          mkdir -p ~/godot ~/.local/share/godot/export_templates/${GODOT_VERSION}.stable
+          curl -fsSL -o /tmp/godot.zip $base/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip
+          unzip -q /tmp/godot.zip -d ~/godot
+          mv ~/godot/Godot_v${GODOT_VERSION}-stable_linux.x86_64 ~/godot/godot
+          curl -fsSL -o /tmp/templates.tpz $base/Godot_v${GODOT_VERSION}-stable_export_templates.tpz
+          unzip -j -q /tmp/templates.tpz 'templates/web_nothreads_release.zip' 'templates/version.txt' \
+            -d ~/.local/share/godot/export_templates/${GODOT_VERSION}.stable
+
+      - name: Import the project
+        run: ~/godot/godot --headless --path . --import
+
+      - name: Export for the web
+        run: |
+          mkdir -p build/web
+          ~/godot/godot --headless --path . --export-release Web build/web/index.html
+          test -s build/web/index.pck
+          test -s build/web/index.wasm
+          ls -la build/web
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/web
+
+  publish:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

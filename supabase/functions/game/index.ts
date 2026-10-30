@@ -190,8 +190,15 @@ const MARKET_ORDERS = new Set(["market", "post_offer", "buy_offer", "cancel_offe
 // deno-lint-ignore no-explicit-any
 type Row = Record<string, any>;
 
+/** The browser build calls the server from another site, so every answer allows that (CORS). */
+const CORS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-client-info",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
 function reply(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+  return new Response(JSON.stringify(body), { status, headers: { ...CORS, "Content-Type": "application/json" } });
 }
 
 function now(): number {
@@ -925,6 +932,7 @@ async function adminOrder(userId: string, body: Record<string, unknown>) {
 }
 
 Deno.serve(async (req: Request) => {
+  if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") return reply({ ok: false, error: "Use POST." }, 405);
   const token = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "");
   const { data: auth, error: authError } = await admin.auth.getUser(token);
