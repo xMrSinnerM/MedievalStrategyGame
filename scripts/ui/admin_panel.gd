@@ -24,6 +24,7 @@ func _ready() -> void:
 	box.add_theme_constant_override("separation", 10)
 	add_child(box)
 	var head := HBoxContainer.new()
+	set_meta("window_head", head)
 	box.add_child(head)
 	var title := MenuStyle.title("Owner tools", 30)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT

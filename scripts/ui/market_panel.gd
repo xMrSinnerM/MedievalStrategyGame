@@ -39,6 +39,7 @@ func _ready() -> void:
 	box.add_theme_constant_override("separation", 10)
 	add_child(box)
 	var head := HBoxContainer.new()
+	set_meta("window_head", head)
 	head.add_theme_constant_override("separation", 10)
 	box.add_child(head)
 	head.add_child(Icons.rect("market", 36))
@@ -55,6 +56,7 @@ func _ready() -> void:
 	_rule = MenuStyle.label("", 14, MenuStyle.MUTED)
 	_rule.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	box.add_child(_rule)
+	set_meta("window_help", _rule)
 	var tabs := HBoxContainer.new()
 	tabs.add_theme_constant_override("separation", 8)
 	box.add_child(tabs)
@@ -83,7 +85,9 @@ func _ready() -> void:
 	buttons.alignment = BoxContainer.ALIGNMENT_CENTER
 	buttons.add_theme_constant_override("separation", 12)
 	buttons.add_child(MenuStyle.button("Refresh", Economy.ask_market, 180.0))
-	buttons.add_child(MenuStyle.button("Close", close_panel, 180.0))
+	var close_button := MenuStyle.button("Close", close_panel, 180.0)
+	buttons.add_child(close_button)
+	set_meta("window_close", close_button)   ## in a GameWindow its own close button does this
 	box.add_child(buttons)
 	_build_sell_form()
 	Economy.market_changed.connect(func(error: String) -> void:

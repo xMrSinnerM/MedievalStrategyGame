@@ -90,13 +90,7 @@ func _ready() -> void:
 	_defence.offset_top = 70
 	add_child(_defence)
 	var quests := preload("res://scripts/ui/quest_panel.gd").new()
-	quests.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-	quests.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	quests.grow_vertical = Control.GROW_DIRECTION_BOTH
 	var achievements := preload("res://scripts/ui/achievements_panel.gd").new()
-	achievements.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-	achievements.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	achievements.grow_vertical = Control.GROW_DIRECTION_BOTH
 	quests.achievements = achievements
 	var tracker := preload("res://scripts/ui/quest_tracker.gd").new()
 	tracker.panel = quests
@@ -107,8 +101,10 @@ func _ready() -> void:
 	tracker.offset_left = 12
 	tracker.offset_top = 40
 	add_child(tracker)
-	add_child(quests)
-	add_child(achievements)
+	var quest_window := GameWindow.new("Quests", "quests")
+	quest_window.add_page(quests, "Quests")
+	quest_window.add_page(achievements, "Achievements")
+	add_child(quest_window)
 	Economy.achievement_news.connect(func(text: String) -> void:
 		if is_inside_tree():
 			_show_toast(text))
