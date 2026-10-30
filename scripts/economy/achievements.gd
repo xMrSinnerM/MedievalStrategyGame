@@ -63,6 +63,8 @@ static func measure(castle: CastleState, def: Dictionary) -> int:
 			return int(castle.quests.story)
 		"streak":
 			return int(castle.quests.streak)
+		"logins":
+			return int(castle.login.total)
 		"research":
 			var n := 0
 			for study: String in castle.research:

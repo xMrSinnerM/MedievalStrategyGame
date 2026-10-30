@@ -14,7 +14,7 @@ export interface Achievement {
   id: string;
   name: string;
   text: string;
-  /** levels, keep, stat:<name>, story, streak, research, commander or soldiers. */
+  /** levels, keep, stat:<name>, story, streak, logins, research, commander or soldiers. */
   measure: string;
   needs: number[];
   titles: string[];
@@ -51,6 +51,8 @@ export function measure(castle: CastleState, def: Achievement): number {
       return castle.quests.story;
     case "streak":
       return castle.quests.streak;
+    case "logins":
+      return castle.login.total;
     case "research":
       return Object.values(castle.research).reduce((n, v) => n + v, 0);
     case "commander":

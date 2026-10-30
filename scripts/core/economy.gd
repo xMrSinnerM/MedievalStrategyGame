@@ -82,6 +82,8 @@ var baron_rules: BaronRules
 var quest_book: QuestBook
 ## Achievements and titles (data/achievements.json).
 var achievements: Achievements
+## The Royal Gift for coming back each day (data/login.json).
+var login_rewards: LoginRewards
 ## The achievement tiers already announced (null: take the next ones silently).
 var _known_tiers: Variant = null
 ## Commanders and gear (data/gear.json).
@@ -246,6 +248,7 @@ func ensure_loaded() -> void:
 	rules = BuildingRules.load_default()
 	baron_rules = BaronRules.load_default()
 	quest_book = QuestBook.load_default()
+	login_rewards = LoginRewards.load_default()
 	achievements = Achievements.load_default()
 	gear_rules = GearRules.load_default()
 	outpost_rules = OutpostRules.load_default()
@@ -316,6 +319,7 @@ func begin_new(n := 1) -> void:
 	rules = BuildingRules.load_default()
 	baron_rules = BaronRules.load_default()
 	quest_book = QuestBook.load_default()
+	login_rewards = LoginRewards.load_default()
 	achievements = Achievements.load_default()
 	gear_rules = GearRules.load_default()
 	outpost_rules = OutpostRules.load_default()
@@ -332,6 +336,7 @@ func begin_load(n := 1) -> void:
 	rules = BuildingRules.load_default()
 	baron_rules = BaronRules.load_default()
 	quest_book = QuestBook.load_default()
+	login_rewards = LoginRewards.load_default()
 	achievements = Achievements.load_default()
 	gear_rules = GearRules.load_default()
 	outpost_rules = OutpostRules.load_default()
@@ -898,6 +903,7 @@ func begin_online(answer: Dictionary) -> void:
 	rules = BuildingRules.load_default()
 	baron_rules = BaronRules.load_default()
 	quest_book = QuestBook.load_default()
+	login_rewards = LoginRewards.load_default()
 	achievements = Achievements.load_default()
 	_known_tiers = null
 	gear_rules = GearRules.load_default()
@@ -2152,6 +2158,25 @@ func claim_quest(kind: String, index := 0) -> String:
 		save_game()
 	changed.emit()
 	return ""
+
+
+func claim_login() -> String:
+	## Takes today's Royal Gift. Online the server gives it too, and its
+	## answer replaces the castle.
+	var why := login_rewards.claim(player_castle, now())
+	if why != "":
+		return why
+	if online:
+		get_node("/root/Online").order({"action": "claim_login"})
+	else:
+		save_game()
+	changed.emit()
+	return ""
+
+
+func login_waiting() -> bool:
+	## Today's Royal Gift hasn't been taken yet.
+	return login_rewards != null and player_castle != null and login_rewards.check_claim(player_castle, now()) == ""
 
 
 func claim_achievement(id: String) -> String:

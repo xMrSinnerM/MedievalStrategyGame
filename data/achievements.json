@@ -1,5 +1,5 @@
 {
-	"_comment": "Achievements. Each has three tiers; a tier is earned for good once its `needs` is reached (even if the count falls again later, like soldiers at home), and then gives its title to pick and its reward to claim. `measure`: levels (all building levels added up), keep (keep level), stat:<name> (a lifetime count: trained, spent, barons, looted, pvp_won, pvp_held), story (story quests done), streak (days in a row the Steward's Coffer was opened), research (all study levels added up), commander (highest commander level), soldiers (in the garrison). `online` ones only count in the online game. `rewards` and `points` are per tier and the same for every achievement; rewards are given in full, even past the storage cap. Nothing here can be bought.",
+	"_comment": "Achievements. Each has three tiers; a tier is earned for good once its `needs` is reached (even if the count falls again later, like soldiers at home), and then gives its title to pick and its reward to claim. `measure`: levels (all building levels added up), keep (keep level), stat:<name> (a lifetime count: trained, spent, barons, looted, pvp_won, pvp_held), story (story quests done), streak (days in a row the Steward's Coffer was opened), logins (days the Royal Gift was taken, in all), research (all study levels added up), commander (highest commander level), soldiers (in the garrison). `online` ones only count in the online game. `rewards` and `points` are per tier and the same for every achievement; rewards are given in full, even past the storage cap. Nothing here can be bought.",
 	"points": [10, 25, 50],
 	"tier_names": ["Bronze", "Silver", "Gold"],
 	"rewards": [
@@ -79,6 +79,14 @@
 			"measure": "streak",
 			"needs": [2, 4, 7],
 			"titles": ["the Diligent", "the Tireless", "the Unfailing"]
+		},
+		{
+			"id": "faithful",
+			"name": "Faithful Lord",
+			"text": "Days the Royal Gift was taken",
+			"measure": "logins",
+			"needs": [7, 30, 100],
+			"titles": ["the Faithful", "the Devoted", "the Ever-Present"]
 		},
 		{
 			"id": "scholar",

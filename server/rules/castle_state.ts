@@ -95,6 +95,17 @@ export function newAchievementLog(): AchievementLog {
   return { tiers: {}, claimed: {}, title: "" };
 }
 
+/** The Royal Gift (login.ts): the last day it was taken (days since 1970, UTC), days in a row and days in all. */
+export interface LoginLog {
+  last: number;
+  streak: number;
+  total: number;
+}
+
+export function newLoginLog(): LoginLog {
+  return { last: -1, streak: 0, total: 0 };
+}
+
 export function newQuestLog(): QuestLog {
   return { story: 0, day: -1, keep: 1, picks: [], base: {}, claimed: [], chest: false, streak: 0, chest_day: -1 };
 }
@@ -116,6 +127,7 @@ export interface CastleData {
   stats: Stats;
   quests: QuestLog;
   achievements: AchievementLog;
+  login: LoginLog;
   tools: Dict;
   crafting: Craft[];
   defence_tools: Tools;
@@ -151,6 +163,8 @@ export class CastleState {
   quests: QuestLog = newQuestLog();
   /** Achievements earned and claimed, and the title picked (achievements.ts). */
   achievements: AchievementLog = newAchievementLog();
+  /** The Royal Gift for coming back each day (login.ts). */
+  login: LoginLog = newLoginLog();
   /** Siege tools in store, the workshop's queue, and the defence tools posted on each wall. */
   tools: Dict = {};
   crafting: Craft[] = [];
@@ -719,6 +733,7 @@ export class CastleState {
       stats: { ...this.stats },
       quests: structuredClone(this.quests),
       achievements: structuredClone(this.achievements),
+      login: { ...this.login },
       tools: { ...this.tools },
       crafting: this.crafting.map((c) => ({ ...c })),
       defence_tools: structuredClone(this.defenceTools),
@@ -786,6 +801,10 @@ export class CastleState {
     for (const k of Object.keys(ach.tiers ?? {})) tiers[k] = Math.trunc(Number(ach.tiers[k]));
     for (const k of Object.keys(ach.claimed ?? {})) claimed[k] = Math.trunc(Number(ach.claimed[k]));
     castle.achievements = { tiers, claimed, title: typeof ach.title === "string" ? ach.title : "" };
+    // Castles saved before the Royal Gift have never taken one.
+    const gift = data.login ?? {};
+    castle.login = { last: Math.trunc(Number(gift.last ?? -1)), streak: Math.trunc(Number(gift.streak ?? 0)),
+      total: Math.trunc(Number(gift.total ?? 0)) };
     for (const tool of Object.keys(data.tools ?? {})) {
       const n = Math.trunc(Number(data.tools[tool]));
       if (rules.hasTool(tool) && n > 0) castle.tools[tool] = n;

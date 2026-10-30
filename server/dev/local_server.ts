@@ -39,6 +39,7 @@ import {
 import { capitalBoost, resolveVillageRaid, type VillageTarget } from "../../supabase/functions/game/villages.ts";
 import type { QuestRules } from "../rules/quests.ts";
 import type { AchievementRules } from "../rules/achievements.ts";
+import type { LoginRules } from "../rules/login.ts";
 import {
   adminEvents, checkGift, giftReport, giveCastle, NOT_ADMIN, startEvent, stopEvent, type AdminLogEntry,
 } from "../../supabase/functions/game/admin.ts";
@@ -61,6 +62,7 @@ const warRules: WarRules = json("data/wars.json");
 // For testing: shorter alliance war seasons.
 if (process.env.WAR_DAYS !== undefined) warRules.days = Number(process.env.WAR_DAYS);
 const achievementRules: AchievementRules = json("data/achievements.json");
+const loginRules: LoginRules = json("data/login.json");
 // The calendar with the owner's changes (kept on the shifted clock below).
 let eventRules: EventRules = eventRules0;
 // For testing: run the event calendar this many hours ahead, to see an event on.
@@ -675,7 +677,7 @@ createServer(async (req, res) => {
     }
     const outcome = act(rules, me, body, t,
       { pvp, outpostSpot, target: target?.target, homecomings, alliances: allianceRules, aid: aidRules,
-        events: { rules: eventRules, world, offset: EVENTS_OFFSET }, quests: questRules, achievements: achievementRules, village: village?.target, villageIncome,
+        events: { rules: eventRules, world, offset: EVENTS_OFFSET }, quests: questRules, achievements: achievementRules, login: loginRules, village: village?.target, villageIncome,
         capitalBoost: capitalBoost(rules, allianceCapitals(user).levels, allianceCapitals(user).guilds), fortresses: world.fortresses, hordeRank: hordePlace,
         market: { rules: marketRules, open: offers.filter((o) => o.seller === user && o.state === "open" && o.expires > t).length,
           offer: bought ? offerOf(bought) : undefined }, marketIncome: market.income });
