@@ -39,6 +39,25 @@
 	"bag_size": 30,
 	"commander_slots": [1, 1, 2, 2, 3],
 	"per_level": 2,
+	"_skills_comment": "Commander skills: a commander earns one skill point for each level past the first and spends it on a skill. A skill needs the commander's level (`needs`) and a rank of the skill before it in its branch (`after`); each rank adds `per_rank` (percent: the fight stats as for gear, on top of gear and past its caps, and xp, more xp from every fight). Retraining hands every point back for retrain_gold gold per commander level.",
+	"branches": [
+		{"id": "siegecraft", "name": "Siegecraft", "text": "Getting over the walls."},
+		{"id": "warfare", "name": "Warfare", "text": "Winning in the courtyard, and learning from it."},
+		{"id": "plunder", "name": "Plunder", "text": "Bringing more home."}
+	],
+	"skills": [
+		{"id": "sapper", "name": "Sapper", "branch": "siegecraft", "needs": 2, "after": "", "max": 3, "per_rank": {"wall_cut": 5}, "text": "Digs under the wall: %s."},
+		{"id": "wallbreaker", "name": "Wallbreaker", "branch": "siegecraft", "needs": 4, "after": "sapper", "max": 3, "per_rank": {"wall_attack": 4}, "text": "Leads from the ladders: %s."},
+		{"id": "breach_master", "name": "Master of the Breach", "branch": "siegecraft", "needs": 7, "after": "wallbreaker", "max": 1, "per_rank": {"wall_attack": 6, "wall_cut": 6}, "text": "No wall stands long: %s."},
+		{"id": "brawler", "name": "Brawler", "branch": "warfare", "needs": 2, "after": "", "max": 3, "per_rank": {"yard_attack": 4}, "text": "First into the courtyard: %s."},
+		{"id": "drillmaster", "name": "Drillmaster", "branch": "warfare", "needs": 4, "after": "brawler", "max": 3, "per_rank": {"xp": 20}, "text": "Learns from every fight: %s."},
+		{"id": "warlord", "name": "Warlord", "branch": "warfare", "needs": 7, "after": "drillmaster", "max": 1, "per_rank": {"wall_attack": 4, "yard_attack": 6}, "text": "Feared by every baron: %s."},
+		{"id": "deep_wagons", "name": "Deep Wagons", "branch": "plunder", "needs": 2, "after": "", "max": 3, "per_rank": {"loot": 8}, "text": "Bigger carts: %s."},
+		{"id": "forager", "name": "Forager", "branch": "plunder", "needs": 4, "after": "deep_wagons", "max": 3, "per_rank": {"loot": 5, "yard_attack": 2}, "text": "Lives off the land on the march: %s."},
+		{"id": "robber_knight", "name": "Robber Knight", "branch": "plunder", "needs": 7, "after": "forager", "max": 1, "per_rank": {"loot": 15, "xp": 20}, "text": "Takes everything not nailed down: %s."}
+	],
+	"retrain_gold": 150,
+	"skill_stats": {"xp": "more xp"},
 	"levels": [0, 5, 15, 30, 50, 80, 120, 170, 230, 300],
 	"xp_win_per_level": 1,
 	"xp_player_win": 15,

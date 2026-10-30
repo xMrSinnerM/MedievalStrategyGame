@@ -38,7 +38,7 @@ func _ready() -> void:
 	head.add_child(close)
 	var about := MenuStyle.label("Commanders lead your attacks and wear attack gear; the castellan leads your castle's defence "
 			+ "and wears defence gear. Robber barons drop gear when beaten, better from stronger camps. More commanders join "
-			+ "at keep levels 3 and 5, and they rise in level by fighting.", 14, MenuStyle.MUTED)
+			+ "at keep levels 3 and 5, and they rise in level by fighting, earning a skill point each level.", 14, MenuStyle.MUTED)
 	about.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	about.custom_minimum_size = Vector2(1000, 0)
 	box.add_child(about)
@@ -138,6 +138,9 @@ func _build_people(castle: CastleState, g: GearRules) -> void:
 		var next := g.xp_to_next(c)
 		var line := "Level %d   %s" % [level, ("%d xp to level %d" % [next, level + 1]) if next > 0 else "highest level"]
 		line += "   " + ("Away with an army, home in %s" % _clock(left) if left > 0.0 else "At home")
+		var spare := GearRules.skill_points(c)
+		if spare > 0:
+			line += "   %d skill point%s to spend (Skills tab)" % [spare, "" if spare == 1 else "s"]
 		_people.add_child(_card(String(c.name), line, g.effects_text(g.commander_effects(c)), c.gear, int(c.id), left > 0.0, g))
 	_people.add_child(_card("Castellan", "Leads your castle's defence", g.effects_text(g.castellan_effects(castle)),
 			castle.armoury.castellan, "castellan", false, g))
