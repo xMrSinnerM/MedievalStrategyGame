@@ -37,6 +37,7 @@ func _ready() -> void:
 	close.add_theme_font_size_override("font_size", 20)
 	close.pressed.connect(close_panel)
 	head.add_child(close)
+	set_meta("window_close", close)
 
 	var help := MenuStyle.label("", 14, MenuStyle.MUTED)
 	help.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART

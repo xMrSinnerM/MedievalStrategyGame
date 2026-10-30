@@ -223,6 +223,19 @@ const SVG := {
 		<rect x="28" y="18" width="8" height="38" fill="#b5281e" stroke="%s" stroke-width="2"/>
 		<path d="M32 18 C24 6 12 8 16 16 C18 19 26 19 32 18 C38 19 46 19 48 16 C52 8 40 6 32 18 Z" fill="#c8362a" stroke="%s" stroke-width="2.5" stroke-linejoin="round"/>
 		<circle cx="32" cy="40" r="6" fill="#e0b048" stroke="%s" stroke-width="2"/>""",
+	# A gold laurel wreath around a star, for seasons and their honours.
+	"laurel": """
+		<path d="M24 54 C10 46 6 30 12 14 M40 54 C54 46 58 30 52 14" fill="none" stroke="#8a6a2a" stroke-width="3" stroke-linecap="round"/>
+		<g fill="#e0b048" stroke="%s" stroke-width="1.5">
+			<ellipse cx="10" cy="22" rx="3.5" ry="7" transform="rotate(-20 10 22)"/>
+			<ellipse cx="9" cy="34" rx="3.5" ry="7" transform="rotate(-50 9 34)"/>
+			<ellipse cx="14" cy="45" rx="3.5" ry="7" transform="rotate(-70 14 45)"/>
+			<ellipse cx="54" cy="22" rx="3.5" ry="7" transform="rotate(20 54 22)"/>
+			<ellipse cx="55" cy="34" rx="3.5" ry="7" transform="rotate(50 55 34)"/>
+			<ellipse cx="50" cy="45" rx="3.5" ry="7" transform="rotate(70 50 45)"/>
+		</g>
+		<path d="M32 16 L36 27 L48 27 L38 34 L42 46 L32 38 L22 46 L26 34 L16 27 L28 27 Z" fill="#f5c842" stroke="%s" stroke-width="2.5" stroke-linejoin="round"/>
+		<path d="M24 56 L32 50 L40 56" fill="none" stroke="#b5281e" stroke-width="4" stroke-linecap="round"/>""",
 	# Check boxes: an empty bronze-rimmed box, and one with a gold tick.
 	"box": """
 		<rect x="8" y="8" width="48" height="48" rx="8" fill="#140d06" stroke="#c79a52" stroke-width="5"/>""",

@@ -153,6 +153,15 @@ The Royal Gift (`server/rules/login.ts`, `data/login.json`) is kept in the
 castle's JSON as `login` (the last UTC day it was taken, days in a row and
 days in all); `claim_login` gives today's gift once a day.
 
+Seasons (`server/rules/seasons.ts`, `data/seasons.json`) are kept in the
+castle's JSON as `season` (the month counted, the stats it counts from, track
+rewards claimed, last month's renown and season titles won). Every save also
+writes `season_key`, `season_points`, `last_season_key` and
+`last_season_points` columns (migration `20261031120000_seasons.sql`) so the
+ranking can be read without opening castles. Orders: `claim_season` (the next
+track reward), `claim_season_prize` (last season's prizes, by your place and
+your alliance's, worked out from those columns) and `season_board`.
+
 Achievements (`server/rules/achievements.ts`, `data/achievements.json`) live
 in the castle's JSON as well (`achievements`: tiers earned, tiers claimed and
 the title shown). Every request notes the tiers reached, before and after its

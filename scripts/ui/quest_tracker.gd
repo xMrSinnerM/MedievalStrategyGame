@@ -64,9 +64,12 @@ func _refresh() -> void:
 	if Economy.achievements != null:
 		lines.append("Achievements: %d points%s" % [Economy.achievements.score(castle),
 			"    reward waiting (Y)" if _achievement_waiting() else ""])
+	if Economy.season_rules != null:
+		lines.append("Season renown: %d%s" % [Economy.season_rules.renown(castle),
+			"    reward waiting" if Economy.season_waiting() else ""])
 	if Economy.login_waiting():
 		lines.append("Today's Royal Gift is waiting")
-	_ready_glow = book.can_claim_anything(castle) or _achievement_waiting() or Economy.login_waiting()
+	_ready_glow = book.can_claim_anything(castle) or _achievement_waiting() or Economy.login_waiting() or Economy.season_waiting()
 	if book.can_claim_anything(castle):
 		lines.append("A reward is waiting! Click or press J")
 	_label.text = "\n".join(lines)

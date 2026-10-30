@@ -16,6 +16,9 @@
 //   and who holds them, your alliance's place and the prize you can claim (data/wars.json)
 // POST { "action": "claim_war_prize" }           your prize for your alliance's place in the last war season
 // POST { "action": "claim_quest", "kind": "story" | "daily" | "chest", "index": n }   a quest reward (data/quests.json)
+// POST { "action": "claim_season" }               the next reward on this season's renown track (data/seasons.json)
+// POST { "action": "claim_season_prize" }         last season's prizes for your place and your alliance's
+// POST { "action": "season_board" }               this season's best players and alliances, and your places
 // POST { "action": "claim_login" }                today's Royal Gift for coming back (data/login.json)
 // POST { "action": "claim_achievement", "id": id }  an achievement's next earned reward (data/achievements.json)
 // POST { "action": "set_title", "title": "id:tier" | "" }   the title shown with your name
@@ -115,6 +118,7 @@ import eventsData from "../../../data/events.json" with { type: "json" };
 import questsData from "../../../data/quests.json" with { type: "json" };
 import achievementsData from "../../../data/achievements.json" with { type: "json" };
 import loginData from "../../../data/login.json" with { type: "json" };
+import seasonsData from "../../../data/seasons.json" with { type: "json" };
 import gearData from "../../../data/gear.json" with { type: "json" };
 import outpostsData from "../../../data/outposts.json" with { type: "json" };
 import villagesData from "../../../data/villages.json" with { type: "json" };
@@ -148,6 +152,7 @@ import {
 import type { QuestRules } from "../../../server/rules/quests.ts";
 import type { AchievementRules } from "../../../server/rules/achievements.ts";
 import type { LoginRules } from "../../../server/rules/login.ts";
+import { allianceStandings, placeIn, renown, seasonColumns, seasonEnd, seasonKey, type SeasonRules } from "../../../server/rules/seasons.ts";
 import {
   adminEvents, checkGift, giftReport, giveCastle, NOT_ADMIN, OVERRIDES_KEPT, startEvent, stopEvent, type Gift,
 } from "./admin.ts";
@@ -168,6 +173,7 @@ const warRules = warsData as WarRules;
 let scoredUntil = 0;
 const achievementRules = achievementsData as unknown as AchievementRules;
 const loginRules = loginData as unknown as LoginRules;
+const seasonRules = seasonsData as unknown as SeasonRules;
 // The calendar with the game owner's changes (admin.ts), loaded with every request.
 let calendar: EventRules = eventRules;
 rules.barons.lootFactor = (t) => effectAt(calendar, t, "baron_loot");
@@ -489,7 +495,7 @@ async function refund(userId: string, cost: Record<string, number>): Promise<Pla
 
 /** The columns other players can see, worked out from a player's state. */
 function publicColumns(state: PlayerState) {
-  return { level: castleLevel(state.castle), might: might(state.castle, pvp) };
+  return { level: castleLevel(state.castle), might: might(state.castle, pvp), ...seasonColumns(state.castle, seasonRules) };
 }
 
 /** Every spot a castle stands on: players' homes and their outposts. */
@@ -707,6 +713,35 @@ async function hordeRank(key: number, points: number): Promise<number> {
   const { count } = await admin.from("players").select("user_id", { count: "exact", head: true })
     .eq("horde_key", key).gt("horde_points", points);
   return (count ?? 0) + 1;
+}
+
+// --- Seasons (server/rules/seasons.ts) ----------------------------------------
+
+type SeasonRow = { alliance_id: number | null; season_key: number; season_points: number; last_season_key: number; last_season_points: number };
+
+/** Every player who earned in season `key`, this season or the last. */
+async function seasonRows(key: number): Promise<SeasonRow[] | null> {
+  const { data, error } = await admin.from("players").select("alliance_id, season_key, season_points, last_season_key, last_season_points")
+    .or(`season_key.eq.${key},last_season_key.eq.${key}`).limit(10000);
+  return error ? null : (data ?? []) as SeasonRow[];
+}
+
+/** What a stored castle earned in the season before this one: {key, points}, or null. */
+function lastSeasonOf(stored: PlayerState, t: number): { key: number; points: number; claimed: boolean } | null {
+  const s = stored.castle.season;
+  if (!s) return null;
+  // Not yet rolled into this month: what it has now is last season's.
+  if (s.key >= 0 && s.key !== seasonKey(t)) return { key: s.key, points: renown(stored.castle, seasonRules), claimed: false };
+  return s.last && "key" in s.last ? s.last : null;
+}
+
+/** Your place and your alliance's in a season's ranking (0: not ranked). */
+async function seasonPlaces(key: number, points: number, allianceId: number | null): Promise<{ player: number; alliance: number }> {
+  const rows = await seasonRows(key);
+  if (rows === null) return { player: 0, alliance: 0 };
+  const standings = allianceStandings(rows, key);
+  const at = allianceId === null ? -1 : standings.findIndex(([id]) => id === Number(allianceId));
+  return { player: placeIn(rows, key, points), alliance: at < 0 ? 0 : at + 1 };
 }
 
 // --- Alliance wars (wars.ts) ------------------------------------------------
@@ -1025,6 +1060,38 @@ Deno.serve(async (req: Request) => {
     return reply({ ok: true, now: now(), error: "", result: { players: (data ?? []).map(flat), me, rank, total: total ?? 0 } });
   }
 
+  if (body.action === "season_board") {
+    // This month's best players and alliances, and where you and your last season stand.
+    const t = now();
+    const key = seasonKey(t);
+    const { data, error } = await admin.from("players").select("name, season_points, alliance:alliances!players_alliance_id_fkey(tag)")
+      .eq("season_key", key).gt("season_points", 0).order("season_points", { ascending: false }).order("name").limit(RANKS_SHOWN);
+    const rows = await seasonRows(key);
+    const meRow = await admin.from("players").select(COLUMNS + ", alliance_id").eq("user_id", userId).maybeSingle();
+    if (error || rows === null || meRow.error) return reply({ ok: false, error: "The server couldn't load the season." }, 500);
+    const mine = meRow.data as (PlayerState & { alliance_id: number | null }) | null;
+    const standings = allianceStandings(rows, key).slice(0, 5);
+    const names = standings.length === 0 ? [] : (await admin.from("alliances").select("id, tag, name").in("id", standings.map(([id]) => id))).data ?? [];
+    const alliances = standings.map(([id, points]) => {
+      const a = names.find((n: Row) => Number(n.id) === id);
+      return { tag: a?.tag ?? "", name: a?.name ?? "", points };
+    });
+    let me = null;
+    let last = {};
+    if (mine) {
+      const fresh = mine.castle.season?.key === key;
+      const points = fresh ? renown(mine.castle, seasonRules) : 0;
+      me = { points, place: points > 0 ? placeIn(rows, key, points) : 0 };
+      const prev = lastSeasonOf(mine, t);
+      if (prev) {
+        const places = await seasonPlaces(prev.key, prev.points, mine.alliance_id);
+        last = { key: prev.key, points: prev.points, place: places.player, alliance_place: places.alliance, claimed: prev.claimed };
+      }
+    }
+    const players = (data ?? []).map((r: Row) => ({ name: r.name, points: r.season_points, tag: tagOf(r) }));
+    return reply({ ok: true, now: t, error: "", result: { key, end: seasonEnd(key), players, alliances, me, last } });
+  }
+
   if (body.action === "event_board") {
     // The Baron Invasion on now (or the last one): the players with the most event points in it.
     const inv = lastInvasion(calendar, now());
@@ -1186,6 +1253,13 @@ Deno.serve(async (req: Request) => {
     if (body.action === "claim_horde_prize" && (stored.horde_points ?? 0) > 0) {
       hordePlace = await hordeRank(Number(stored.horde_key ?? 0), Number(stored.horde_points));
     }
+    // Last season's prizes go by your place and your alliance's in its ranking.
+    let seasonPlace: { player: number; alliance: number } | undefined;
+    if (body.action === "claim_season_prize") {
+      const prev = lastSeasonOf(stored, t);
+      const me = await store.player(userId);
+      seasonPlace = prev && prev.points > 0 ? await seasonPlaces(prev.key, prev.points, me?.alliance_id ?? null) : { player: 0, alliance: 0 };
+    }
     // An outpost goes on the free spot nearest your home.
     let outpostSpot: [number, number] | null = null;
     if (body.action === "found_outpost" && !stored.outpost) {
@@ -1194,7 +1268,7 @@ Deno.serve(async (req: Request) => {
       outpostSpot = nearestSpot((world as World).spots, [stored.home_x, stored.home_y], taken);
     }
     const outcome = act(rules, stored, body, t, { pvp, outpostSpot, target: target?.target, homecomings, alliances: allianceRules, aid: aidRules,
-      events: { rules: calendar, world: world as World }, quests: questRules, achievements: achievementRules, login: loginRules, village: village?.target, villageIncome,
+      events: { rules: calendar, world: world as World }, quests: questRules, achievements: achievementRules, login: loginRules, seasons: seasonRules, seasonPlace, village: village?.target, villageIncome,
       capitalBoost: boost, fortresses: (world as World).fortresses, hordeRank: hordePlace,
       market: { rules: marketRules, open: openOffers, offer: bought?.offer }, marketIncome: market.income });
     // Save only if nobody else changed the row meanwhile; otherwise start over.

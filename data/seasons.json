@@ -1,0 +1,27 @@
+{
+	"_comment": "Seasons: one a calendar month (UTC). Renown is earned in a season from what the castle does in it: `renown` gives the points per building level finished (levels), soldier trained, robber baron beaten, resource of loot brought home, and online per battle won against a player's castle (pvp_won) and attack held off (pvp_held). It starts again at 0 each month. `track`: renown milestones with a reward each, claimed by hand during the season (rewards x `scale` for the keep level, like the daily tasks; given in full, past the storage cap); the last one also gives the season's `renowned` title. Online, when the month ends the players and alliances with the most renown win `players` / `alliances` prizes (the first entry whose `top` covers your place): a reward and a title for that season, like 'Champion of October 2026', claimed in the next season. An alliance's renown is its members' added up. Nothing here can be bought.",
+	"renown": {"levels": 10, "trained": 0.5, "barons": 25, "looted": 0.02, "pvp_won": 60, "pvp_held": 40},
+	"scale": [1, 2, 5, 12, 25],
+	"track": [
+		{"renown": 250, "reward": {"resources": {"wood": 300, "stone": 300}}},
+		{"renown": 750, "reward": {"resources": {"food": 400, "gold": 150}}},
+		{"renown": 1500, "reward": {"resources": {"wood": 600, "stone": 600, "food": 300}}},
+		{"renown": 2500, "reward": {"resources": {"gold": 400}, "troops": {"archer": 10}}},
+		{"renown": 4000, "reward": {"resources": {"wood": 1000, "stone": 1000, "food": 800}}},
+		{"renown": 6000, "reward": {"resources": {"food": 1000, "gold": 600}, "troops": {"swordsman": 10}}},
+		{"renown": 8500, "reward": {"resources": {"wood": 1500, "stone": 1500, "food": 1200, "gold": 600}}},
+		{"renown": 12000, "reward": {"resources": {"wood": 2500, "stone": 2500, "food": 2000, "gold": 1200}, "troops": {"horseman": 10}}}
+	],
+	"renowned": "the Renowned",
+	"players": [
+		{"top": 1, "id": "champion", "title": "Champion", "reward": {"resources": {"wood": 20000, "stone": 20000, "food": 15000, "gold": 8000}, "troops": {"horseman": 40}}},
+		{"top": 3, "id": "hero", "title": "Hero", "reward": {"resources": {"wood": 12000, "stone": 12000, "food": 9000, "gold": 5000}, "troops": {"horseman": 25}}},
+		{"top": 10, "id": "vanguard", "title": "Vanguard", "reward": {"resources": {"wood": 7000, "stone": 7000, "food": 5000, "gold": 2500}, "troops": {"swordsman": 30}}},
+		{"top": 25, "id": "contender", "title": "Contender", "reward": {"resources": {"wood": 4000, "stone": 4000, "food": 3000, "gold": 1200}}}
+	],
+	"alliances": [
+		{"top": 1, "id": "first_banner", "title": "First Banner", "reward": {"resources": {"wood": 8000, "stone": 8000, "food": 6000, "gold": 3000}}},
+		{"top": 2, "id": "second_banner", "title": "Second Banner", "reward": {"resources": {"wood": 5000, "stone": 5000, "food": 4000, "gold": 2000}}},
+		{"top": 3, "id": "third_banner", "title": "Third Banner", "reward": {"resources": {"wood": 3000, "stone": 3000, "food": 2500, "gold": 1200}}}
+	]
+}

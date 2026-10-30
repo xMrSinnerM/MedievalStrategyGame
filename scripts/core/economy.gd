@@ -38,6 +38,8 @@ signal barons_changed
 signal event_board_changed
 ## Online: the server sent the Ember Horde's ranking (see `horde_board`).
 signal horde_board_changed
+## Online: the server sent the season's ranking (see `season_board`).
+signal season_board_changed
 ## Online: the server sent the alliance war's standings (see `war_board`).
 signal war_board_changed
 ## Online: the server sent the game owner's panel (see `admin_view`), or refused an owner's order.
@@ -84,6 +86,8 @@ var quest_book: QuestBook
 var achievements: Achievements
 ## The Royal Gift for coming back each day (data/login.json).
 var login_rewards: LoginRewards
+## Seasons: renown each month, its track and, online, the ranked prizes (data/seasons.json).
+var season_rules: SeasonRules
 ## The achievement tiers already announced (null: take the next ones silently).
 var _known_tiers: Variant = null
 ## Commanders and gear (data/gear.json).
@@ -214,6 +218,11 @@ var horde_state := {}
 ## Online: the Ember Horde's ranking as the server last sent it: {"event",
 ## "players": [{"name", "points", "tag"}], "me", "rank", "total", "prize"}.
 var horde_board := {}
+## Online: the season's ranking as the server last sent it: {"key", "end",
+## "players": [{"name", "points", "tag"}], "alliances": [{"tag", "name",
+## "points"}], "me": {"points", "place"}, "last": {"key", "points", "place",
+## "alliance_place", "claimed"} or {}}.
+var season_board := {}
 ## Online: the alliance war as the server last sent it: {"season": {start, end,
 ## "alliances"}, "last": {start, end, "alliances"}, "capitals", "mine",
 ## "prize": {prize, claimed, can_claim, why}, "rules"} (data/wars.json).
@@ -249,6 +258,7 @@ func ensure_loaded() -> void:
 	baron_rules = BaronRules.load_default()
 	quest_book = QuestBook.load_default()
 	login_rewards = LoginRewards.load_default()
+	season_rules = SeasonRules.load_default()
 	achievements = Achievements.load_default()
 	gear_rules = GearRules.load_default()
 	outpost_rules = OutpostRules.load_default()
@@ -320,6 +330,7 @@ func begin_new(n := 1) -> void:
 	baron_rules = BaronRules.load_default()
 	quest_book = QuestBook.load_default()
 	login_rewards = LoginRewards.load_default()
+	season_rules = SeasonRules.load_default()
 	achievements = Achievements.load_default()
 	gear_rules = GearRules.load_default()
 	outpost_rules = OutpostRules.load_default()
@@ -337,6 +348,7 @@ func begin_load(n := 1) -> void:
 	baron_rules = BaronRules.load_default()
 	quest_book = QuestBook.load_default()
 	login_rewards = LoginRewards.load_default()
+	season_rules = SeasonRules.load_default()
 	achievements = Achievements.load_default()
 	gear_rules = GearRules.load_default()
 	outpost_rules = OutpostRules.load_default()
@@ -875,6 +887,7 @@ func _process(delta: float) -> void:
 		advance_marches(t)
 		_collect_villages(t)
 		quest_book.roll_day(player_castle, t)
+		season_rules.roll(player_castle, t)
 		gear_rules.sync(player_castle)
 		achievements.note(player_castle, false)
 		_announce_achievements()
@@ -904,6 +917,7 @@ func begin_online(answer: Dictionary) -> void:
 	baron_rules = BaronRules.load_default()
 	quest_book = QuestBook.load_default()
 	login_rewards = LoginRewards.load_default()
+	season_rules = SeasonRules.load_default()
 	achievements = Achievements.load_default()
 	_known_tiers = null
 	gear_rules = GearRules.load_default()
@@ -1107,6 +1121,7 @@ func _process_online(delta: float) -> void:
 		if outpost_castle() != null:
 			outpost_castle().advance_to(now())
 		quest_book.roll_day(player_castle, now())
+		season_rules.roll(player_castle, now())
 		gear_rules.sync(player_castle)
 		achievements.note(player_castle, true)
 		_announce_achievements()
@@ -2179,6 +2194,45 @@ func login_waiting() -> bool:
 	return login_rewards != null and player_castle != null and login_rewards.check_claim(player_castle, now()) == ""
 
 
+func claim_season_track() -> String:
+	## Claims the next reward on the season's renown track. Online the server
+	## gives it too, and its answer replaces the castle.
+	var why := season_rules.claim_track(player_castle, now())
+	if why != "":
+		return why
+	if online:
+		get_node("/root/Online").order({"action": "claim_season"})
+	else:
+		save_game()
+	changed.emit()
+	return ""
+
+
+func claim_season_prize() -> String:
+	## Online: asks the server for last season's prizes for your place and
+	## your alliance's; the castle comes back with them.
+	if not online:
+		return "Season prizes are for the online game."
+	var why := SeasonRules.check_prize(player_castle)
+	if why != "":
+		return why
+	get_node("/root/Online").order({"action": "claim_season_prize"})
+	ask_season_board()
+	return ""
+
+
+func ask_season_board() -> void:
+	## Asks the server for the season's ranking; it arrives with season_board_changed.
+	get_node("/root/Online").order({"action": "season_board"})
+
+
+func season_waiting() -> bool:
+	## A season track reward, or online last season's prize, is ready to claim.
+	if season_rules == null or player_castle == null:
+		return false
+	return season_rules.check_track(player_castle) == "" or (online and SeasonRules.check_prize(player_castle) == "")
+
+
 func claim_achievement(id: String) -> String:
 	## Claims the next earned reward of an achievement. Online the server
 	## gives it too, and its answer replaces the castle.
@@ -2577,6 +2631,10 @@ func take_order_result(body: Dictionary, answer: Dictionary) -> void:
 	if body.get("action", "") == "event_board" and answer.get("result") is Dictionary:
 		event_board = answer.result
 		event_board_changed.emit()
+		return
+	if body.get("action", "") == "season_board" and answer.get("result") is Dictionary:
+		season_board = answer.result
+		season_board_changed.emit()
 		return
 	if body.get("action", "") == "horde_board" and answer.get("result") is Dictionary:
 		horde_board = answer.result
