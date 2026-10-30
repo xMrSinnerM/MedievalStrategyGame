@@ -26,6 +26,9 @@ var trophies := 0
 ## Online only: a fortress, one of the old kingdoms' castles, with the
 ## fortress rules (BaronRules.for_camp()).
 var fortress := false
+## Until when saboteurs have weakened the palisade, and by how much (SabotageRules).
+var weak_until := 0.0
+var weak_cut := 0.0
 
 
 static func create(camp_id: String, display_name: String, pos: Vector2, start_level := 1) -> BaronCamp:
@@ -65,7 +68,7 @@ func attack(rules: BaronRules, units: BuildingRules, army: Dictionary, seed_valu
 	var barons := rules
 	rules = barons.for_camp(self)
 	var result := Battle.siege(units, waves if not waves.is_empty() else Battle.auto_waves(army), garrison(barons), Battle.DEFAULT_LAYOUT,
-			seed_value, Battle.wall_from_defense(rules.palisade(level)), {"a": tools, "lead_a": lead})
+			seed_value, Battle.wall_from_defense(rules.palisade(level) * walls_factor(now)), {"a": tools, "lead_a": lead})
 	result["level"] = level
 	result["leveled"] = false
 	result["survivors"] = Battle.survivors(result.a)
@@ -80,6 +83,11 @@ func attack(rules: BaronRules, units: BuildingRules, army: Dictionary, seed_valu
 		defeats = 0
 		result["leveled"] = true
 	return result
+
+
+func walls_factor(t: float) -> float:
+	## What's left of the palisade's strength at time t after sabotage.
+	return 1.0 - weak_cut if weak_until > t else 1.0
 
 
 static func _carried(stock: Dictionary, capacity: float) -> Dictionary:
@@ -106,6 +114,9 @@ func to_dict() -> Dictionary:
 		out["trophies"] = trophies
 	if fortress:
 		out["fortress"] = true
+	if weak_until > 0.0:
+		out["weak_until"] = weak_until
+		out["weak_cut"] = weak_cut
 	return out
 
 
@@ -119,4 +130,6 @@ static func from_dict(data: Dictionary) -> BaronCamp:
 	camp.horde = float(data.get("horde", 0.0))
 	camp.trophies = int(data.get("trophies", 0))
 	camp.fortress = bool(data.get("fortress", false))
+	camp.weak_until = float(data.get("weak_until", 0.0))
+	camp.weak_cut = float(data.get("weak_cut", 0.0))
 	return camp

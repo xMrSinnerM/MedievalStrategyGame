@@ -57,6 +57,7 @@ func _initialize() -> void:
 	test_chests()
 	test_encounters()
 	test_weather()
+	test_sabotage()
 	print("%d checks, %d failed" % [checks, failures])
 	quit(1 if failures > 0 else 0)
 
@@ -1807,3 +1808,64 @@ func test_weather() -> void:
 		check(eco.weather_slow(mid + Vector2(400, 0)) > 1.0, "a march through %s is slower" % wet.kind)
 	eco.delete_slot(1)
 	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://test_saves"))
+
+
+func test_sabotage() -> void:
+	var rules := BuildingRules.load_default()
+	var barons := BaronRules.load_default()
+	var sab := SabotageRules.load_default()
+	var c := CastleState.create_new(rules, "c", "Valentin's Castle", "player", T0)
+	var camp := BaronCamp.create("camp_1", "Camp", Vector2(100, 100), 3)
+	c.resources.gold = 1000.0
+	check(sab.against_camp(c, camp, barons, "burn_stores", 5, T0).error == "Camps keep no stores worth burning.", "no stores at camps")
+	check(sab.against_camp(c, camp, barons, "steal", 0, T0).error == "Send between 1 and %d agents." % sab.max_agents, "at least one agent")
+	check(sab.against_camp(c, camp, barons, "steal", 2.5, T0).error.begins_with("Send between"), "whole agents")
+	check(sab.against_camp(c, camp, barons, "nope", 5, T0).error == "There's no such mission.", "no such mission")
+	near(sab.camp_chance(5, 3), 0.4 + 0.125 - 0.024, "the odds grow with agents and fall with the camp's level")
+	check(sab.camp_chance(20, 1) == 0.9 and sab.camp_chance(1, 60) == 0.1, "between 10% and 90%")
+	check(sab.player_chance(5, 3, 1) == sab.player_chance(5, 3, 3) and sab.player_chance(5, 1, 3) < sab.player_chance(5, 3, 3),
+			"bigger castles are harder")
+	# The luck comes from the castle, the target and the missions sent before, so the server agrees.
+	var outcomes: Array = []
+	for k in 12:
+		var probe := CastleState.create_new(rules, "c", "Valentin's Castle", "player", T0)
+		probe.resources.gold = 1000.0
+		probe.sabotage.count = k
+		outcomes.append(sab.against_camp(probe, BaronCamp.create("camp_1", "Camp", Vector2.ZERO, 3), barons, "steal", 5, T0).success)
+	check(outcomes.has(true) and outcomes.has(false), "some succeed, some are caught: %s" % [outcomes])
+	var out := sab.against_camp(c, camp, barons, "burn_walls", 10, T0)
+	check(out.error == "" and c.resources.gold == 700.0 and c.sabotage.count == 1, "10 agents cost 300 gold")
+	check(sab.against_camp(c, camp, barons, "steal", 10, T0 + 60.0).error.begins_with("Your agents there are lying low"), "a cooldown per target")
+	if out.success:
+		near(camp.walls_factor(T0 + 3600.0), 0.7, "the palisade is 30% weaker")
+		check(camp.walls_factor(T0 + 7.0 * 3600.0) == 1.0, "for six hours")
+		var kept := BaronCamp.from_dict(JSON.parse_string(JSON.stringify(camp.to_dict())))
+		check(kept.weak_until == camp.weak_until and kept.weak_cut == camp.weak_cut, "the weakened palisade is saved")
+	var saved := CastleState.from_dict(rules, JSON.parse_string(JSON.stringify(c.to_dict())))
+	check(saved.sabotage.count == 1 and saved.sabotage.sent.has(SabotageRules.camp_key("camp_1")), "missions sent are saved")
+	check(sab.wait_left(c, SabotageRules.camp_key("camp_1"), T0 + 4.0 * 3600.0) == 0.0, "agents can go again after four hours")
+	# Stealing from a camp: a share of its loot, as much as the agents carry.
+	var thief := CastleState.create_new(rules, "c", "Thief", "player", T0)
+	thief.resources = {"wood": 0.0, "stone": 0.0, "food": 0.0, "gold": 1000.0}
+	var tries := 0
+	var got := {}
+	while tries < 20 and got.is_empty():
+		thief.sabotage.sent = {}
+		var r := sab.against_camp(thief, BaronCamp.create("camp_2", "Camp", Vector2.ZERO, 1), barons, "steal", 20, T0)
+		if r.success:
+			got = r.stolen
+		tries += 1
+	var total := 0
+	for k: String in got:
+		total += int(got[k])
+	check(total > 0 and total <= sab.carry(20, 1), "agents carry off loot: %s" % [got])
+	# Players: what agents take or burn, and walls weakened.
+	var them := CastleState.create_new(rules, "t", "Them", "player", T0)
+	them.resources = {"wood": 1000.0, "stone": 0.0, "food": 1000.0, "gold": 1000.0}
+	check(sab.steal_from(them, "wood", 5, 1) == mini(sab.carry(5, 1), floori((1000.0 - them.hidden()) * sab.steal_share)), "steal is capped")
+	check(sab.steal_from(them, "toString", 5, 1) == 0, "no such resource")
+	check(not sab.burned(them).has("stone"), "nothing to burn where there's nothing")
+	them.sabotage.walls_until = T0 + 100.0
+	them.sabotage.walls_cut = 0.3
+	near(SabotageRules.walls_factor(them, T0), 0.7, "a sabotaged wall")
+	check(SabotageRules.walls_factor(them, T0 + 101.0) == 1.0, "and mended after")

@@ -52,6 +52,10 @@ var chests := new_chest_log()
 ## Map encounters this castle has won while they're still on the map
 ## (EncounterRules).
 var encounters := {"done": []}
+## Spies and sabotage (SabotageRules): when this castle last sent agents to
+## each target, how many missions it has sent, and until when its own walls
+## are weakened by someone else's agents, and by how much.
+var sabotage := {"sent": {}, "count": 0, "walls_until": 0.0, "walls_cut": 0.0}
 ## Siege tools in store (tool -> count), the workshop's queue (batches
 ## {tool, remaining, unit_time, next}, like training) and the defence tools
 ## posted on each wall (wall -> {tool: count}, Battle.siege()).
@@ -837,6 +841,7 @@ func copy_from(other: CastleState) -> void:
 	season = other.season
 	chests = other.chests
 	encounters = other.encounters
+	sabotage = other.sabotage
 	tools = other.tools
 	crafting = other.crafting
 	defence_tools = other.defence_tools
@@ -866,6 +871,7 @@ func to_dict() -> Dictionary:
 		"stats": stats.duplicate(), "quests": quests.duplicate(true), "achievements": achievements.duplicate(true),
 		"login": login.duplicate(), "season": season.duplicate(true),
 		"chests": chests.duplicate(true), "encounters": encounters.duplicate(true),
+		"sabotage": sabotage.duplicate(true),
 		"tools": tools.duplicate(), "crafting": crafting.duplicate(true), "defence_tools": defence_tools.duplicate(true),
 		"armoury": armoury.duplicate(true),
 		"boost": boost.duplicate(), "limits": limits.duplicate(true) if not limits.is_empty() else null,
@@ -968,6 +974,16 @@ static func from_dict(p_rules: BuildingRules, data: Dictionary) -> CastleState:
 		for id: Variant in met.get("done", []):
 			if id is String:
 				castle.encounters.done.append(id)
+	var agents: Variant = data.get("sabotage", {})
+	if agents is Dictionary:
+		var sent: Variant = agents.get("sent", {})
+		if sent is Dictionary:
+			for key: Variant in sent:
+				if key is String and (sent[key] is float or sent[key] is int):
+					castle.sabotage.sent[key] = float(sent[key])
+		castle.sabotage.count = int(agents.get("count", 0))
+		castle.sabotage.walls_until = float(agents.get("walls_until", 0.0))
+		castle.sabotage.walls_cut = float(agents.get("walls_cut", 0.0))
 	var stock: Dictionary = data.get("tools", {})
 	for tool: String in stock:
 		if p_rules.has_tool(tool) and int(stock[tool]) > 0:

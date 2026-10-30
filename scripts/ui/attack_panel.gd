@@ -545,7 +545,7 @@ func _defence() -> Dictionary:
 		return {}
 	var br := Economy.baron_rules.for_camp(camp)
 	return {"troops": camp.garrison(br), "layout": Battle.DEFAULT_LAYOUT,
-			"wall": Battle.wall_from_defense(br.palisade(camp.level))}
+			"wall": Battle.wall_from_defense(br.palisade(camp.level) * camp.walls_factor(Economy.now()))}
 
 
 # --- Siege tools ------------------------------------------------------------------
@@ -713,7 +713,7 @@ func _describe_camp(camp: BaronCamp) -> void:
 	var garrison := camp.garrison(br)
 	for unit: String in garrison:
 		lines.append("%d %s" % [garrison[unit], Economy.rules.unit_plural(unit)])
-	var wall := Battle.wall_from_defense(br.palisade(camp.level))
+	var wall := Battle.wall_from_defense(br.palisade(camp.level) * camp.walls_factor(Economy.now()))
 	lines.append("%s: +%d%% defence" % ["Walls" if camp.fortress else "Palisade", roundi((wall - 1.0) * 100.0)])
 	lines.append_array(_posts(garrison, Battle.DEFAULT_LAYOUT))
 	var loot := Economy.baron_loot(camp.level, camp)

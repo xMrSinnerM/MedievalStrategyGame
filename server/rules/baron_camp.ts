@@ -28,6 +28,9 @@ export interface CampData {
   until?: number;
   /** A fortress (one of the old kingdoms' castles), with the fortress rules (BaronRules.forCamp()). */
   fortress?: boolean;
+  /** Until when saboteurs have weakened the palisade (sabotage.ts), and by how much. */
+  weak_until?: number;
+  weak_cut?: number;
 }
 
 export interface CampAttack extends SiegeResult {
@@ -51,7 +54,7 @@ export function attackCamp(camp: CampData, barons: BaronRules, units: BuildingRu
   waves?: Wave[], tools: Tools = {}, lead: Dict = {}): CampAttack {
   const rules = barons.forCamp(camp);
   const result = siege(units, waves ?? autoWaves(army), rules.garrison(camp.level), DEFAULT_LAYOUT, seed,
-    wallFromDefense(rules.palisade(camp.level)), { a: tools, lead_a: lead });
+    wallFromDefense(rules.palisade(camp.level) * ((camp.weak_until ?? 0) > now ? 1 - (camp.weak_cut ?? 0) : 1)), { a: tools, lead_a: lead });
   const out: CampAttack = { ...result, level: camp.level, leveled: false, survivors: survivors(result.a), loot: {} };
   if (result.winner !== "a") return out;
   const factor = barons.lootFactor(now);

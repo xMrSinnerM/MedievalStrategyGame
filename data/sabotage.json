@@ -1,0 +1,18 @@
+{
+	"_comment": "Spies and sabotage: instead of attacking, hire agents (agent_gold each, 1 to max_agents) and send them into a robber baron's camp or, online, another player's castle. They succeed with chance base + per_agent for each agent, less per_camp_level for each camp level past the first or per_keep for each keep level the player is above you (between min and max). Missions: steal (agents carry off carry_per_agent each, times your keep's scale, up to steal_share of what is there: one resource from a player, an even share of a camp's loot), burn_stores (players: burn_share of every resource above their hidden cellars goes up in smoke) and burn_walls (the wall or palisade loses walls_cut of its strength for walls_hours). Failed agents are caught and the player is told who sent them. You can send agents to the same target once every cooldown_hours. Players under beginner protection, too small to attack or in your alliance can't be targeted.",
+	"agent_gold": 30,
+	"max_agents": 20,
+	"cooldown_hours": 4,
+	"chance": {"base": 0.4, "per_agent": 0.025, "per_camp_level": 0.012, "per_keep": 0.08, "min": 0.1, "max": 0.9},
+	"scale": [1, 2, 4, 7, 10],
+	"carry_per_agent": 40,
+	"steal_share": 0.25,
+	"burn_share": 0.08,
+	"walls_cut": 0.3,
+	"walls_hours": 6,
+	"missions": {
+		"steal": {"name": "Steal", "text": "Slip into the stores and carry off what they can."},
+		"burn_stores": {"name": "Burn the stores", "text": "Set fire to the stores: some of everything they hold burns.", "players_only": true},
+		"burn_walls": {"name": "Weaken the walls", "text": "Fire the gate and the scaffolding: the walls are weaker for a while."}
+	}
+}
