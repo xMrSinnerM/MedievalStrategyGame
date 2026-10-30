@@ -10,17 +10,17 @@
 		{"renown": 4000, "reward": {"resources": {"wood": 1000, "stone": 1000, "food": 800}}},
 		{"renown": 6000, "reward": {"resources": {"food": 1000, "gold": 600}, "troops": {"swordsman": 10}}},
 		{"renown": 8500, "reward": {"resources": {"wood": 1500, "stone": 1500, "food": 1200, "gold": 600}}},
-		{"renown": 12000, "reward": {"resources": {"wood": 2500, "stone": 2500, "food": 2000, "gold": 1200}, "troops": {"horseman": 10}}}
+		{"renown": 12000, "reward": {"resources": {"wood": 2500, "stone": 2500, "food": 2000, "gold": 1200}, "troops": {"horseman": 10}, "chests": {"golden": 1}}}
 	],
 	"renowned": "the Renowned",
 	"players": [
-		{"top": 1, "id": "champion", "title": "Champion", "reward": {"resources": {"wood": 20000, "stone": 20000, "food": 15000, "gold": 8000}, "troops": {"horseman": 40}}},
-		{"top": 3, "id": "hero", "title": "Hero", "reward": {"resources": {"wood": 12000, "stone": 12000, "food": 9000, "gold": 5000}, "troops": {"horseman": 25}}},
-		{"top": 10, "id": "vanguard", "title": "Vanguard", "reward": {"resources": {"wood": 7000, "stone": 7000, "food": 5000, "gold": 2500}, "troops": {"swordsman": 30}}},
+		{"top": 1, "id": "champion", "title": "Champion", "reward": {"resources": {"wood": 20000, "stone": 20000, "food": 15000, "gold": 8000}, "troops": {"horseman": 40}, "chests": {"golden": 3}}},
+		{"top": 3, "id": "hero", "title": "Hero", "reward": {"resources": {"wood": 12000, "stone": 12000, "food": 9000, "gold": 5000}, "troops": {"horseman": 25}, "chests": {"golden": 2}}},
+		{"top": 10, "id": "vanguard", "title": "Vanguard", "reward": {"resources": {"wood": 7000, "stone": 7000, "food": 5000, "gold": 2500}, "troops": {"swordsman": 30}, "chests": {"golden": 1}}},
 		{"top": 25, "id": "contender", "title": "Contender", "reward": {"resources": {"wood": 4000, "stone": 4000, "food": 3000, "gold": 1200}}}
 	],
 	"alliances": [
-		{"top": 1, "id": "first_banner", "title": "First Banner", "reward": {"resources": {"wood": 8000, "stone": 8000, "food": 6000, "gold": 3000}}},
+		{"top": 1, "id": "first_banner", "title": "First Banner", "reward": {"resources": {"wood": 8000, "stone": 8000, "food": 6000, "gold": 3000}, "chests": {"golden": 1}}},
 		{"top": 2, "id": "second_banner", "title": "Second Banner", "reward": {"resources": {"wood": 5000, "stone": 5000, "food": 4000, "gold": 2000}}},
 		{"top": 3, "id": "third_banner", "title": "Third Banner", "reward": {"resources": {"wood": 3000, "stone": 3000, "food": 2500, "gold": 1200}}}
 	]

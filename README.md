@@ -524,6 +524,22 @@ The numbers live in `data/seasons.json`. `SeasonRules`
 count renown from the castle's lifetime stats as they were when the season
 began.
 
+## Treasure chests and the Wheel of Fortune
+
+Rewards now also bring **treasure chests**: a wooden chest from the Steward's
+Coffer, an iron chest on day 7 of the Royal Gift, a wooden, iron or golden
+chest with each achievement tier, and golden chests from the season's track
+and its prizes. Open them in the *Treasure* tab of the quest window: each
+kind has a **Wheel of Fortune** of eight prizes (resources, soldiers, siege
+tools, more chests, or a rare jackpot) with the odds shown beside it. The
+wheel spins and lands on what you won. Resources grow with your keep, as
+with the daily tasks. Chests can't be bought.
+
+The numbers live in `data/chests.json`. Each spin is decided by the castle
+and how many chests it has opened, so `ChestRules`
+(`scripts/economy/chest_rules.gd`) and the server's `server/rules/chests.ts`
+always agree on where the wheel lands (order `open_chest`).
+
 ## Achievements and titles
 
 Press **Y** (or **Achievements** at the top of the quest screen) for 14

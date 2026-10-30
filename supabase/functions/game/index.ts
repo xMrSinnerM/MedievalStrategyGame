@@ -16,6 +16,7 @@
 //   and who holds them, your alliance's place and the prize you can claim (data/wars.json)
 // POST { "action": "claim_war_prize" }           your prize for your alliance's place in the last war season
 // POST { "action": "claim_quest", "kind": "story" | "daily" | "chest", "index": n }   a quest reward (data/quests.json)
+// POST { "action": "open_chest", "kind": "wooden" | "iron" | "golden" }   spins a treasure chest's wheel (data/chests.json)
 // POST { "action": "claim_season" }               the next reward on this season's renown track (data/seasons.json)
 // POST { "action": "claim_season_prize" }         last season's prizes for your place and your alliance's
 // POST { "action": "season_board" }               this season's best players and alliances, and your places
@@ -119,6 +120,7 @@ import questsData from "../../../data/quests.json" with { type: "json" };
 import achievementsData from "../../../data/achievements.json" with { type: "json" };
 import loginData from "../../../data/login.json" with { type: "json" };
 import seasonsData from "../../../data/seasons.json" with { type: "json" };
+import chestsData from "../../../data/chests.json" with { type: "json" };
 import gearData from "../../../data/gear.json" with { type: "json" };
 import outpostsData from "../../../data/outposts.json" with { type: "json" };
 import villagesData from "../../../data/villages.json" with { type: "json" };
@@ -152,6 +154,7 @@ import {
 import type { QuestRules } from "../../../server/rules/quests.ts";
 import type { AchievementRules } from "../../../server/rules/achievements.ts";
 import type { LoginRules } from "../../../server/rules/login.ts";
+import type { ChestRules } from "../../../server/rules/chests.ts";
 import { allianceStandings, placeIn, renown, seasonColumns, seasonEnd, seasonKey, type SeasonRules } from "../../../server/rules/seasons.ts";
 import {
   adminEvents, checkGift, giftReport, giveCastle, NOT_ADMIN, OVERRIDES_KEPT, startEvent, stopEvent, type Gift,
@@ -174,6 +177,7 @@ let scoredUntil = 0;
 const achievementRules = achievementsData as unknown as AchievementRules;
 const loginRules = loginData as unknown as LoginRules;
 const seasonRules = seasonsData as unknown as SeasonRules;
+const chestRules = chestsData as unknown as ChestRules;
 // The calendar with the game owner's changes (admin.ts), loaded with every request.
 let calendar: EventRules = eventRules;
 rules.barons.lootFactor = (t) => effectAt(calendar, t, "baron_loot");
@@ -1268,7 +1272,7 @@ Deno.serve(async (req: Request) => {
       outpostSpot = nearestSpot((world as World).spots, [stored.home_x, stored.home_y], taken);
     }
     const outcome = act(rules, stored, body, t, { pvp, outpostSpot, target: target?.target, homecomings, alliances: allianceRules, aid: aidRules,
-      events: { rules: calendar, world: world as World }, quests: questRules, achievements: achievementRules, login: loginRules, seasons: seasonRules, seasonPlace, village: village?.target, villageIncome,
+      events: { rules: calendar, world: world as World }, quests: questRules, achievements: achievementRules, login: loginRules, seasons: seasonRules, seasonPlace, chests: chestRules, village: village?.target, villageIncome,
       capitalBoost: boost, fortresses: (world as World).fortresses, hordeRank: hordePlace,
       market: { rules: marketRules, open: openOffers, offer: bought?.offer }, marketIncome: market.income });
     // Save only if nobody else changed the row meanwhile; otherwise start over.

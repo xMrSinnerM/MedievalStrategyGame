@@ -16,7 +16,7 @@ export interface LoginRules {
   scale: number[];
   week_bonus: number;
   max_weeks: number;
-  days: { resources?: Dict; troops?: Dict }[];
+  days: Reward[];
 }
 
 export function dayOf(t: number): number {
@@ -58,6 +58,7 @@ export function loginReward(rules: LoginRules, day: number, keep: number, weeks 
   for (const [r, n] of Object.entries(base.resources ?? {})) resources[r] = round(n * mult);
   const out: Reward = { resources };
   if (base.troops) out.troops = { ...base.troops };
+  if (base.chests) out.chests = { ...base.chests };
   return out;
 }
 

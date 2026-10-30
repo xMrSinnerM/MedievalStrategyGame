@@ -81,6 +81,7 @@ func _ready() -> void:
 	quests.achievements = achievements
 	_gift = preload("res://scripts/ui/login_panel.gd").new()
 	var season := preload("res://scripts/ui/season_panel.gd").new()
+	var treasure := preload("res://scripts/ui/chest_panel.gd").new()
 	var tracker := preload("res://scripts/ui/quest_tracker.gd").new()
 	tracker.panel = quests
 	tracker.add_to_group("tutorial_quest_tracker")
@@ -134,7 +135,7 @@ func _ready() -> void:
 	var leaderboard := preload("res://scripts/ui/leaderboard_panel.gd").new()
 	var events := preload("res://scripts/ui/event_panel.gd").new()
 	var market := preload("res://scripts/ui/market_panel.gd").new()
-	var quest_window := _window("Quests", "quests", [quests, "Quests", _gift, "Royal Gift", season, "Season", achievements, "Achievements"])
+	var quest_window := _window("Quests", "quests", [quests, "Quests", _gift, "Royal Gift", season, "Season", treasure, "Treasure", achievements, "Achievements"])
 	var army_window := _window("Commanders", "commanders", [commanders, ""])
 	var lands_window := _window("Your lands", "villages", [villages, "Villages", outpost, "Outpost"])
 	var alliance_window := _window("Alliance", "alliance", [alliance, "Alliance", war, "War", leaderboard, "Leaderboard"])
@@ -161,7 +162,7 @@ func _ready() -> void:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 6)
 	dock.add_child(row)
-	_quests_button = _dock_button("Quests", "quests", "Quests, the Royal Gift, the season and achievements (J, Y)", quest_window.toggle)
+	_quests_button = _dock_button("Quests", "quests", "Quests, the Royal Gift, the season, treasure chests and achievements (J, Y)", quest_window.toggle)
 	row.add_child(_quests_button)
 	row.add_child(_dock_button("Army", "commanders", "Commanders and their gear (H)", army_window.toggle))
 	row.add_child(_dock_button("Lands", "villages", "Your villages, capitals and outpost (B, P)", lands_window.toggle))
@@ -297,7 +298,8 @@ func _process(delta: float) -> void:
 		var book := Economy.quest_book
 		var waiting: bool = (book != null and book.can_claim_anything(Economy.player_castle)) \
 				or (Economy.achievements != null and Economy.achievements.can_claim_anything(Economy.player_castle)) \
-				or Economy.login_waiting() or Economy.season_waiting()
+				or Economy.login_waiting() or Economy.season_waiting() \
+				or (Economy.chest_rules != null and Economy.chest_rules.total(Economy.player_castle) > 0)
 		_set_badge(_quests_button, "!" if waiting else "")
 	_show_gift(delta)
 	var status := ""

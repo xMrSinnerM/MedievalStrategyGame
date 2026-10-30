@@ -164,6 +164,8 @@ func coffer_reward(keep: int, streak: int) -> Dictionary:
 		for u: String in c.streak_troops:
 			troops[u] = roundi(float(c.streak_troops[u]) * scale)
 		reward["troops"] = troops
+	if c.has("chests"):
+		reward["chests"] = c.chests.duplicate()
 	return reward
 
 
@@ -200,7 +202,8 @@ func check_claim(castle: CastleState, kind: String, index := 0) -> String:
 
 
 static func give(castle: CastleState, reward: Dictionary) -> void:
-	## Gives a quest reward in full (even past the storage cap).
+	## Gives a reward in full (even past the storage cap): resources,
+	## soldiers, siege tools and treasure chests.
 	var res: Dictionary = reward.get("resources", {})
 	for r: String in res:
 		if castle.resources.has(r):
@@ -209,6 +212,13 @@ static func give(castle: CastleState, reward: Dictionary) -> void:
 	for unit: String in troops:
 		if castle.rules.has_unit(unit):
 			castle.troops[unit] = int(castle.troops.get(unit, 0)) + int(troops[unit])
+	var tools: Dictionary = reward.get("tools", {})
+	for tool: String in tools:
+		if castle.rules.has_tool(tool):
+			castle.tools[tool] = int(castle.tools.get(tool, 0)) + int(tools[tool])
+	var chests: Dictionary = reward.get("chests", {})
+	for kind: String in chests:
+		castle.chests.have[kind] = int(castle.chests.have.get(kind, 0)) + int(chests[kind])
 
 
 func claim(castle: CastleState, kind: String, index: int, now: float) -> String:

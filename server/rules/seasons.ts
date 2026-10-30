@@ -80,6 +80,7 @@ export function trackReward(rules: SeasonRules, index: number, keep: number): Re
   for (const [r, n] of Object.entries(base.resources ?? {})) resources[r] = round(n * mult);
   const out: Reward = { resources };
   if (base.troops) out.troops = { ...base.troops };
+  if (base.chests) out.chests = { ...base.chests };
   return out;
 }
 

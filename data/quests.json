@@ -616,6 +616,9 @@
 			"max_streak": 7,
 			"streak_troops": {
 				"swordsman": 4
+			},
+			"chests": {
+				"wooden": 1
 			}
 		}
 	}
