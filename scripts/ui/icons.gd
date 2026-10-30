@@ -216,6 +216,13 @@ const SVG := {
 		<path d="M12 22 C18 20 23 20 27 23 M12 30 C18 28 23 28 27 31 M12 38 C18 36 23 36 27 39" stroke="#8a6a3a" stroke-width="2" fill="none" stroke-linecap="round"/>
 		<path d="M54 4 C46 12 41 22 38 34 L41 35 C45 24 50 15 58 8 Z" fill="#b5281e" stroke="%s" stroke-width="2.5" stroke-linejoin="round"/>
 		<path d="M38 34 L36 41" stroke="#2a1a0c" stroke-width="2.5" stroke-linecap="round"/>""",
+	# A gift box tied with a crimson ribbon and a wax seal, for the Royal Gift.
+	"gift": """
+		<rect x="8" y="26" width="48" height="30" rx="3" fill="#2f4f8a" stroke="%s" stroke-width="3"/>
+		<rect x="5" y="18" width="54" height="11" rx="2" fill="#3c62a8" stroke="%s" stroke-width="3"/>
+		<rect x="28" y="18" width="8" height="38" fill="#b5281e" stroke="%s" stroke-width="2"/>
+		<path d="M32 18 C24 6 12 8 16 16 C18 19 26 19 32 18 C38 19 46 19 48 16 C52 8 40 6 32 18 Z" fill="#c8362a" stroke="%s" stroke-width="2.5" stroke-linejoin="round"/>
+		<circle cx="32" cy="40" r="6" fill="#e0b048" stroke="%s" stroke-width="2"/>""",
 	# Check boxes: an empty bronze-rimmed box, and one with a gold tick.
 	"box": """
 		<rect x="8" y="8" width="48" height="48" rx="8" fill="#140d06" stroke="#c79a52" stroke-width="5"/>""",

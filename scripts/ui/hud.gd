@@ -24,6 +24,8 @@ var _alert: Label
 var _event: Label                ## online: the timed event on now, or the next one
 var _sieges := {}                ## castle id -> {"besieger", "until"} for sieges of your castles
 var _windows: Array[GameWindow] = []
+var _gift: Control               ## the Royal Gift page, opened by itself once when today's is waiting
+var _gift_wait := 2.0            ## seconds after the map opens before it may show (-1: done)
 
 
 func _ready() -> void:
@@ -77,10 +79,12 @@ func _ready() -> void:
 	var achievements := preload("res://scripts/ui/achievements_panel.gd").new()
 	var quests := preload("res://scripts/ui/quest_panel.gd").new()
 	quests.achievements = achievements
+	_gift = preload("res://scripts/ui/login_panel.gd").new()
 	var tracker := preload("res://scripts/ui/quest_tracker.gd").new()
 	tracker.panel = quests
 	tracker.add_to_group("tutorial_quest_tracker")
 	tracker.achievements = achievements
+	tracker.gift = _gift
 	tracker.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	notes.add_child(tracker)
 	var status_card := PanelContainer.new()
@@ -129,7 +133,7 @@ func _ready() -> void:
 	var leaderboard := preload("res://scripts/ui/leaderboard_panel.gd").new()
 	var events := preload("res://scripts/ui/event_panel.gd").new()
 	var market := preload("res://scripts/ui/market_panel.gd").new()
-	var quest_window := _window("Quests", "quests", [quests, "Quests", achievements, "Achievements"])
+	var quest_window := _window("Quests", "quests", [quests, "Quests", _gift, "Royal Gift", achievements, "Achievements"])
 	var army_window := _window("Commanders", "commanders", [commanders, ""])
 	var lands_window := _window("Your lands", "villages", [villages, "Villages", outpost, "Outpost"])
 	var alliance_window := _window("Alliance", "alliance", [alliance, "Alliance", war, "War", leaderboard, "Leaderboard"])
@@ -156,7 +160,7 @@ func _ready() -> void:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 6)
 	dock.add_child(row)
-	_quests_button = _dock_button("Quests", "quests", "Quests and achievements (J, Y)", quest_window.toggle)
+	_quests_button = _dock_button("Quests", "quests", "Quests, the Royal Gift and achievements (J, Y)", quest_window.toggle)
 	row.add_child(_quests_button)
 	row.add_child(_dock_button("Army", "commanders", "Commanders and their gear (H)", army_window.toggle))
 	row.add_child(_dock_button("Lands", "villages", "Your villages, capitals and outpost (B, P)", lands_window.toggle))
@@ -291,8 +295,10 @@ func _process(delta: float) -> void:
 		_quest_book_check = 0.5
 		var book := Economy.quest_book
 		var waiting: bool = (book != null and book.can_claim_anything(Economy.player_castle)) \
-				or (Economy.achievements != null and Economy.achievements.can_claim_anything(Economy.player_castle))
+				or (Economy.achievements != null and Economy.achievements.can_claim_anything(Economy.player_castle)) \
+				or Economy.login_waiting()
 		_set_badge(_quests_button, "!" if waiting else "")
+	_show_gift(delta)
 	var status := ""
 	if Economy.online:
 		if Economy.is_protected():
@@ -306,6 +312,26 @@ func _process(delta: float) -> void:
 		_status.text = status
 	_status.get_parent().visible = status != ""
 	_controls.show_status(_zoom_t)
+
+
+func _show_gift(delta: float) -> void:
+	## Once, shortly after the map opens: today's Royal Gift if it's waiting,
+	## unless the tutorial is on or a window is already open.
+	if _gift_wait < 0.0:
+		return
+	_gift_wait -= delta
+	if _gift_wait > 0.0:
+		return
+	_gift_wait = -1.0
+	var main := get_tree().current_scene
+	var tutorial: Variant = main.get("tutorial") if main != null else null
+	if tutorial != null and tutorial.running():
+		return
+	for w in _windows:
+		if w.is_open():
+			return
+	if Economy.login_waiting():
+		_gift.open_panel()
 
 
 func _show_event() -> void:

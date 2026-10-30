@@ -481,13 +481,30 @@ spent less refunds, barons beaten, loot brought home), so `QuestBook`
 (`scripts/economy/quest_book.gd`) and the server's `server/rules/quests.ts`
 give the same answers (checked by the server fixtures).
 
+## Royal Gift
+
+Come back every day for the **Royal Gift**, a tab of the quest window that
+opens by itself on the map when today's gift is waiting (the quest box glows
+and says so too). One gift a day (the day turns at midnight UTC), taken by
+hand. The gifts grow over a week of days in a row: wood and stone on day 1,
+up to all four resources plus 5 swordsmen and 5 archers on day 7, and then
+the week starts again. Every full week in a row adds 10% to the gifts, up to
+50%; miss a day and you start again at day 1. Bigger keeps get bigger gifts
+(x1, x2, x5, x12, x25 from keep 1 to 5, like the daily tasks), given in full
+even past the storage cap. The **Faithful Lord** achievement counts the days
+you took it, in all.
+
+The numbers live in `data/login.json`. `LoginRewards`
+(`scripts/economy/login_rewards.gd`) and the server's `server/rules/login.ts`
+are the same rules; online the server gives it with the `claim_login` order.
+
 ## Achievements and titles
 
-Press **Y** (or **Achievements** at the top of the quest screen) for 13
+Press **Y** (or **Achievements** at the top of the quest screen) for 14
 lifetime achievements, each in three tiers (bronze, silver, gold): building
 levels, keep level, soldiers trained, soldiers at home at once, robber baron
 camps beaten, loot brought home, resources spent, story quests, the coffer
-streak, study levels, your best commander's level and, online only, battles
+streak, days the Royal Gift was taken, study levels, your best commander's level and, online only, battles
 won against other players' castles and attacks on yours held off.
 
 A tier is earned for good the moment you reach it, even if the count falls

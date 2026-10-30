@@ -1,0 +1,18 @@
+{
+	"_comment": "The Royal Gift: a reward for coming back each day (UTC days, like the daily tasks). One a day, taken by hand. `days` is a week of gifts: day 1 the first day, day 2 the next day in a row and so on; after day 7 the week starts again at day 1. Missing a day starts over at day 1. Every full week in a row adds `week_bonus` to the gifts, up to `max_weeks` weeks. Rewards are multiplied by `scale` for the keep level (keep 1, 2, ...), like the daily tasks, and given in full, even past the storage cap. Troops are not scaled. Nothing here can be bought.",
+	"name": "Royal Gift",
+	"giver": "Steward Bertram",
+	"line": "The king remembers lords who keep their halls. A gift came at dawn, my lord.",
+	"scale": [1, 2, 5, 12, 25],
+	"week_bonus": 0.1,
+	"max_weeks": 5,
+	"days": [
+		{"resources": {"wood": 150, "stone": 150}},
+		{"resources": {"food": 200, "gold": 50}},
+		{"resources": {"wood": 200, "stone": 200, "food": 100}},
+		{"resources": {"gold": 120}},
+		{"resources": {"wood": 250, "stone": 250, "food": 200}},
+		{"resources": {"food": 300, "gold": 120}},
+		{"resources": {"wood": 400, "stone": 400, "food": 300, "gold": 200}, "troops": {"swordsman": 5, "archer": 5}}
+	]
+}

@@ -1,10 +1,12 @@
 extends PanelContainer
-## A small box with the story quest you're on, today's daily tasks and your
-## achievement points. It glows when a reward is waiting; clicking it opens
+## A small box with the story quest you're on, today's daily tasks, today's
+## Royal Gift if it's waiting, and your achievement points. It glows when a
+## reward is waiting; clicking it opens the Royal Gift while it waits, else
 ## the quest screen, or the achievements when only those have a reward.
 
 var panel: Control   ## the quest panel to open; set by the HUD
 var achievements: Control   ## the achievements panel; set by the HUD
+var gift: Control           ## the Royal Gift panel; set by the HUD
 
 var _label: Label
 var _timer := 0.0
@@ -20,7 +22,9 @@ func _ready() -> void:
 	add_child(_label)
 	gui_input.connect(func(event: InputEvent) -> void:
 		if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT and panel != null:
-			if achievements != null and _achievement_waiting() and not Economy.quest_book.can_claim_anything(Economy.player_castle):
+			if gift != null and Economy.login_waiting():
+				gift.toggle()
+			elif achievements != null and _achievement_waiting() and not Economy.quest_book.can_claim_anything(Economy.player_castle):
 				achievements.toggle()
 			else:
 				panel.toggle()
@@ -60,7 +64,9 @@ func _refresh() -> void:
 	if Economy.achievements != null:
 		lines.append("Achievements: %d points%s" % [Economy.achievements.score(castle),
 			"    reward waiting (Y)" if _achievement_waiting() else ""])
-	_ready_glow = book.can_claim_anything(castle) or _achievement_waiting()
+	if Economy.login_waiting():
+		lines.append("Today's Royal Gift is waiting")
+	_ready_glow = book.can_claim_anything(castle) or _achievement_waiting() or Economy.login_waiting()
 	if book.can_claim_anything(castle):
 		lines.append("A reward is waiting! Click or press J")
 	_label.text = "\n".join(lines)

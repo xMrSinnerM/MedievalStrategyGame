@@ -16,11 +16,11 @@ const achievements: AchievementRules = json("data/achievements.json");
 const pvp: PvpRules = json("data/pvp.json");
 const world: World = json("server/world/world.json");
 const T0 = 1_000_000;
-const MEASURES = ["levels", "keep", "story", "streak", "research", "commander", "soldiers"];
+const MEASURES = ["levels", "keep", "story", "streak", "logins", "research", "commander", "soldiers"];
 const STATS = ["trained", "spent", "barons", "looted", "pvp_won", "pvp_held"];
 
 test("every achievement has three rising tiers, a title for each, and nothing bought", () => {
-  assert.equal(achievements.list.length, 13);
+  assert.equal(achievements.list.length, 14);
   assert.equal(achievements.rewards.length, 3);
   assert.equal(new Set(achievements.list.map((a) => a.id)).size, achievements.list.length, "ids are unique");
   for (const a of achievements.list) {
@@ -32,7 +32,7 @@ test("every achievement has three rising tiers, a title for each, and nothing bo
   }
   assert.ok(achievements.list.find((a) => a.id === "keep")!.needs[2] <= rules.buildings.maxLevel("keep", 5), "the keep's top tier can be reached");
   for (const r of achievements.rewards) for (const k of Object.keys(r.resources ?? {})) assert.ok(rules.buildings.resources.includes(k));
-  assert.equal(shown(achievements, false).length, 11);
+  assert.equal(shown(achievements, false).length, 12);
   assert.equal(titleText(achievements, "barons:2"), "Baron-Breaker");
   for (const bad of ["barons:0", "barons:4", "nope:1", "barons", 7, null]) assert.equal(titleText(achievements, bad), "");
 });

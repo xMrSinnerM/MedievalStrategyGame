@@ -52,6 +52,7 @@ func _initialize() -> void:
 	test_public_order()
 	test_achievements()
 	test_notices()
+	test_login()
 	print("%d checks, %d failed" % [checks, failures])
 	quit(1 if failures > 0 else 0)
 
@@ -1438,11 +1439,11 @@ func test_public_order() -> void:
 
 func test_achievements() -> void:
 	var book := Achievements.load_default()
-	check(book.list.size() == 13 and book.rewards.size() == 3 and book.points.size() == 3, "13 achievements in 3 tiers")
+	check(book.list.size() == 14 and book.rewards.size() == 3 and book.points.size() == 3, "14 achievements in 3 tiers")
 	for def: Dictionary in book.list:
 		check(def.needs.size() == 3 and def.titles.size() == 3, "%s has 3 tiers and 3 titles" % def.id)
 		check(int(def.needs[0]) < int(def.needs[1]) and int(def.needs[1]) < int(def.needs[2]), "%s grows tier by tier" % def.id)
-	check(book.shown(false).size() == 11 and book.shown(true).size() == 13, "the player-versus-player ones only online")
+	check(book.shown(false).size() == 12 and book.shown(true).size() == 14, "the player-versus-player ones only online")
 	var c := fresh()
 	check(book.note(c, false).is_empty(), "a new castle has earned nothing")
 	check(book.check_claim(c, "keep") == "You haven't earned that yet.", "nothing to claim yet")
@@ -1549,3 +1550,55 @@ func test_notices() -> void:
 	var mac := NoticeRules.desktop_command("macOS", "Say \"hi\"", "x")
 	check(mac[0] == "osascript" and mac[1][1] == "display notification \"x\" with title \"Say \\\"hi\\\"\"", "macOS: %s" % [mac])
 	check(NoticeRules.desktop_command("Web", "A", "B").is_empty(), "nothing elsewhere")
+
+
+func test_login() -> void:
+	var gifts := LoginRewards.load_default()
+	check(gifts.days.size() == 7 and gifts.days[6].has("troops"), "a week of gifts, soldiers on day 7")
+	var day0 := 20000 * LoginRewards.DAY
+	var c := fresh()
+	check(gifts.check_claim(c, day0 + 100) == "", "a new castle has a gift waiting")
+	var wood: float = c.resources.wood
+	c.resources.wood = c.storage_capacity()
+	check(gifts.claim(c, day0 + 100) == "", "the first gift")
+	near(c.resources.wood, c.storage_capacity() + 150.0, "day 1 in full, past the cap")
+	c.resources.wood = wood
+	check(gifts.claim(c, day0 + 200) != "", "once a day")
+	check(int(c.login.streak) == 1 and int(c.login.total) == 1, "day 1 of a streak")
+	# A streak of days walks through the week, starts it again after day 7
+	# with a bonus for the full week, and a missed day starts it over.
+	var got := []
+	for day in range(1, 9):
+		var t: float = day0 + day * LoginRewards.DAY + 50
+		var gold: float = c.resources.gold
+		var swords: int = c.troops.get("swordsman", 0)
+		check(gifts.claim(c, t) == "", "the gift on day %d" % day)
+		got.append([roundi(c.resources.gold - gold), c.troops.get("swordsman", 0) - swords])
+	check(int(c.login.streak) == 9 and int(c.login.total) == 9, "nine days in a row")
+	check(got[0] == [50, 0] and got[5] == [200, 5], "day 2 and day 7: %s" % [got])
+	check(got[6] == [0, 0] and got[7] == [55, 0], "then day 1 and 2 again, a tenth more: %s" % [got.slice(6)])
+	check(LoginRewards.current_streak(c, day0 + 9 * LoginRewards.DAY) == 9, "the streak holds until the next day ends")
+	check(LoginRewards.current_streak(c, day0 + 10 * LoginRewards.DAY) == 0, "a missed day breaks it")
+	check(gifts.claim(c, day0 + 10 * LoginRewards.DAY) == "" and int(c.login.streak) == 1, "and starts again at day 1")
+	check(int(c.login.total) == 10, "days in all still count")
+	# Bigger keeps get bigger gifts; full weeks stop adding after max_weeks.
+	near(float(gifts.reward(0, 3).resources.wood), 750.0, "keep 3 gets five times as much")
+	near(float(gifts.reward(0, 1, 99).resources.wood), 150.0 * (1.0 + gifts.week_bonus * 99), "the reward itself takes any weeks")
+	check(gifts.weeks_kept(1000) == gifts.max_weeks, "but a streak counts at most max_weeks")
+	# Saved with the castle; old saves have never taken a gift.
+	var saved := CastleState.from_dict(rules, JSON.parse_string(JSON.stringify(c.to_dict())))
+	check(saved.login == c.login, "the gift log is saved")
+	var old := c.to_dict()
+	old.erase("login")
+	check(int(CastleState.from_dict(rules, old).login.last) == -1, "old saves have taken none")
+	# The Faithful Lord achievement counts the days in all.
+	var book := Achievements.load_default()
+	check(Achievements.measure(c, book.get_def("faithful")) == 10, "Faithful Lord counts days in all")
+	# Offline, the economy takes it and saves.
+	var eco = load("res://scripts/core/economy.gd").new()
+	eco.save_dir = "user://test_saves"
+	eco.begin_new(1)
+	check(eco.login_waiting(), "a new game has a gift waiting")
+	check(eco.claim_login() == "" and not eco.login_waiting(), "the economy takes it")
+	check(eco.claim_login() != "", "only once")
+	eco.free()

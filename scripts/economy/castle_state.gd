@@ -39,6 +39,9 @@ var quests := new_quest_log()
 ## Achievements: tiers earned and claimed by achievement, and the title shown
 ## ("id:tier", or "" for none) (Achievements).
 var achievements := new_achievement_log()
+## The Royal Gift for coming back each day: the last day it was taken
+## (days since 1970, UTC), days in a row and days in all (LoginRewards).
+var login := new_login_log()
 ## Siege tools in store (tool -> count), the workshop's queue (batches
 ## {tool, remaining, unit_time, next}, like training) and the defence tools
 ## posted on each wall (wall -> {tool: count}, Battle.siege()).
@@ -87,6 +90,10 @@ static func new_stats() -> Dictionary:
 
 static func new_achievement_log() -> Dictionary:
 	return {"tiers": {}, "claimed": {}, "title": ""}
+
+
+static func new_login_log() -> Dictionary:
+	return {"last": -1, "streak": 0, "total": 0}
 
 
 static func new_quest_log() -> Dictionary:
@@ -808,6 +815,7 @@ func copy_from(other: CastleState) -> void:
 	stats = other.stats
 	quests = other.quests
 	achievements = other.achievements
+	login = other.login
 	tools = other.tools
 	crafting = other.crafting
 	defence_tools = other.defence_tools
@@ -835,6 +843,7 @@ func to_dict() -> Dictionary:
 		"troops": troops.duplicate(), "training": training.duplicate(true), "hunger": hunger,
 		"field": field.duplicate(), "field_ready": field_ready, "layout": layout.duplicate(),
 		"stats": stats.duplicate(), "quests": quests.duplicate(true), "achievements": achievements.duplicate(true),
+		"login": login.duplicate(),
 		"tools": tools.duplicate(), "crafting": crafting.duplicate(true), "defence_tools": defence_tools.duplicate(true),
 		"armoury": armoury.duplicate(true),
 		"boost": boost.duplicate(), "limits": limits.duplicate(true) if not limits.is_empty() else null,
@@ -905,6 +914,10 @@ static func from_dict(p_rules: BuildingRules, data: Dictionary) -> CastleState:
 			castle.achievements.claimed[k] = int(ach.claimed[k])
 		var shown: Variant = ach.get("title", "")
 		castle.achievements.title = shown if shown is String else ""
+	# Castles saved before the Royal Gift have never taken one.
+	var gift: Variant = data.get("login", {})
+	if gift is Dictionary:
+		castle.login = {"last": int(gift.get("last", -1)), "streak": int(gift.get("streak", 0)), "total": int(gift.get("total", 0))}
 	var stock: Dictionary = data.get("tools", {})
 	for tool: String in stock:
 		if p_rules.has_tool(tool) and int(stock[tool]) > 0:

@@ -17,6 +17,7 @@ import { claimReward, eventPoints, invade, rewardTiers } from "./invasion.ts";
 import { buy, claimPrize, emptyHorde, hordeArrives, hordeScore, playerRun, type HordeState } from "./horde.ts";
 import { claimQuest, rollDay, type QuestRules } from "../../../server/rules/quests.ts";
 import { claimAchievement, note, setTitle, type AchievementRules } from "../../../server/rules/achievements.ts";
+import { claimLogin, type LoginRules } from "../../../server/rules/login.ts";
 import type { GearRules, Lead } from "../../../server/rules/gear.ts";
 import { deliverCarts, OUTPOST_ID, unload, type Cart, type OutpostData } from "../../../server/rules/outposts.ts";
 import { rulesFor, type VillageInfo, type VillageState } from "../../../server/rules/villages.ts";
@@ -154,6 +155,8 @@ export interface Context {
   quests?: QuestRules;
   /** Achievements and titles (data/achievements.json). */
   achievements?: AchievementRules;
+  /** The Royal Gift for coming back each day (data/login.json). */
+  login?: LoginRules;
   /** For "found_outpost": the free spot nearest your home, or null when there is none. */
   outpostSpot?: [number, number] | null;
   /** For "attack_village", "station" and "build_capital": the village (or capital) named. */
@@ -654,6 +657,9 @@ export function act(rules: Rules, given: PlayerState, req: Request, now: number,
     }
     case "claim_quest":
       error = ctx.quests ? claimQuest(castle, ctx.quests, req.kind, req.index, now) : "Unknown order.";
+      break;
+    case "claim_login":
+      error = ctx.login ? claimLogin(castle, ctx.login, now) : "Unknown order.";
       break;
     case "claim_achievement":
       error = ctx.achievements ? claimAchievement(castle, ctx.achievements, req.id, true) : "Unknown order.";

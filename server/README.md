@@ -149,6 +149,10 @@ of their own. Every request starts a new day's daily tasks once the UTC day
 turns, and `claim_quest` gives the story quest's, a daily task's or the
 coffer's reward when it is done.
 
+The Royal Gift (`server/rules/login.ts`, `data/login.json`) is kept in the
+castle's JSON as `login` (the last UTC day it was taken, days in a row and
+days in all); `claim_login` gives today's gift once a day.
+
 Achievements (`server/rules/achievements.ts`, `data/achievements.json`) live
 in the castle's JSON as well (`achievements`: tiers earned, tiers claimed and
 the title shown). Every request notes the tiers reached, before and after its
