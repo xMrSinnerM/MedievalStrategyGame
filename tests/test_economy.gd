@@ -56,6 +56,7 @@ func _initialize() -> void:
 	test_seasons()
 	test_chests()
 	test_encounters()
+	test_weather()
 	print("%d checks, %d failed" % [checks, failures])
 	quit(1 if failures > 0 else 0)
 
@@ -1760,3 +1761,49 @@ func test_encounters() -> void:
 		check(er.take(c, String(e.id), "half", at).error != "" or kind == "bandits" and not out.won, "%s once" % kind)
 	check(er.check(c, {"id": "x", "kind": "bandits"}, "all") == "", "a fresh one can be fought")
 	check(er.check(fresh(), {"id": "x", "kind": "bandits"}, "all") == "Send at least one soldier.", "not without soldiers")
+
+
+func test_weather() -> void:
+	var w := WeatherRules.load_default()
+	var t := 1_800_000_000.0
+	var cells := w.active(t)
+	check(cells.size() == w.count, "%d weather cells" % cells.size())
+	var kinds := {}
+	var off := 0
+	for k in 400:
+		for c: Dictionary in w.active(t + k * 3600.0):
+			kinds[c.kind] = int(kinds.get(c.kind, 0)) + 1
+			if not (float(c.start) <= t + k * 3600.0 and t + k * 3600.0 < float(c.end)):
+				off += 1
+	check(off == 0, "every cell is on when it's on the map (%d not)" % off)
+	check(kinds.get("storm", 0) > 0 and kinds.get("rain", 0) > 0 and kinds.get("clear", 0) > kinds.get("storm", 0), "a mix of weather: %s" % [kinds])
+	var storm := {}
+	for c: Dictionary in cells:
+		if c.kind == "storm":
+			storm = c
+	var at := w.centre(storm, t)
+	near(w.march_slow(at - Vector2(300, 0), at + Vector2(300, 0), t), 1.3, "a march through the storm is 30% slower")
+	check(w.march_cell(at - Vector2(300, 0), at + Vector2(300, 0), t).id == storm.id, "and knows which storm")
+	check(w.centre(storm, float(storm.start)) == Vector2(storm.x, storm.z), "a cell starts where it was made")
+	check(w.strength(storm, float(storm.start)) == 0.0 and w.strength(storm, float(storm.start) + w.window / 2.0) == 1.0, "it gathers and breaks up")
+	# The time of day.
+	near(w.daylight(0.0), 0.0, "midnight is dark")
+	near(w.daylight(w.day / 2.0), 1.0, "noon is light")
+	check(w.time_name(w.day * 0.25) == "Dawn" and w.time_name(w.day * 0.75) == "Dusk" and w.time_name(w.day * 0.5) == "Day", "dawn, day and dusk")
+	# Offline: the march to a camp takes the weather into account.
+	var eco = load("res://scripts/core/economy.gd").new()
+	eco.save_dir = "user://test_saves"
+	eco.begin_new(1)
+	var right_now: float = eco.now()
+	var wet := {}
+	for c: Dictionary in eco.weather_rules.active(right_now):
+		if c.kind != "clear":
+			wet = c
+	if not wet.is_empty():
+		var mid: Vector2 = eco.weather_rules.centre(wet, right_now)
+		eco.castle_positions[eco.MAIN_CASTLE] = mid - Vector2(400, 0)
+		near(eco.weather_slow(mid + Vector2(400, 0)), w.march_slow(mid - Vector2(400, 0), mid + Vector2(400, 0), right_now),
+				"the economy's march times include the weather")
+		check(eco.weather_slow(mid + Vector2(400, 0)) > 1.0, "a march through %s is slower" % wet.kind)
+	eco.delete_slot(1)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://test_saves"))

@@ -9,6 +9,7 @@ import { checkTools, type Side, type SiegeResult, type Tools, type Wave } from "
 import { CastleState } from "./castle_state.ts";
 import type { GearRules, Item, Lead, LeadReport } from "./gear.ts";
 import { godotHash, type Dict } from "./util.ts";
+import { marchSlow, type WeatherRules } from "./weather.ts";
 
 /** Seed offset for what a beaten camp drops. */
 export const DROP_SEED = 31337;
@@ -74,12 +75,16 @@ export interface Army {
   home: [number, number];
   /** Commanders and gear (data/gear.json); without them no drops or xp. */
   gear?: GearRules;
+  /** Weather (data/weather.json); without it marches are never slowed. */
+  weather?: WeatherRules;
 }
 
-export function marchTimeTo(world: Army, rules: BaronRules, camp: CampData): number {
+/** How long a march to the camp takes, setting off at `now` (the weather on the way slows it). */
+export function marchTimeTo(world: Army, rules: BaronRules, camp: CampData, now?: number): number {
   const dx = camp.position[0] - world.home[0];
   const dy = camp.position[1] - world.home[1];
-  return rules.marchTime(Math.sqrt(dx * dx + dy * dy)) * world.castle.marchFactor();
+  const slow = now === undefined ? 1 : marchSlow(world.weather, world.home, camp.position, now);
+  return rules.marchTime(Math.sqrt(dx * dx + dy * dy)) * world.castle.marchFactor() * slow;
 }
 
 export function checkAttack(world: Army, campId: string, army: Dict, now: number): string {
@@ -120,7 +125,7 @@ export function sendAttack(world: Army, rules: BaronRules, campId: string, army:
       world.castle.troops[unit] -= army[unit];
     }
   }
-  const travel = marchTimeTo(world, rules, world.camps.find((c) => c.id === campId)!);
+  const travel = marchTimeTo(world, rules, world.camps.find((c) => c.id === campId)!, now);
   // A lead with id 0 is research alone, without a commander.
   if (lead && lead.id > 0) world.gear!.commander(castle, lead.id)!.away_until = now + 2 * travel;
   world.marches.push({ id: world.nextMarch, camp: campId, army: sent, depart: now, arrive: now + travel,
