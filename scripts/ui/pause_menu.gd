@@ -4,6 +4,7 @@ extends CanvasLayer
 ## paused, like when the game is closed.
 
 signal main_menu_requested
+signal tutorial_requested
 
 var _panel: MenuBanner
 var _settings: PanelContainer
@@ -35,6 +36,9 @@ func _ready() -> void:
 	box.add_child(MenuStyle.menu_button("Settings", func() -> void:
 		_panel.visible = false
 		_settings.visible = true, 280.0))
+	box.add_child(MenuStyle.menu_button("Replay tutorial", func() -> void:
+		close()
+		tutorial_requested.emit(), 280.0))
 	box.add_child(MenuStyle.menu_button("Main menu", func() -> void:
 		close()
 		main_menu_requested.emit(), 280.0))

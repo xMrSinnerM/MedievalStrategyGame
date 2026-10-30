@@ -63,6 +63,7 @@ func _ready() -> void:
 	add_theme_stylebox_override("panel", MenuStyle.panel(0.95))
 	custom_minimum_size = Vector2(1000, 0)
 	visible = false
+	add_to_group("tutorial_window")
 	# Battle music while the attack screen is open.
 	visibility_changed.connect(func() -> void: Audio.set_battle(is_visible_in_tree()))
 	tree_exiting.connect(func() -> void: Audio.set_battle(false))
@@ -191,6 +192,7 @@ func _ready() -> void:
 	buttons.add_theme_constant_override("separation", 12)
 	_send = GameTheme.primary(MenuStyle.button("Send army", _send_army, 360.0))
 	_send.custom_minimum_size.y = 46
+	_send.add_to_group("tutorial_send_army")
 	_send.add_theme_font_size_override("font_size", 18)
 	buttons.add_child(_send)
 	var cancel := MenuStyle.button("Cancel", close_panel, 160.0)

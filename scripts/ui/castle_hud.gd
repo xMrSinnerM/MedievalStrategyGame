@@ -100,6 +100,7 @@ func _ready() -> void:
 	quests.achievements = achievements
 	var tracker := preload("res://scripts/ui/quest_tracker.gd").new()
 	tracker.panel = quests
+	tracker.add_to_group("tutorial_quest_tracker")
 	tracker.achievements = achievements
 	# On the left, between the construction list and the build menu.
 	tracker.set_anchors_and_offsets_preset(Control.PRESET_CENTER_LEFT)
@@ -182,6 +183,7 @@ func _build_top_bar() -> void:
 	var back := _button("Map (C)")
 	back.icon = Icons.get_icon("diplomacy", 22)
 	back.pressed.connect(func() -> void: EventBus.world_map_requested.emit())
+	back.add_to_group("tutorial_map_button")
 	row.add_child(back)
 
 
@@ -220,6 +222,7 @@ func _build_build_menu() -> void:
 			continue
 		var b := _build_button(type)
 		b.pressed.connect(func() -> void: view.start_placing(type))
+		b.add_to_group("tutorial_build_" + type)
 		row.add_child(b)
 		_build_buttons[type] = b
 
@@ -310,6 +313,7 @@ func _build_side_panel() -> void:
 	box.add_child(buttons)
 	_upgrade_button = GameTheme.primary(_button("Upgrade"))
 	_upgrade_button.pressed.connect(func() -> void: view.upgrade_selected())
+	_upgrade_button.add_to_group("tutorial_upgrade")
 	buttons.add_child(_upgrade_button)
 	_move_button = _button("Move")
 	_move_button.pressed.connect(func() -> void: view.start_moving())

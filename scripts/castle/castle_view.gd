@@ -85,6 +85,12 @@ func open(p_castle: CastleState, p_glimpse := false) -> void:
 	hud.show_castle()
 
 
+func building_position(building_id: int) -> Vector3:
+	## A point just above a building's model, for the tutorial's arrow (INF if it has none).
+	var node: Node3D = _nodes.get(building_id)
+	return node.global_position + Vector3(0, 3.0, 0) if node != null and node.is_inside_tree() else Vector3.INF
+
+
 func grid_centre() -> Vector3:
 	var size := castle.rules.grid_size * CELL
 	return Vector3(size * 0.5, 0, size * 0.5)

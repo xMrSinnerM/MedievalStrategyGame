@@ -1,0 +1,77 @@
+{
+	"_comment": "The tutorial for new players: Steward Bertram walks you through building, recruiting and your first robber baron attack. Steps run in this order; scripts/ui/tutorial.gd knows when each `id` is done and what to point at. `text` is what Bertram says; `{soldiers}` is replaced by `soldiers`. Steps with `next` wait for the Next button instead of something you do. While a big window (the attack screen, a battle report, the quests) is open, Bertram's card shrinks to one line at the bottom showing `hint` (or the title). It starts with every new game (and a fresh online castle) and can be replayed from the pause menu.",
+	"narrator": "Steward Bertram",
+	"soldiers": 20,
+	"steps": [
+		{
+			"id": "welcome",
+			"title": "Welcome, my lord",
+			"text": "I am Bertram, your steward. The Black Baron's riders left this valley in ashes, and it is ours to rebuild. Let me show you how. Move the map with WASD or by dragging, and zoom with the mouse wheel.",
+			"next": "Show me"
+		},
+		{
+			"id": "enter_castle",
+			"title": "Your castle",
+			"text": "Everything starts at home. Press C, or click \"Your castle\" at the top, to go inside your walls."
+		},
+		{
+			"id": "upgrade_woodcutter",
+			"title": "Wood first",
+			"text": "Every building needs wood. Click your woodcutter's lodge, then press Upgrade in the panel on the right."
+		},
+		{
+			"id": "build_barracks",
+			"title": "Raise a barracks",
+			"text": "Soldiers keep us safe and bring home loot. Pick Barracks in the build bar at the bottom, then click a free spot inside the walls."
+		},
+		{
+			"id": "wait_barracks",
+			"title": "Builders at work",
+			"text": "Building takes time: the list at the top left shows what your builders are doing and how long is left. Your castle grows even while the game is closed."
+		},
+		{
+			"id": "recruit",
+			"title": "Train soldiers",
+			"text": "The barracks stands. Click it and train {soldiers} spearmen: press \"Max\" next to Spearman. They cost gold and food."
+		},
+		{
+			"id": "wait_training",
+			"title": "Recruits drilling",
+			"text": "Your recruits are drilling in the yard. Each one joins the garrison when his training is done."
+		},
+		{
+			"id": "go_map",
+			"title": "To the map",
+			"text": "Your soldiers are ready. Press C, or click \"Map\" at the top, to go back to the world map."
+		},
+		{
+			"id": "find_camp",
+			"title": "Smoke on the road",
+			"text": "See those tents? A robber baron camps close by. Click his camp, then press \"Prepare attack\"."
+		},
+		{
+			"id": "send_army",
+			"title": "Plan the attack",
+			"text": "I have spread your soldiers over the camp's walls for you. The ring shows your chance to win. Press \"Send army\".",
+			"hint": "Press \"Send army\" to attack the camp."
+		},
+		{
+			"id": "wait_battle",
+			"title": "On the march",
+			"text": "Your army is marching to the camp. When it gets there, you will see a battle report, and the survivors carry the loot home. Beaten camps grow stronger and richer, so come back for more.",
+			"hint": "Your army is on the march."
+		},
+		{
+			"id": "claim_quest",
+			"title": "Your first reward",
+			"text": "I keep a list of tasks for you, each with a reward. You already finished the first one with that woodcutter! Click the quest box on the left (or press J) and claim it.",
+			"hint": "Claim your reward in the quests (J)."
+		},
+		{
+			"id": "finish",
+			"title": "The valley is yours to win",
+			"text": "That is all you need to begin, my lord. Follow my quests, finish the daily tasks for the coffer, and keep beating barons. I will be here if you need me: Esc, then \"Replay tutorial\".",
+			"next": "Finish"
+		}
+	]
+}

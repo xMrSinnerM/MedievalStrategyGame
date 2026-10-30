@@ -58,6 +58,7 @@ func _ready() -> void:
 	_attack.focus_mode = Control.FOCUS_NONE
 	_attack.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_attack.pressed.connect(_send)
+	_attack.add_to_group("tutorial_baron_attack")
 	buttons.add_child(_attack)
 	EventBus.baron_selected.connect(show_camp)
 	EventBus.party_selected.connect(func(id: String) -> void:

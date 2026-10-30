@@ -104,6 +104,7 @@ func _build_rows(rules: BuildingRules) -> void:
 			line.add_child(b)
 			buttons.append(b)
 		var max_button := _small_button("Max", unit, 0)
+		max_button.add_to_group("tutorial_recruit_" + unit)
 		line.add_child(max_button)
 		box.add_child(line)
 		_units_box.add_child(box)
