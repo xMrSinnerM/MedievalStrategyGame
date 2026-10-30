@@ -42,9 +42,11 @@ func _ready() -> void:
 	box.add_child(MenuStyle.menu_button("Main menu", func() -> void:
 		close()
 		main_menu_requested.emit(), 280.0))
-	box.add_child(MenuStyle.menu_button("Quit to desktop", func() -> void:
-		Economy.save_game()
-		get_tree().quit(), 280.0))
+	# A browser tab can't quit itself; players just close the tab.
+	if not OS.has_feature("web"):
+		box.add_child(MenuStyle.menu_button("Quit to desktop", func() -> void:
+			Economy.save_game()
+			get_tree().quit(), 280.0))
 	_note = MenuStyle.label("", 15, MenuStyle.MUTED)
 	_note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(_note)

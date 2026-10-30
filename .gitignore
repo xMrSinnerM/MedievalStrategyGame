@@ -2,7 +2,7 @@
 .godot/
 /android/
 *.tmp
-export_presets.cfg
+/build/
 
 # OS
 .DS_Store

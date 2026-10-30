@@ -18,13 +18,53 @@ var biome_image: Image                  ## R desert, G forest, B snow
 var rivers: Array = []                  ## [{ "points": [[x, z, surface_y, width], ...] }]
 
 
+static func packed_path(heightmap_path: String) -> String:
+	## Where exports keep the heights (see addons/world_export).
+	return heightmap_path.get_basename() + ".heights"
+
+
+static func pack_heights(image: Image) -> PackedByteArray:
+	## The heightmap as its side length followed by the heights as floats, compressed.
+	var img := image.duplicate() as Image
+	if img.is_compressed():
+		img.decompress()
+	img.convert(Image.FORMAT_RF)
+	var data := img.get_data()
+	var out := PackedByteArray()
+	out.resize(8)
+	out.encode_u32(0, img.get_width())
+	out.encode_u32(4, data.size())
+	out.append_array(data.compress(FileAccess.COMPRESSION_ZSTD))
+	return out
+
+
+static func _load_heightmap(path: String) -> Image:
+	## In the editor straight from the file, so a freshly generated world shows
+	## at once; exported games read the heights packed at export (they have no
+	## .exr, and the web build can't decode EXR anyway).
+	var packed := packed_path(path)
+	if not OS.has_feature("template") or not FileAccess.file_exists(packed):
+		return Image.load_from_file(path)
+	var bytes := FileAccess.get_file_as_bytes(packed)
+	var side := bytes.decode_u32(0)
+	var data := bytes.slice(8).decompress(bytes.decode_u32(4), FileAccess.COMPRESSION_ZSTD)
+	return Image.create_from_data(side, side, false, Image.FORMAT_RF, data)
+
+
+static func _load_image(path: String) -> Image:
+	## Exported games only have the imported copy of the biome mask.
+	if not OS.has_feature("template") or not ResourceLoader.exists(path):
+		return Image.load_from_file(path)
+	return load(path) as Image
+
+
 func load_from_config(config: Dictionary) -> Error:
 	world_size = float(config.world_size)
 	max_height = float(config.max_height)
 	sea_level = float(config.sea_level)
 	var files: Dictionary = config.files
 
-	height_image = Image.load_from_file(files.heightmap)
+	height_image = _load_heightmap(files.heightmap)
 	if height_image == null or height_image.is_empty():
 		push_error("Heightmap missing: %s. Run scripts/tools/generate_world.gd first." % files.heightmap)
 		return ERR_FILE_NOT_FOUND
@@ -40,7 +80,7 @@ func load_from_config(config: Dictionary) -> Error:
 	for k in heights.size():
 		heights[k] *= max_height
 
-	biome_image = Image.load_from_file(files.biome_mask)
+	biome_image = _load_image(files.biome_mask)
 	if biome_image == null or biome_image.is_empty():
 		push_warning("Biome mask missing: %s" % files.biome_mask)
 		biome_image = Image.create(8, 8, false, Image.FORMAT_RGB8)

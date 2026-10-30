@@ -199,7 +199,8 @@ func _post(path: String, body: Dictionary, signed: bool) -> Dictionary:
 		return {"status": 0, "data": {}}
 	var http := HTTPRequest.new()
 	http.timeout = TIMEOUT
-	http.use_threads = true
+	# Browsers run HTTP through fetch() and the web build has no threads.
+	http.use_threads = not OS.has_feature("web")
 	add_child(http)
 	var headers := PackedStringArray(["Content-Type: application/json", "apikey: " + key])
 	if signed:
