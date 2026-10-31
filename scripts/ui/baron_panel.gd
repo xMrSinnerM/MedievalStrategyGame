@@ -2,7 +2,8 @@ extends PanelContainer
 ## Shown on the world map when you click a robber baron camp: its level and
 ## progress to the next, its garrison, palisade and loot, whether it is
 ## rebuilding, the march time and a button to open the attack screen.
-## Fortresses also have a button to look around inside.
+## Fortresses also have a button to look around inside. "Send agents" opens
+## spies and sabotage against it (sabotage_box.gd).
 
 const TEXT := Color(0.95, 0.9, 0.8)
 const MUTED := Color(0.78, 0.72, 0.62)
@@ -15,6 +16,8 @@ var _details: Label
 var _odds: Label
 var _attack: Button
 var _look: Button
+var _agents_button: Button
+var _agents: VBoxContainer
 
 var _picture: InfoPicture
 
@@ -60,6 +63,17 @@ func _ready() -> void:
 	_attack.pressed.connect(_send)
 	_attack.add_to_group("tutorial_baron_attack")
 	buttons.add_child(_attack)
+	_agents_button = Button.new()
+	_agents_button.text = "Send agents..."
+	_agents_button.focus_mode = Control.FOCUS_NONE
+	_agents_button.toggle_mode = true
+	_agents_button.tooltip_text = "Hire agents to steal from the camp or weaken its palisade"
+	box.add_child(_agents_button)
+	_agents = preload("res://scripts/ui/sabotage_box.gd").new()
+	box.add_child(_agents)
+	_agents_button.toggled.connect(func(on: bool) -> void:
+		_agents.visible = on
+		_agents.set_camp(camp_id))
 	EventBus.baron_selected.connect(show_camp)
 	EventBus.party_selected.connect(func(id: String) -> void:
 		if id != "":
@@ -114,8 +128,9 @@ func _refresh() -> void:
 	lines.append("Garrison: %d soldiers" % total)
 	for unit: String in garrison:
 		lines.append("    %d %s" % [garrison[unit], Economy.rules.unit_plural(unit)])
-	var wall := Battle.wall_from_defense(br.palisade(camp.level))
-	lines.append("%s: defenders +%d%% defence" % ["Walls" if camp.fortress else "Palisade", roundi((wall - 1.0) * 100.0)])
+	var wall := Battle.wall_from_defense(br.palisade(camp.level) * camp.walls_factor(Economy.now()))
+	lines.append("%s: defenders +%d%% defence%s" % ["Walls" if camp.fortress else "Palisade", roundi((wall - 1.0) * 100.0),
+			"  (weakened by your agents for %s)" % _long_clock(camp.weak_until - Economy.now()) if camp.weak_until > Economy.now() else ""])
 	var loot := Economy.baron_loot(camp.level, camp)
 	var parts: PackedStringArray = []
 	for r: String in loot:
@@ -128,6 +143,8 @@ func _refresh() -> void:
 		lines.append(("Its lord is rebuilding for %s" if camp.fortress else "Rebuilding for %s") % _long_clock(camp.rebuilt_at - now)
 				if camp.rebuilt_at - now >= 3600.0 else ("Rebuilding for %s" % _clock(camp.rebuilt_at - now)))
 	_details.text = "\n".join(lines)
+	if _agents.visible:
+		_agents.set_camp(camp_id)
 	var army: Dictionary = Economy.player_castle.troops
 	var mine := Economy.player_castle.troop_count()
 	if mine <= 0:

@@ -26,6 +26,7 @@ import { deliverCarts, OUTPOST_ID, unload, type Cart, type OutpostData } from ".
 import { rulesFor, type VillageInfo, type VillageState } from "../../../server/rules/villages.ts";
 import { checkVillageAttack, type VillageTarget } from "./villages.ts";
 import { marchSlow, type WeatherRules } from "../../../server/rules/weather.ts";
+import { againstCamp, campKey, checkSabotage, hitPlayer, playerChance, playerKey, roll, seedFor, sendAgents, wallsFactor, type SabotageRules } from "../../../server/rules/sabotage.ts";
 
 /** A player as stored in the players table (the game columns). */
 export interface PlayerState {
@@ -167,6 +168,10 @@ export interface Context {
   chests?: ChestRules;
   /** Bandit camps, merchant caravans and treasure sites along the roads (data/encounters.json). */
   encounters?: EncounterRules;
+  /** Spies and sabotage (data/sabotage.json). */
+  sabotage?: SabotageRules;
+  /** For "sabotage_player": the target's castle as stored (index.ts loads it with the target). */
+  targetCastle?: CastleData;
   /** Weather (data/weather.json): rain and storms slow marches. */
   weather?: WeatherRules;
   /** For "claim_season_prize": your place and your alliance's in last season's ranking (0: none). */
@@ -702,6 +707,46 @@ export function act(rules: Rules, given: PlayerState, req: Request, now: number,
       if (error === "") result = met;
       break;
     }
+    case "sabotage_camp": {
+      const camp = army.camps.find((c) => c.id === req.camp);
+      if (!ctx.sabotage) error = "Unknown order.";
+      else if (camp === undefined) error = "No such camp.";
+      else {
+        const out = againstCamp(castle, camp, rules.barons, ctx.sabotage, req.mission, req.agents, now);
+        error = out.error;
+        if (error === "") result = out;
+      }
+      break;
+    }
+    case "sabotage_player": {
+      // The target's side (what is stolen or burned there) is carried out by index.ts with sabotagePlayer().
+      const s = ctx.sabotage;
+      const target = ctx.target;
+      if (!s) error = "Unknown order.";
+      else if (target === undefined || ctx.targetCastle === undefined) error = "There's no player by that name.";
+      else if (target.name === stored.name) error = "That's your own castle.";
+      else if (target.ally) error = "Your agents won't work against your own alliance.";
+      else if (target.protected) error = "That castle is under beginner protection.";
+      else if (tooSmall(castle.keepLevel(), target.level, ctx.pvp)) error = "That castle is too small to bother.";
+      else error = checkSabotage(castle, s, playerKey(target.name), req.mission, req.agents, now, true);
+      const resource = String(req.resource ?? "");
+      if (error === "" && req.mission === "steal" && !Object.hasOwn(castle.resources, resource)) error = "Steal which resource?";
+      if (error !== "" || !s || target === undefined) break;
+      const agents = req.agents as number;
+      const key = playerKey(target.name);
+      const chance = playerChance(s, agents, castle.keepLevel(), target.level ?? castle.keepLevel());
+      const success = roll(chance, seedFor(castle, key, agents));
+      sendAgents(castle, s, key, agents, now);
+      let stolen: Dict = {};
+      if (success && req.mission === "steal") {
+        const their = CastleState.fromDict(rules.buildings, ctx.targetCastle!);
+        their.advanceTo(now);
+        stolen = hitPlayer(s, their, "steal", resource, agents, castle.keepLevel(), now).stolen;
+        for (const [r, n] of Object.entries(stolen)) castle.resources[r] = (castle.resources[r] ?? 0) + n;
+      }
+      result = { success, chance, mission: req.mission, resource, agents, stolen, target: target.name };
+      break;
+    }
     case "claim_season":
       error = ctx.seasons ? claimTrack(castle, ctx.seasons, now) : "Unknown order.";
       break;
@@ -814,7 +859,7 @@ export function fightRaid(rules: Rules, pvp: PvpRules, stored: PlayerState, raid
   const campReports = advanceMarches(world, rules.barons, raid.arrive);
   const castle = world.castle;
   castle.advanceTo(raid.arrive);
-  const wall = wallFromDefense(castle.defense());
+  const wall = wallFromDefense(castle.defense() * wallsFactor(castle, raid.arrive));
   const groups: Dict[] = [castle.troops, ...helpers.map((h) => ({ ...h }))];
   const defenders: Dict = {};
   for (const g of groups) for (const unit of Object.keys(g)) defenders[unit] = (defenders[unit] ?? 0) + g[unit];
@@ -887,6 +932,57 @@ function shareLosses(groups: Dict[], unit: string, lost: number): void {
   });
 }
 
+/** A report of agents at work: for the castle that sent them and the castle they went into. */
+export interface SabotageReport {
+  kind: "sabotage";
+  role: "sender" | "target";
+  name: string;
+  at: number;
+  mission: string;
+  success: boolean;
+  stolen: Dict;
+  burned: Dict;
+}
+
+/**
+ * The target's side of a "sabotage_player" order: brings their castle up to
+ * `now` and takes what the agents stole (up to what is there now), burns
+ * the stores or weakens the walls. A failed mission only tells them.
+ */
+export function sabotagePlayer(rules: Rules, s: SabotageRules, stored: PlayerState, sent: { success: boolean; mission: string;
+  resource: string; stolen: Dict; target: string }, senderName: string, senderKeep: number, agents: number, now: number) {
+  const world: Army = {
+    castle: CastleState.fromDict(rules.buildings, stored.castle),
+    camps: structuredClone(stored.camps),
+    marches: structuredClone(stored.marches),
+    nextMarch: stored.next_march,
+    home: [stored.home_x, stored.home_y],
+    gear: rules.gear,
+  };
+  const campReports = advanceMarches(world, rules.barons, now);
+  const castle = world.castle;
+  castle.advanceTo(now);
+  let burned: Dict = {};
+  let stolen: Dict = {};
+  if (sent.success) {
+    if (sent.mission === "steal") {
+      for (const [r, n] of Object.entries(sent.stolen)) {
+        stolen[r] = Math.min(n, Math.floor(castle.resources[r] ?? 0));
+        castle.resources[r] -= stolen[r];
+      }
+    } else burned = hitPlayer(s, castle, sent.mission, sent.resource, agents, senderKeep, now).burned;
+  }
+  const report = (role: "sender" | "target", name: string): SabotageReport =>
+    ({ kind: "sabotage", role, name, at: now, mission: sent.mission, success: sent.success, stolen, burned });
+  return {
+    target: { ...stored, castle: castle.toDict(), camps: world.camps, marches: world.marches, next_march: world.nextMarch,
+      ...scored(stored, campReports) },
+    campReports,
+    targetReport: report("target", senderName),
+    senderReport: report("sender", sent.target),
+  };
+}
+
 /** What a spy sees: the soldiers at home (with any allied defenders) and the wall, as of now. */
 export function spyReport(rules: Rules, pvp: PvpRules, stored: PlayerState, now: number, helpers: Dict[] = []) {
   const world: Army = {
@@ -905,7 +1001,7 @@ export function spyReport(rules: Rules, pvp: PvpRules, stored: PlayerState, now:
   }
   return {
     name: stored.name, at: now, level: castleLevel(stored.castle), troops,
-    wall: wallFromDefense(world.castle.defense()), layout: world.castle.layout, tools: world.castle.defenceTools,
+    wall: wallFromDefense(world.castle.defense() * wallsFactor(world.castle, now)), layout: world.castle.layout, tools: world.castle.defenceTools,
     castellan: rules.gear.castellanEffects(world.castle),
     protected: isProtected(stored, pvp, now),
   };

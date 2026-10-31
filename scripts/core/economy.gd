@@ -19,6 +19,9 @@ signal others_changed
 signal raids_changed
 ## Online: a spy came back with news of this player (see `spy_reports`).
 signal spy_returned(player_name: String)
+## Online: your agents came back from another player's castle (the server's
+## answer: success, chance, mission, resource, agents, stolen, target).
+signal agents_returned(result: Dictionary)
 ## Online: the server sent the leaderboard (see `leaderboard`).
 signal leaderboard_changed
 ## Online: the server sent your alliance's view (see `alliance`); `error` is
@@ -93,6 +96,7 @@ var chest_rules: ChestRules
 ## Bandit camps, merchant caravans and treasure sites along the roads (data/encounters.json).
 var encounter_rules: EncounterRules
 var weather_rules: WeatherRules
+var sabotage_rules: SabotageRules
 ## The achievement tiers already announced (null: take the next ones silently).
 var _known_tiers: Variant = null
 ## Commanders and gear (data/gear.json).
@@ -267,6 +271,7 @@ func ensure_loaded() -> void:
 	chest_rules = ChestRules.load_default()
 	encounter_rules = EncounterRules.load_default()
 	weather_rules = WeatherRules.load_default()
+	sabotage_rules = SabotageRules.load_default()
 	achievements = Achievements.load_default()
 	gear_rules = GearRules.load_default()
 	outpost_rules = OutpostRules.load_default()
@@ -342,6 +347,7 @@ func begin_new(n := 1) -> void:
 	chest_rules = ChestRules.load_default()
 	encounter_rules = EncounterRules.load_default()
 	weather_rules = WeatherRules.load_default()
+	sabotage_rules = SabotageRules.load_default()
 	achievements = Achievements.load_default()
 	gear_rules = GearRules.load_default()
 	outpost_rules = OutpostRules.load_default()
@@ -363,6 +369,7 @@ func begin_load(n := 1) -> void:
 	chest_rules = ChestRules.load_default()
 	encounter_rules = EncounterRules.load_default()
 	weather_rules = WeatherRules.load_default()
+	sabotage_rules = SabotageRules.load_default()
 	achievements = Achievements.load_default()
 	gear_rules = GearRules.load_default()
 	outpost_rules = OutpostRules.load_default()
@@ -945,6 +952,7 @@ func begin_online(answer: Dictionary) -> void:
 	chest_rules = ChestRules.load_default()
 	encounter_rules = EncounterRules.load_default()
 	weather_rules = WeatherRules.load_default()
+	sabotage_rules = SabotageRules.load_default()
 	achievements = Achievements.load_default()
 	_known_tiers = null
 	gear_rules = GearRules.load_default()
@@ -1045,6 +1053,8 @@ func apply_server(answer: Dictionary) -> void:
 			camp.defeats = fresh.defeats
 			camp.rebuilt_at = fresh.rebuilt_at
 			camp.fortress = fresh.fortress
+			camp.weak_until = fresh.weak_until
+			camp.weak_cut = fresh.weak_cut
 	# Invader camps leave when their invasion is over.
 	var kept := barons.filter(func(b: BaronCamp) -> bool: return listed.has(b.id))
 	if kept.size() != barons.size():
@@ -1085,6 +1095,9 @@ func apply_server(answer: Dictionary) -> void:
 			aid_news.emit(gift_text(report))
 		elif report.get("kind", "") == "market":
 			aid_news.emit(market_text(report))
+		elif report.get("kind", "") == "sabotage":
+			if report.get("role", "") == "target":
+				aid_news.emit(sabotage_text(report))
 		else:
 			attack_resolved.emit(_server_report(report))
 	if camps_moved:
@@ -1391,6 +1404,36 @@ func spy(player_name: String) -> String:
 	if not player_castle.can_afford(spy_cost()):
 		return "Not enough gold to send a spy."
 	get_node("/root/Online").order({"action": "spy", "target": player_name})
+	return ""
+
+
+func sabotage_camp(camp_id: String, mission: String, agents: int) -> Dictionary:
+	## Sends agents into a robber baron's camp: {"error"} or {"error": "",
+	## "success", "stolen", "chance"} (SabotageRules.against_camp). Online the
+	## server sends them too (the luck comes out the same).
+	var camp := get_baron(camp_id)
+	if camp == null:
+		return {"error": "No such camp."}
+	var out := sabotage_rules.against_camp(player_castle, camp, baron_rules, mission, agents, now())
+	if out.error != "":
+		return out
+	if online:
+		get_node("/root/Online").order({"action": "sabotage_camp", "camp": camp_id, "mission": mission, "agents": agents})
+	else:
+		save_game()
+	barons_changed.emit()
+	changed.emit()
+	return out
+
+
+func sabotage_player(player_name: String, mission: String, resource: String, agents: int) -> String:
+	## Online: sends agents into another player's castle. What they did comes
+	## with the server's answer (agents_returned).
+	var why := sabotage_rules.check(player_castle, SabotageRules.player_key(player_name), mission, agents, now(), true)
+	if why != "":
+		return why
+	get_node("/root/Online").order({"action": "sabotage_player", "target": player_name, "mission": mission,
+			"resource": resource, "agents": agents})
 	return ""
 
 
@@ -2638,6 +2681,19 @@ func cancel_offer(id: int) -> void:
 	get_node("/root/Online").order({"action": "cancel_offer", "id": id})
 
 
+func sabotage_text(r: Dictionary) -> String:
+	## A server report of someone's agents in your castle as one sentence.
+	var who := String(r.get("name", ""))
+	if not bool(r.get("success", false)):
+		return "Your guards caught agents sent by %s. They got away with nothing." % who
+	match String(r.get("mission", "")):
+		"steal":
+			return "Agents sent by %s stole %s from your stores." % [who, reward_text({"resources": r.get("stolen", {})})]
+		"burn_stores":
+			return "Agents sent by %s set your stores on fire: %s burned." % [who, reward_text({"resources": r.get("burned", {})})]
+	return "Agents sent by %s fired your gate: your walls are weaker for %d hours." % [who, roundi(sabotage_rules.walls_time / 3600.0)]
+
+
 func market_text(r: Dictionary) -> String:
 	## A server report about the market as one sentence.
 	var give := "%d %s" % [int(r.get("give_amount", 0)), String(r.get("give", ""))]
@@ -2726,6 +2782,8 @@ func take_order_result(body: Dictionary, answer: Dictionary) -> void:
 	if body.get("action", "") == "view_castle" and answer.get("result") is Dictionary:
 		_show_visit(answer.result)
 		return
+	if body.get("action", "") == "sabotage_player" and answer.get("result") is Dictionary:
+		agents_returned.emit(answer.result)
 	if body.get("action", "") == "spy" and answer.get("result") is Dictionary:
 		var seen: Dictionary = answer.result
 		spy_reports[String(seen.get("name", body.get("target", "")))] = seen

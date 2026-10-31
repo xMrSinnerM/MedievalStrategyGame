@@ -16,6 +16,8 @@ var _level: Label
 var _details: Label
 var _note: Label
 var _spy: Button
+var _agents_button: Button
+var _agents: VBoxContainer
 var _attack: Button
 var _help_buttons: HBoxContainer
 var _recall: Button
@@ -79,6 +81,17 @@ func _ready() -> void:
 	_attack.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_attack.pressed.connect(func() -> void: EventBus.attack_screen_requested.emit("player:" + player_name))
 	buttons.add_child(_attack)
+	_agents_button = Button.new()
+	_agents_button.text = "Send agents..."
+	_agents_button.focus_mode = Control.FOCUS_NONE
+	_agents_button.toggle_mode = true
+	_agents_button.tooltip_text = "Hire agents to steal, burn their stores or weaken their walls"
+	box.add_child(_agents_button)
+	_agents = preload("res://scripts/ui/sabotage_box.gd").new()
+	box.add_child(_agents)
+	_agents_button.toggled.connect(func(on: bool) -> void:
+		_agents.visible = on
+		_refresh())
 	_help_buttons = HBoxContainer.new()
 	_help_buttons.add_theme_constant_override("separation", 8)
 	box.add_child(_help_buttons)
@@ -194,6 +207,11 @@ func _refresh() -> void:
 	_spy.text = "Send a spy (%s)" % _cost(Economy.spy_cost())
 	_spy.disabled = ally or not Economy.player_castle.can_afford(Economy.spy_cost())
 	_attack.disabled = ally or shielded or small or Economy.player_castle.troop_count() <= 0
+	_agents_button.visible = not (ally or shielded or small)
+	if not _agents_button.visible:
+		_agents_button.button_pressed = false
+	if _agents.visible:
+		_agents.set_player(player_name, int(p.get("level", 1)))
 	_attack.tooltip_text = "Train soldiers first" if Economy.player_castle.troop_count() <= 0 else ""
 
 

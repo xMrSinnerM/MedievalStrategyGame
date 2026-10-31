@@ -45,6 +45,8 @@
 // POST { "action": "sell_gear", "item": id }     sells gear from your bag for gold
 // POST { "action": "set_layout", "layout": { "left", "front", "right", "courtyard" } }   percent of the garrison at each post
 // POST { "action": "spy", "target": "name" }
+// POST { "action": "sabotage_player", "target": "name", "mission": "steal" | "burn_stores" | "burn_walls", "resource": "wood", "agents": n }
+// POST { "action": "sabotage_camp", "camp": id, "mission": "steal" | "burn_walls", "agents": n }   spies and sabotage (data/sabotage.json)
 // POST { "action": "view_castle", "target": "name", "outpost": false }   another player's buildings, to look around inside
 // POST { "action": "found_outpost", "region": "wood" | "stone" | "food" | "gold" }   a second castle (data/outposts.json)
 //   on the free spot nearest your home; "place", "upgrade", "cancel" and "move" then take "castle": "outpost"
@@ -124,6 +126,7 @@ import seasonsData from "../../../data/seasons.json" with { type: "json" };
 import chestsData from "../../../data/chests.json" with { type: "json" };
 import encountersData from "../../../data/encounters.json" with { type: "json" };
 import weatherData from "../../../data/weather.json" with { type: "json" };
+import sabotageData from "../../../data/sabotage.json" with { type: "json" };
 import roadsData from "../../../data/roads.json" with { type: "json" };
 import gearData from "../../../data/gear.json" with { type: "json" };
 import outpostsData from "../../../data/outposts.json" with { type: "json" };
@@ -140,7 +143,7 @@ import { nearestSpot } from "../../../server/rules/outposts.ts";
 import { CapitalRules, rulesFor, settled, type VillageInfo, type VillageState } from "../../../server/rules/villages.ts";
 import { capitalBoost, resolveVillageRaid, type VillageTarget } from "./villages.ts";
 import {
-  act, castleLevel, castleView, checkName, fightRaid, isProtected, might, newPlayer, pickSpot, spyReport,
+  act, castleLevel, castleView, checkName, fightRaid, isProtected, might, newPlayer, pickSpot, sabotagePlayer, spyReport,
   type Homecoming, type PlayerState, type PvpRules, type Raid, type Target, type World,
 } from "./game.ts";
 import { allianceView, checkFound, found, handle, type AllianceRules } from "./alliances.ts";
@@ -161,6 +164,7 @@ import type { LoginRules } from "../../../server/rules/login.ts";
 import type { ChestRules } from "../../../server/rules/chests.ts";
 import { encounterRules } from "../../../server/rules/encounters.ts";
 import type { WeatherRules } from "../../../server/rules/weather.ts";
+import type { SabotageRules } from "../../../server/rules/sabotage.ts";
 import { allianceStandings, placeIn, renown, seasonColumns, seasonEnd, seasonKey, type SeasonRules } from "../../../server/rules/seasons.ts";
 import {
   adminEvents, checkGift, giftReport, giveCastle, NOT_ADMIN, OVERRIDES_KEPT, startEvent, stopEvent, type Gift,
@@ -186,6 +190,7 @@ const seasonRules = seasonsData as unknown as SeasonRules;
 const chestRules = chestsData as unknown as ChestRules;
 const encounters = encounterRules(encountersData, roadsData);
 const weather = weatherData as unknown as WeatherRules;
+const sabotageRules = sabotageData as unknown as SabotageRules;
 // The calendar with the game owner's changes (admin.ts), loaded with every request.
 let calendar: EventRules = eventRules;
 rules.barons.lootFactor = (t) => effectAt(calendar, t, "baron_loot");
@@ -551,6 +556,26 @@ async function resolveAid(userId: string) {
       break;
     }
     await admin.from("aid").update({ state: "done" }).eq("id", row.id);
+  }
+}
+
+type SentAgents = { success: boolean; mission: string; resource: string; stolen: Record<string, number>; target: string };
+
+/** The target's side of a sabotage mission: what the agents took or burned there, and word to both sides. */
+async function agentsArrive(targetId: string, senderId: string, senderName: string, sender: PlayerState, sent: SentAgents,
+  agents: number, t: number) {
+  for (let attempt = 0; attempt < RETRIES; attempt++) {
+    const { data: row } = await admin.from("players").select(COLUMNS).eq("user_id", targetId).maybeSingle();
+    if (!row) return;
+    const { version, ...stored } = row as PlayerState & { version: number };
+    const out = sabotagePlayer(rules, sabotageRules, stored, sent, senderName, castleLevel(sender.castle), agents, t);
+    const { data: saved } = await admin.from("players")
+      .update({ ...out.target, ...publicColumns(out.target), version: version + 1, updated_at: new Date().toISOString() })
+      .eq("user_id", targetId).eq("version", version).select("version");
+    if (!saved || saved.length === 0) continue;
+    await saveReports(targetId, [...out.campReports, out.targetReport]);
+    await saveReports(senderId, [out.senderReport]);
+    return;
   }
 }
 
@@ -1215,7 +1240,7 @@ Deno.serve(async (req: Request) => {
   if (["attack_village", "station", "build_capital"].includes(String(body.action))) village = await findVillage(body.village, userId);
 
   let target: { target: Target; row: Row } | null = null;
-  if (["attack_player", "spy", "send_resources", "send_defenders"].includes(String(body.action))) {
+  if (["attack_player", "spy", "sabotage_player", "send_resources", "send_defenders"].includes(String(body.action))) {
     target = await findTarget(body.target, userId);
   }
 
@@ -1280,7 +1305,8 @@ Deno.serve(async (req: Request) => {
       outpostSpot = nearestSpot((world as World).spots, [stored.home_x, stored.home_y], taken);
     }
     const outcome = act(rules, stored, body, t, { pvp, outpostSpot, target: target?.target, homecomings, alliances: allianceRules, aid: aidRules,
-      events: { rules: calendar, world: world as World }, quests: questRules, achievements: achievementRules, login: loginRules, seasons: seasonRules, seasonPlace, chests: chestRules, encounters, weather, village: village?.target, villageIncome,
+      events: { rules: calendar, world: world as World }, quests: questRules, achievements: achievementRules, login: loginRules, seasons: seasonRules, seasonPlace, chests: chestRules, encounters, weather,
+      sabotage: sabotageRules, targetCastle: target ? (target.row as PlayerState).castle : undefined, village: village?.target, villageIncome,
       capitalBoost: boost, fortresses: (world as World).fortresses, hordeRank: hordePlace,
       market: { rules: marketRules, open: openOffers, offer: bought?.offer }, marketIncome: market.income });
     // Save only if nobody else changed the row meanwhile; otherwise start over.
@@ -1345,6 +1371,9 @@ Deno.serve(async (req: Request) => {
         const refunded = await refund(userId, outcome.capitalBuild.cost);
         return reply(await view(userId, refunded ?? outcome.state, { error: "That capital changed hands meanwhile, try again.", result }));
       }
+    }
+    if (body.action === "sabotage_player" && outcome.error === "" && target) {
+      await agentsArrive(target.row.user_id, userId, stored.name, outcome.state, outcome.result as SentAgents, Number(body.agents), t);
     }
     if (body.action === "spy" && outcome.error === "" && target) {
       const helpers = await helpersAt(target.row.user_id, t);

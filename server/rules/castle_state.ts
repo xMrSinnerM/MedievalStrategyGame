@@ -13,6 +13,14 @@ import { get, round, type Dict } from "./util.ts";
 /** Share of the cost given back when a construction is cancelled. */
 export const CANCEL_REFUND = 0.75;
 
+/** Spies and sabotage (sabotage.ts): when agents last went to each target, how many missions were sent, and this castle's own weakened walls. */
+export interface Sabotage {
+  sent: Dict;
+  count: number;
+  walls_until: number;
+  walls_cut: number;
+}
+
 export interface Building {
   id: number;
   type: string;
@@ -154,6 +162,7 @@ export interface CastleData {
   season: SeasonLog;
   chests: ChestLog;
   encounters: { done: string[] };
+  sabotage: Sabotage;
   tools: Dict;
   crafting: Craft[];
   defence_tools: Tools;
@@ -197,6 +206,8 @@ export class CastleState {
   chests: ChestLog = newChestLog();
   /** Map encounters won while they're still on the map (encounters.ts). */
   encounters: { done: string[] } = { done: [] };
+  /** Spies and sabotage (sabotage.ts): missions sent, and this castle's own weakened walls. */
+  sabotage: Sabotage = { sent: {}, count: 0, walls_until: 0, walls_cut: 0 };
   /** Siege tools in store, the workshop's queue, and the defence tools posted on each wall. */
   tools: Dict = {};
   crafting: Craft[] = [];
@@ -769,6 +780,7 @@ export class CastleState {
       season: structuredClone(this.season),
       chests: structuredClone(this.chests),
       encounters: { done: [...this.encounters.done] },
+      sabotage: structuredClone(this.sabotage),
       tools: { ...this.tools },
       crafting: this.crafting.map((c) => ({ ...c })),
       defence_tools: structuredClone(this.defenceTools),
@@ -856,6 +868,11 @@ export class CastleState {
     for (const k of Object.keys(box.have ?? {})) if (Math.trunc(Number(box.have[k])) > 0) have[k] = Math.trunc(Number(box.have[k]));
     castle.chests = { have, opened: Math.trunc(Number(box.opened ?? 0)) };
     castle.encounters = { done: (data.encounters?.done ?? []).filter((id: unknown) => typeof id === "string") };
+    const agents = data.sabotage ?? {};
+    const sent: Dict = {};
+    for (const [k, v] of Object.entries(agents.sent ?? {})) if (typeof v === "number") sent[k] = v;
+    castle.sabotage = { sent, count: Math.trunc(Number(agents.count ?? 0)), walls_until: Number(agents.walls_until ?? 0),
+      walls_cut: Number(agents.walls_cut ?? 0) };
     for (const tool of Object.keys(data.tools ?? {})) {
       const n = Math.trunc(Number(data.tools[tool]));
       if (rules.hasTool(tool) && n > 0) castle.tools[tool] = n;

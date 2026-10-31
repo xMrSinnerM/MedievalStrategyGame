@@ -581,6 +581,29 @@ The weather is worked out from the time alone, so `WeatherRules`
 `server/rules/weather.ts` agree on every march. The light is only drawn by
 the game. The numbers live in `data/weather.json`.
 
+## Spies and sabotage
+
+Instead of attacking, you can hire **agents** (30 gold each, up to 20) from
+a camp's or a player's map card: press **Send agents...** and pick a mission.
+
+- **Steal**: the agents slip out with a quarter of a camp's loot, or of one
+  resource a player keeps above their hidden cellars (online). Each agent
+  carries 40, more as your keep grows.
+- **Burn the walls**: the palisade or wall loses 30% of its strength for six
+  hours, so attack while it's down.
+- **Burn the stores** (players only): 8% of everything above the hidden
+  cellars burns.
+
+More agents mean a better chance; stronger camps and bigger keeps catch
+more of them (10% to 90%, shown before you send). Caught agents cost the
+gold. Each target can be sabotaged once every four hours. Allies, players
+under beginner protection and players far below you are off limits, and
+the target always gets a report; if the agents are caught, it names you.
+
+`SabotageRules` (`scripts/economy/sabotage_rules.gd`) and the server's
+`server/rules/sabotage.ts` share the rules and the dice, so the result is
+the same offline and online. The numbers live in `data/sabotage.json`.
+
 ## Achievements and titles
 
 Press **Y** (or **Achievements** at the top of the quest screen) for 14
