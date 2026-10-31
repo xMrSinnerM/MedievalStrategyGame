@@ -153,6 +153,7 @@ export interface CastleData {
   login: LoginLog;
   season: SeasonLog;
   chests: ChestLog;
+  encounters: { done: string[] };
   tools: Dict;
   crafting: Craft[];
   defence_tools: Tools;
@@ -194,6 +195,8 @@ export class CastleState {
   season: SeasonLog = newSeasonLog();
   /** Treasure chests to open (chests.ts). */
   chests: ChestLog = newChestLog();
+  /** Map encounters won while they're still on the map (encounters.ts). */
+  encounters: { done: string[] } = { done: [] };
   /** Siege tools in store, the workshop's queue, and the defence tools posted on each wall. */
   tools: Dict = {};
   crafting: Craft[] = [];
@@ -765,6 +768,7 @@ export class CastleState {
       login: { ...this.login },
       season: structuredClone(this.season),
       chests: structuredClone(this.chests),
+      encounters: { done: [...this.encounters.done] },
       tools: { ...this.tools },
       crafting: this.crafting.map((c) => ({ ...c })),
       defence_tools: structuredClone(this.defenceTools),
@@ -851,6 +855,7 @@ export class CastleState {
     const have: Dict = {};
     for (const k of Object.keys(box.have ?? {})) if (Math.trunc(Number(box.have[k])) > 0) have[k] = Math.trunc(Number(box.have[k]));
     castle.chests = { have, opened: Math.trunc(Number(box.opened ?? 0)) };
+    castle.encounters = { done: (data.encounters?.done ?? []).filter((id: unknown) => typeof id === "string") };
     for (const tool of Object.keys(data.tools ?? {})) {
       const n = Math.trunc(Number(data.tools[tool]));
       if (rules.hasTool(tool) && n > 0) castle.tools[tool] = n;

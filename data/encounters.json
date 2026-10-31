@@ -1,0 +1,37 @@
+{
+	"_comment": "Random map encounters: bandit camps, merchant caravans and treasure sites that come and go along the roads. `count` of them are on the map at once; each stays `window_hours` and then another takes its place, staggered so they don't all change together. Where and what they are is worked out from the time alone, so the game and the server see the same ones. `kinds` are picked by weight. Each player can win each encounter once. Bandits fight the soldiers you send from your garrison (a quarter, half or all of each kind), with `army` by your keep level (keep 1, 2, ...); beat them for `loot` (x `scale` for your keep) and a `chest_chance` of a chest. A caravan offers one of its `trades`, once (x `scale`). A treasure site wants `diggers` soldiers at home and `cost` food (x `scale`), and gives `gold` (x `scale`) and one chest picked from `chests` by weight. Nothing here can be bought.",
+	"window_hours": 6,
+	"count": 8,
+	"scale": [1, 2, 5, 12, 25],
+	"kinds": {"bandits": 4, "caravan": 3, "treasure": 2},
+	"bandits": {
+		"name": "Bandit camp",
+		"army": [
+			{"spearman": 15, "archer": 6},
+			{"spearman": 35, "archer": 15, "swordsman": 5},
+			{"spearman": 70, "archer": 35, "swordsman": 20},
+			{"spearman": 120, "archer": 70, "swordsman": 45, "horseman": 10},
+			{"spearman": 180, "archer": 110, "swordsman": 80, "horseman": 30}
+		],
+		"loot": {"wood": 300, "stone": 300, "food": 250, "gold": 80},
+		"chest": "wooden",
+		"chest_chance": 0.4
+	},
+	"caravan": {
+		"name": "Merchant caravan",
+		"trades": [
+			{"give": {"gold": 100}, "get": {"wood": 350, "stone": 350}},
+			{"give": {"food": 400}, "get": {"gold": 160}},
+			{"give": {"wood": 500}, "get": {"stone": 650}},
+			{"give": {"stone": 500}, "get": {"food": 750}},
+			{"give": {"gold": 150}, "get": {"food": 1000}}
+		]
+	},
+	"treasure": {
+		"name": "Treasure site",
+		"diggers": 10,
+		"cost": {"food": 150},
+		"gold": 100,
+		"chests": [{"kind": "wooden", "weight": 70}, {"kind": "iron", "weight": 25}, {"kind": "golden", "weight": 5}]
+	}
+}

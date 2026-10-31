@@ -19,6 +19,7 @@ import { claimQuest, rollDay, type QuestRules } from "../../../server/rules/ques
 import { claimAchievement, note, setTitle, type AchievementRules } from "../../../server/rules/achievements.ts";
 import { claimLogin, type LoginRules } from "../../../server/rules/login.ts";
 import { openChest, type ChestRules } from "../../../server/rules/chests.ts";
+import { takeEncounter, type EncounterRules } from "../../../server/rules/encounters.ts";
 import { claimPrize as claimSeasonPrize, claimTrack, rollSeason, type SeasonRules } from "../../../server/rules/seasons.ts";
 import type { GearRules, Lead } from "../../../server/rules/gear.ts";
 import { deliverCarts, OUTPOST_ID, unload, type Cart, type OutpostData } from "../../../server/rules/outposts.ts";
@@ -163,6 +164,8 @@ export interface Context {
   seasons?: SeasonRules;
   /** Treasure chests and their Wheel of Fortune (data/chests.json). */
   chests?: ChestRules;
+  /** Bandit camps, merchant caravans and treasure sites along the roads (data/encounters.json). */
+  encounters?: EncounterRules;
   /** For "claim_season_prize": your place and your alliance's in last season's ranking (0: none). */
   seasonPlace?: { player: number; alliance: number };
   /** For "found_outpost": the free spot nearest your home, or null when there is none. */
@@ -675,6 +678,16 @@ export function act(rules: Rules, given: PlayerState, req: Request, now: number,
       const opened = openChest(castle, ctx.chests, req.kind);
       error = opened.error;
       if (error === "") result = { slot: opened.slot, reward: opened.reward };
+      break;
+    }
+    case "encounter": {
+      if (!ctx.encounters) {
+        error = "Unknown order.";
+        break;
+      }
+      const met = takeEncounter(castle, ctx.encounters, req.id, req.choice, now);
+      error = met.error;
+      if (error === "") result = met;
       break;
     }
     case "claim_season":

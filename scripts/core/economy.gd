@@ -90,6 +90,8 @@ var login_rewards: LoginRewards
 var season_rules: SeasonRules
 ## Treasure chests and their Wheel of Fortune (data/chests.json).
 var chest_rules: ChestRules
+## Bandit camps, merchant caravans and treasure sites along the roads (data/encounters.json).
+var encounter_rules: EncounterRules
 ## The achievement tiers already announced (null: take the next ones silently).
 var _known_tiers: Variant = null
 ## Commanders and gear (data/gear.json).
@@ -262,6 +264,7 @@ func ensure_loaded() -> void:
 	login_rewards = LoginRewards.load_default()
 	season_rules = SeasonRules.load_default()
 	chest_rules = ChestRules.load_default()
+	encounter_rules = EncounterRules.load_default()
 	achievements = Achievements.load_default()
 	gear_rules = GearRules.load_default()
 	outpost_rules = OutpostRules.load_default()
@@ -335,6 +338,7 @@ func begin_new(n := 1) -> void:
 	login_rewards = LoginRewards.load_default()
 	season_rules = SeasonRules.load_default()
 	chest_rules = ChestRules.load_default()
+	encounter_rules = EncounterRules.load_default()
 	achievements = Achievements.load_default()
 	gear_rules = GearRules.load_default()
 	outpost_rules = OutpostRules.load_default()
@@ -354,6 +358,7 @@ func begin_load(n := 1) -> void:
 	login_rewards = LoginRewards.load_default()
 	season_rules = SeasonRules.load_default()
 	chest_rules = ChestRules.load_default()
+	encounter_rules = EncounterRules.load_default()
 	achievements = Achievements.load_default()
 	gear_rules = GearRules.load_default()
 	outpost_rules = OutpostRules.load_default()
@@ -924,6 +929,7 @@ func begin_online(answer: Dictionary) -> void:
 	login_rewards = LoginRewards.load_default()
 	season_rules = SeasonRules.load_default()
 	chest_rules = ChestRules.load_default()
+	encounter_rules = EncounterRules.load_default()
 	achievements = Achievements.load_default()
 	_known_tiers = null
 	gear_rules = GearRules.load_default()
@@ -2248,6 +2254,22 @@ func open_chest(kind: String) -> Dictionary:
 		return out
 	if online:
 		get_node("/root/Online").order({"action": "open_chest", "kind": kind})
+	else:
+		save_game()
+	changed.emit()
+	return out
+
+
+func take_encounter(id: String, choice := "") -> Dictionary:
+	## Takes on a map encounter (bandits: with a "quarter", "half" or "all"
+	## of the garrison). Returns {"error"} or what happened (EncounterRules.take).
+	## Online the server does the same (it comes out the same), and its answer
+	## replaces the castle.
+	var out := encounter_rules.take(player_castle, id, choice, now())
+	if out.error != "":
+		return out
+	if online:
+		get_node("/root/Online").order({"action": "encounter", "id": id, "choice": choice})
 	else:
 		save_game()
 	changed.emit()

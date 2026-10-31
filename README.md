@@ -540,6 +540,28 @@ and how many chests it has opened, so `ChestRules`
 (`scripts/economy/chest_rules.gd`) and the server's `server/rules/chests.ts`
 always agree on where the wheel lands (order `open_chest`).
 
+## Map encounters
+
+Bandit camps, merchant caravans and treasure sites turn up along the roads
+of the world map and leave again after six hours. Eight are on the map at any
+time, each replaced on its own clock, so something new appears every 45
+minutes. Click one to open its card:
+
+- **Bandit camp**: send a quarter, half or all of your garrison (the card
+  shows the odds of each). Win and you take their loot and maybe a wooden
+  chest; the survivors come straight home. Lose and the camp stays.
+- **Merchant caravan**: a wagon walking its road, offering one resource for
+  another.
+- **Treasure site**: needs 10 soldiers at home and some food to dig, and
+  gives gold and a wooden, iron or (rarely) golden chest.
+
+Each castle can take on each encounter once; ones you've done fade on the
+map. Bandits and prizes grow with your keep. Everyone sees the same
+encounters: which ones are out, and where, is worked out from the time alone,
+so `EncounterRules` (`scripts/economy/encounter_rules.gd`) and the server's
+`server/rules/encounters.ts` agree without keeping a list (order
+`encounter`). The numbers live in `data/encounters.json`.
+
 ## Achievements and titles
 
 Press **Y** (or **Achievements** at the top of the quest screen) for 14

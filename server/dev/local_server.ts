@@ -42,6 +42,7 @@ import type { QuestRules } from "../rules/quests.ts";
 import type { AchievementRules } from "../rules/achievements.ts";
 import type { LoginRules } from "../rules/login.ts";
 import type { ChestRules } from "../rules/chests.ts";
+import { encounterRules } from "../rules/encounters.ts";
 import { allianceStandings, placeIn, renown, seasonColumns, seasonEnd, seasonKey, type SeasonRules } from "../rules/seasons.ts";
 import {
   adminEvents, checkGift, giftReport, giveCastle, NOT_ADMIN, startEvent, stopEvent, type AdminLogEntry,
@@ -68,6 +69,7 @@ const achievementRules: AchievementRules = json("data/achievements.json");
 const loginRules: LoginRules = json("data/login.json");
 const seasonRules: SeasonRules = json("data/seasons.json");
 const chestRules: ChestRules = json("data/chests.json");
+const encounters = encounterRules(json("data/encounters.json"), json("data/roads.json"));
 // The calendar with the owner's changes (kept on the shifted clock below).
 let eventRules: EventRules = eventRules0;
 // For testing: run the event calendar this many hours ahead, to see an event on.
@@ -759,7 +761,7 @@ createServer(async (req, res) => {
     }
     const outcome = act(rules, me, body, t,
       { pvp, outpostSpot, target: target?.target, homecomings, alliances: allianceRules, aid: aidRules,
-        events: { rules: eventRules, world, offset: EVENTS_OFFSET }, quests: questRules, achievements: achievementRules, login: loginRules, seasons: seasonRules, seasonPlace, chests: chestRules, village: village?.target, villageIncome,
+        events: { rules: eventRules, world, offset: EVENTS_OFFSET }, quests: questRules, achievements: achievementRules, login: loginRules, seasons: seasonRules, seasonPlace, chests: chestRules, encounters, village: village?.target, villageIncome,
         capitalBoost: capitalBoost(rules, allianceCapitals(user).levels, allianceCapitals(user).guilds), fortresses: world.fortresses, hordeRank: hordePlace,
         market: { rules: marketRules, open: offers.filter((o) => o.seller === user && o.state === "open" && o.expires > t).length,
           offer: bought ? offerOf(bought) : undefined }, marketIncome: market.income });

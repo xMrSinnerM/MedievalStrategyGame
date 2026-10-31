@@ -49,6 +49,9 @@ var season := new_season_log()
 ## Treasure chests to open (kind -> count) and how many were opened in all,
 ## which picks each spin of the Wheel of Fortune (ChestRules).
 var chests := new_chest_log()
+## Map encounters this castle has won while they're still on the map
+## (EncounterRules).
+var encounters := {"done": []}
 ## Siege tools in store (tool -> count), the workshop's queue (batches
 ## {tool, remaining, unit_time, next}, like training) and the defence tools
 ## posted on each wall (wall -> {tool: count}, Battle.siege()).
@@ -833,6 +836,7 @@ func copy_from(other: CastleState) -> void:
 	login = other.login
 	season = other.season
 	chests = other.chests
+	encounters = other.encounters
 	tools = other.tools
 	crafting = other.crafting
 	defence_tools = other.defence_tools
@@ -861,7 +865,7 @@ func to_dict() -> Dictionary:
 		"field": field.duplicate(), "field_ready": field_ready, "layout": layout.duplicate(),
 		"stats": stats.duplicate(), "quests": quests.duplicate(true), "achievements": achievements.duplicate(true),
 		"login": login.duplicate(), "season": season.duplicate(true),
-		"chests": chests.duplicate(true),
+		"chests": chests.duplicate(true), "encounters": encounters.duplicate(true),
 		"tools": tools.duplicate(), "crafting": crafting.duplicate(true), "defence_tools": defence_tools.duplicate(true),
 		"armoury": armoury.duplicate(true),
 		"boost": boost.duplicate(), "limits": limits.duplicate(true) if not limits.is_empty() else null,
@@ -959,6 +963,11 @@ static func from_dict(p_rules: BuildingRules, data: Dictionary) -> CastleState:
 			if int(box.have[kind]) > 0:
 				castle.chests.have[kind] = int(box.have[kind])
 		castle.chests.opened = int(box.get("opened", 0))
+	var met: Variant = data.get("encounters", {})
+	if met is Dictionary:
+		for id: Variant in met.get("done", []):
+			if id is String:
+				castle.encounters.done.append(id)
 	var stock: Dictionary = data.get("tools", {})
 	for tool: String in stock:
 		if p_rules.has_tool(tool) and int(stock[tool]) > 0:

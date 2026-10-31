@@ -151,6 +151,7 @@ var barons: Node3D
 var players: Node3D   ## online: the other players' castles (players_layer.gd)
 var outposts: Node3D  ## outposts and carts (outposts_layer.gd)
 var villages: Node3D  ## resource villages (villages_layer.gd)
+var encounters: Node3D  ## bandits, caravans and treasure sites (encounters_layer.gd)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -180,6 +181,14 @@ func _on_click(screen_pos: Vector2) -> void:
 	if hit == null:
 		return
 	var target := Vector2(hit.x, hit.z)
+	var met: String = encounters.encounter_at(target) if encounters != null else ""
+	if met != "":
+		for sig: Signal in [EventBus.settlement_selected, EventBus.baron_selected, EventBus.village_selected, EventBus.player_selected]:
+			sig.emit("")
+		EventBus.encounter_selected.emit(met)
+		Audio.play("select_camp")
+		return
+	EventBus.encounter_selected.emit("")
 	var camp: String = barons.camp_at(target) if barons != null else ""
 	if camp != "":
 		EventBus.settlement_selected.emit("")

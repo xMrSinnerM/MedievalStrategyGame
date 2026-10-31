@@ -55,6 +55,7 @@ func _initialize() -> void:
 	test_login()
 	test_seasons()
 	test_chests()
+	test_encounters()
 	print("%d checks, %d failed" % [checks, failures])
 	quit(1 if failures > 0 else 0)
 
@@ -1682,3 +1683,52 @@ func test_chests() -> void:
 	var got: Dictionary = eco.open_chest("wooden")
 	check(got.error == "" and eco.reward_text(got.reward) != "", "the economy opens one: %s" % eco.reward_text(got.reward))
 	eco.free()
+
+
+func test_encounters() -> void:
+	var er := EncounterRules.load_default()
+	var t := 1_800_000_000.0
+	var now := er.active(t)
+	check(now.size() == er.count and er.roads.size() > 10, "%d encounters on the map" % now.size())
+	var ids := {}
+	for e: Dictionary in now:
+		ids[e.id] = true
+		check(float(e.start) <= t and t < float(e.end), "%s is on now" % e.id)
+	check(ids.size() == er.count, "each slot its own")
+	# They come and go one at a time, not all at once.
+	var later := er.active(t + er.window / er.count + 1.0)
+	var same := 0
+	for e: Dictionary in later:
+		if ids.has(e.id):
+			same += 1
+	check(same == er.count - 1, "one changes at a time (%d stayed)" % same)
+	var kinds := {}
+	for w in 200:
+		kinds[er.make(0, w).kind] = true
+	check(kinds.size() == 3, "all three kinds turn up")
+	# A caravan walks its road.
+	for w in 50:
+		var e := er.make(1, w)
+		if e.kind == "caravan":
+			check(er.position(e, float(e.start)) != er.position(e, float(e.start) + 3600.0), "a caravan moves")
+			break
+	# Taking them on.
+	var c := fresh()
+	c.troops = {"spearman": 200, "archer": 100}
+	var by_kind := {}
+	for slot in er.count:
+		for w in 40:
+			var e := er.make(slot, int(floor(t / er.window)) + w)
+			by_kind[e.kind] = e
+	for kind: String in ["bandits", "caravan", "treasure"]:
+		var e: Dictionary = by_kind[kind]
+		var at := float(e.start) + 10.0
+		check(er.take(c, String(e.id), "all", at - er.window * 2).error == "That's gone from the map.", "%s only while it's there" % kind)
+		c.resources = {"wood": 5000.0, "stone": 5000.0, "food": 5000.0, "gold": 5000.0}
+		var out := er.take(c, String(e.id), "half", at)
+		check(out.error == "", "%s: %s" % [kind, out.error])
+		if kind == "bandits":
+			check(out.won and int(c.troops.spearman) <= 200, "half the garrison beats keep-1 bandits")
+		check(er.take(c, String(e.id), "half", at).error != "" or kind == "bandits" and not out.won, "%s once" % kind)
+	check(er.check(c, {"id": "x", "kind": "bandits"}, "all") == "", "a fresh one can be fought")
+	check(er.check(fresh(), {"id": "x", "kind": "bandits"}, "all") == "Send at least one soldier.", "not without soldiers")
