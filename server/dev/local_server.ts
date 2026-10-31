@@ -29,6 +29,9 @@ import {
   allianceView, checkFound, found, handle, MemoryAllianceStore, type AllianceRules,
 } from "../../supabase/functions/game/alliances.ts";
 import { chatView, MemoryChatStore, send as sendChat, type Speaker } from "../../supabase/functions/game/chat.ts";
+import {
+  type Directory, MAIL_ORDERS, mailOrder, mailView, MemoryMailStore, sendLetter,
+} from "../../supabase/functions/game/mail.ts";
 import { deliver, recall, type Aid, type AidRules } from "../../supabase/functions/game/aid.ts";
 import { goingRates, type MarketReport, type MarketRules, type Offer } from "../../supabase/functions/game/market.ts";
 import { invade } from "../../supabase/functions/game/invasion.ts";
@@ -110,7 +113,7 @@ const refreshTokens = new Map<string, string>();
 // Password reset codes by email; the real server emails them, this one prints them.
 const resetCodes = new Map<string, { code: string; expires: number }>();
 const players = new Map<string, PlayerState>();
-const reports: { id: number; user: string; at: number; report: unknown }[] = [];
+const reports: { id: number; user: string; at: number; report: unknown; read?: boolean }[] = [];
 let nextReport = 1;
 const raids: (Raid & { attacker: string; defender: string | null })[] = [];
 let nextRaid = 1;
@@ -122,6 +125,14 @@ let nextOffer = 1;
 const store = new MemoryAllianceStore(() => new Map([...players].map(([id, p]) => [id,
   { name: p.name, level: castleLevel(p.castle), might: might(p.castle, pvp) }])));
 const chat = new MemoryChatStore();
+const mail = new MemoryMailStore(reports);
+const directory: Directory = {
+  byName: async (name) => {
+    const p = await store.playerByName(name);
+    return p === null ? null : { user: p.user, name: p.name };
+  },
+  members: async (id) => (await store.members(id)).map((m) => ({ user: m.user, name: m.name })),
+};
 // Who holds each village and capital; `holder` is the owner's account (null for the militia).
 const villages = new Map<string, VillageState & { holder: string | null }>(
   PLACES.map((v) => [v.id, { ...untouched(v.id), holder: null }]));
@@ -180,7 +191,7 @@ function session(email: string) {
     refresh_token: refresh, user: { id: user.id, email } };
 }
 
-function view(user: string, state: PlayerState, extra: Record<string, unknown> = {}) {
+async function view(user: string, state: PlayerState, extra: Record<string, unknown> = {}) {
   const mine = reports.filter((r) => r.user === user).slice(-20).reverse().map(({ id, at, report }) => ({ id, at, report }));
   const moving = raids.filter((r) => (r.attacker === user || r.defender === user) && r.state !== "done")
     .map(({ attacker, defender: _d, ...r }) => {
@@ -190,7 +201,7 @@ function view(user: string, state: PlayerState, extra: Record<string, unknown> =
     });
   const helping = aid.filter((a) => (a.sender === user || a.receiver === user) && a.state === "out")
     .sort((a, b) => a.arrive - b.arrive).map(({ sender, receiver: _r, state: _s, ...a }) => ({ ...a, mine: sender === user }));
-  return { ok: true, now: now(), ...extra, player: state, raids: moving, aid: helping, reports: mine,
+  return { ok: true, now: now(), ...extra, player: state, raids: moving, aid: helping, reports: mine, mail_unread: await mail.unread(user),
     villages: villagesView(user), events: shifted(eventsView(eventRules, now() + EVENTS_OFFSET)) };
 }
 
@@ -678,7 +689,7 @@ createServer(async (req, res) => {
       if (keep && START_KEEP > 0) keep.level = START_KEEP;
       const placed = hordeArrives(invade(state, eventRules, world, now(), EVENTS_OFFSET), eventRules, world, now(), EVENTS_OFFSET);
       players.set(user, placed);
-      return send(res, 200, view(user, placed));
+      return send(res, 200, await view(user, placed));
     }
     if (body.action === "world") {
       const others = [...players.entries()].filter(([id]) => id !== user)
@@ -749,6 +760,14 @@ createServer(async (req, res) => {
       return send(res, 200, { ok: true, now: now(), error, result: await chatView(chat, speaker(user), body.after) });
     }
     if (body.action === "market") return send(res, 200, { ok: true, now: now(), error: "", result: marketView(user) });
+    if (typeof body.action === "string" && MAIL_ORDERS.has(body.action)) {
+      const me = (await store.player(user))!;
+      const a = me.alliance_id === null ? null : await store.alliance(me.alliance_id);
+      const error = body.action === "mail_send"
+        ? await sendLetter(mail, directory, { user, name: me.name, alliance_id: me.alliance_id, tag: a?.tag ?? "", role: me.role }, body, now())
+        : body.action === "mail" ? "" : await mailOrder(mail, user, body);
+      return send(res, 200, { ok: true, now: now(), error, result: await mailView(mail, user, body) });
+    }
     if (typeof body.action === "string" && ALLIANCE_ORDERS.has(body.action)) {
       const error = await handle(store, allianceRules, user, body, now());
       return send(res, 200, { ok: true, now: now(), error, result: await allianceView(store, allianceRules, user) });
@@ -865,13 +884,16 @@ createServer(async (req, res) => {
     }
     if (body.action === "spy" && outcome.error === "" && target) {
       result = spyReport(rules, pvp, players.get(target.user)!, t, helpersAt(target.user, t).map((h) => h.army));
+      // The same as index.ts: both sides keep a report.
+      report(user, { ...result, kind: "spy", role: "spy" });
+      report(target.user, { kind: "spy", role: "target", name: outcome.state.name, at: t });
     }
     if (founded !== null) {
       if (outcome.error !== "") await store.remove(founded);
       result = await allianceView(store, allianceRules, user);
     }
     if (marketOrder) result = marketView(user);
-    return send(res, 200, view(user, outcome.state, { error: recalled || villageError || marketError || warError || outcome.error, result }));
+    return send(res, 200, await view(user, outcome.state, { error: recalled || villageError || marketError || warError || outcome.error, result }));
   }
   send(res, 404, { msg: "Not found" });
 }).listen(PORT, "127.0.0.1", () => console.log(`Local game server on http://127.0.0.1:${PORT}`));

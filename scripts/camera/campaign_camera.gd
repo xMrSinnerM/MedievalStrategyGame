@@ -97,7 +97,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _process(delta: float) -> void:
 	# Keys don't move the camera while you type in a text field (chat, alliance names).
-	_typing = get_viewport().gui_get_focus_owner() is LineEdit
+	_typing = get_viewport().gui_get_focus_owner() is LineEdit or get_viewport().gui_get_focus_owner() is TextEdit
 	var move := Vector2.ZERO
 	if _key(KEY_W) or _key(KEY_UP):
 		move.y -= 1.0

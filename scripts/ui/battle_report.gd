@@ -95,6 +95,10 @@ func _ready() -> void:
 	box.add_child(ok)
 	EventBus.battle_fought.connect(_on_battle)
 	Economy.attack_resolved.connect(show_baron_report)
+	Economy.report_shown.connect(func(report: Dictionary) -> void:
+		# From the reports inbox: over the mail window.
+		move_to_front()
+		show_baron_report(report))
 
 
 func _column(row: HBoxContainer, icon: String) -> Array:

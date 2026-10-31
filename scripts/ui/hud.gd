@@ -12,6 +12,8 @@ const TOP := 66.0                ## panels start below the resource bar
 var _controls: MapControls
 var _resources: ResourceBar
 var _alliance_button: Button
+var _mail_button: Button
+var _mail_window: GameWindow
 var _quests_button: Button
 var _quest_book_check := 0.0
 var _status: Label               ## your party, or beginner protection online
@@ -148,6 +150,22 @@ func _ready() -> void:
 	if Economy.online:
 		market_window = _window("Market", "market", [market, ""])
 	_window("Capital", "villages", [preload("res://scripts/ui/town_panel.gd").new(), ""])
+	if Economy.online:
+		var reports_page := preload("res://scripts/ui/mail_panel.gd").new("reports")
+		var inbox_page := preload("res://scripts/ui/mail_panel.gd").new("inbox")
+		var sent_page := preload("res://scripts/ui/mail_panel.gd").new("sent")
+		var letter_page := preload("res://scripts/ui/letter_panel.gd").new()
+		_mail_window = _window("Mail", "mail", [reports_page, "Reports", inbox_page, "Letters", sent_page, "Sent",
+				letter_page, "Write"])
+		for page in [reports_page, inbox_page, sent_page]:
+			page.compose = letter_page
+			page.window = _mail_window
+		letter_page.sent_page = sent_page
+		letter_page.window = _mail_window
+		EventBus.letter_requested.connect(func(who: String) -> void:
+			letter_page.prefill(who, "")
+			_mail_window.open(letter_page))
+		Economy.mail_changed.connect(func(_error: String) -> void: _update_mail_button())
 	var owner_window: GameWindow = null
 	if Economy.online:
 		_owner_panel = preload("res://scripts/ui/admin_panel.gd").new()
@@ -172,6 +190,8 @@ func _ready() -> void:
 	if Economy.online:
 		_alliance_button = _dock_button("Alliance", "alliance", "Alliance, alliance war, tournament and leaderboard (G, K, L)", alliance_window.toggle)
 		row.add_child(_alliance_button)
+		_mail_button = _dock_button("Mail", "mail", "Reports and letters (I)", _mail_window.toggle)
+		row.add_child(_mail_button)
 		row.add_child(_dock_button("Market", "market", "Market (T)", market_window.toggle))
 		row.add_child(_dock_button("Events", "events", "Events (V)", events_window.toggle))
 		var owner_button := _dock_button("Owner", "owner", "Owner tools (O)", owner_window.toggle)
@@ -248,6 +268,11 @@ func _ready() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo and event.physical_keycode == KEY_I \
+			and _mail_window != null and not get_tree().paused:
+		_mail_window.toggle()
+		get_viewport().set_input_as_handled()
+		return
 	if event is InputEventKey and event.pressed and not event.echo and event.physical_keycode == KEY_F1:
 		visible = not visible
 
@@ -309,7 +334,7 @@ func _process(delta: float) -> void:
 	if Economy.online:
 		if Economy.is_protected():
 			status = "Beginner protection: %s left (ends if you attack a player)" % _hours(Economy.protected_until - Economy.now())
-		_controls.keys = "Click: pick your castle, another player's, a robber baron camp, a village or a town\nC: your castle   L: leaderboard   G: alliance   V: events   T: market   K: alliance war   J: quests   Y: achievements   H: commanders   P: outpost   B: villages   Enter: chat" + ("   O: owner tools" if Economy.is_admin else "") + "\nWASD / drag: pan   Q E / right-drag: rotate   wheel: zoom\nM: parchment map   N: minimap   Home: recentre   F1: hide   Esc: menu\n\nOnline as " + Online.email
+		_controls.keys = "Click: pick your castle, another player's, a robber baron camp, a village or a town\nC: your castle   L: leaderboard   G: alliance   V: events   T: market   I: mail   K: alliance war   J: quests   Y: achievements   H: commanders   P: outpost   B: villages   Enter: chat" + ("   O: owner tools" if Economy.is_admin else "") + "\nWASD / drag: pan   Q E / right-drag: rotate   wheel: zoom\nM: parchment map   N: minimap   Home: recentre   F1: hide   Esc: menu\n\nOnline as " + Online.email
 	else:
 		if _party_status != "":
 			status = "Your party: %s" % _party_status
@@ -359,6 +384,12 @@ func _show_event() -> void:
 	_event.text = "" if next.is_empty() else "Next event: %s in %s" % [next.name, _days(float(next.start) - Economy.now())]
 	_event.tooltip_text = ""
 	_event.add_theme_color_override("font_color", MenuStyle.MUTED)
+
+
+func _update_mail_button() -> void:
+	## Reports and letters you haven't read show as a count.
+	var waiting := int(Economy.mail_unread.get("inbox", 0)) + int(Economy.mail_unread.get("reports", 0))
+	_set_badge(_mail_button, str(mini(waiting, 99)) + ("+" if waiting > 99 else "") if waiting > 0 else "")
 
 
 func _update_alliance_button() -> void:

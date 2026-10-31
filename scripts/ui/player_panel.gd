@@ -67,6 +67,13 @@ func _ready() -> void:
 	_look_outpost.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_look_outpost.pressed.connect(func() -> void: Economy.visit_player(player_name, true))
 	looks.add_child(_look_outpost)
+	var write := Button.new()
+	write.text = "Write"
+	write.tooltip_text = "Send them a letter"
+	write.icon = Icons.get_icon("mail", 18)
+	write.focus_mode = Control.FOCUS_NONE
+	write.pressed.connect(func() -> void: EventBus.letter_requested.emit(player_name))
+	looks.add_child(write)
 	var buttons := HBoxContainer.new()
 	buttons.add_theme_constant_override("separation", 8)
 	box.add_child(buttons)
