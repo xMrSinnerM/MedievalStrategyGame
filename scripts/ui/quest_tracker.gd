@@ -71,11 +71,35 @@ func _refresh() -> void:
 		lines.append("Treasure chests to open: %d" % Economy.chest_rules.total(castle))
 	if Economy.login_waiting():
 		lines.append("Today's Royal Gift is waiting")
+	if Economy.weather_rules != null:
+		lines.append(_weather_line())
 	_ready_glow = book.can_claim_anything(castle) or _achievement_waiting() or Economy.login_waiting() or Economy.season_waiting()
 	if book.can_claim_anything(castle):
 		lines.append("A reward is waiting! Click or press J")
 	_label.text = "\n".join(lines)
 	_label.add_theme_color_override("font_color", MenuStyle.GOLD if _ready_glow else MenuStyle.TEXT)
+
+
+func _weather_line() -> String:
+	## "Dusk    2 storms, 1 rain on the map", or what's over your castle.
+	var w := Economy.weather_rules
+	var now := Economy.now()
+	var counts := {"storm": 0, "rain": 0}
+	var over := ""
+	for cell: Dictionary in w.active(now):
+		if counts.has(cell.kind):
+			counts[cell.kind] += 1
+			if w.centre(cell, now).distance_to(Economy.home_position()) <= float(cell.radius) and (over == "" or cell.kind == "storm"):
+				over = String(cell.kind)
+	var parts: PackedStringArray = []
+	if counts.storm > 0:
+		parts.append("%d storm%s" % [counts.storm, "" if counts.storm == 1 else "s"])
+	if counts.rain > 0:
+		parts.append("%d rain" % counts.rain)
+	var sky := "clear skies" if parts.is_empty() else ", ".join(parts) + " on the map"
+	if over != "":
+		sky = "%s over your castle" % w.kind_name(over).to_lower()
+	return "%s    %s" % [w.time_name(now), sky]
 
 
 func _achievement_waiting() -> bool:

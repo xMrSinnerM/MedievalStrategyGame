@@ -25,6 +25,7 @@ import type { GearRules, Lead } from "../../../server/rules/gear.ts";
 import { deliverCarts, OUTPOST_ID, unload, type Cart, type OutpostData } from "../../../server/rules/outposts.ts";
 import { rulesFor, type VillageInfo, type VillageState } from "../../../server/rules/villages.ts";
 import { checkVillageAttack, type VillageTarget } from "./villages.ts";
+import { marchSlow, type WeatherRules } from "../../../server/rules/weather.ts";
 
 /** A player as stored in the players table (the game columns). */
 export interface PlayerState {
@@ -166,6 +167,8 @@ export interface Context {
   chests?: ChestRules;
   /** Bandit camps, merchant caravans and treasure sites along the roads (data/encounters.json). */
   encounters?: EncounterRules;
+  /** Weather (data/weather.json): rain and storms slow marches. */
+  weather?: WeatherRules;
   /** For "claim_season_prize": your place and your alliance's in last season's ranking (0: none). */
   seasonPlace?: { player: number; alliance: number };
   /** For "found_outpost": the free spot nearest your home, or null when there is none. */
@@ -346,6 +349,7 @@ export function act(rules: Rules, given: PlayerState, req: Request, now: number,
     nextMarch: stored.next_march,
     home: [stored.home_x, stored.home_y],
     gear: rules.gear,
+    weather: ctx.weather,
   };
   if (ctx.capitalBoost) army.castle.boost = { ...ctx.capitalBoost };
   const reports = advanceMarches(army, rules.barons, now);
@@ -483,7 +487,8 @@ export function act(rules: Rules, given: PlayerState, req: Request, now: number,
         }
       }
       const from: [number, number] = [stored.home_x, stored.home_y];
-      const travel = rules.barons.marchTime(Math.hypot(target.home[0] - from[0], target.home[1] - from[1])) * castle.marchFactor();
+      const travel = rules.barons.marchTime(Math.hypot(target.home[0] - from[0], target.home[1] - from[1])) * castle.marchFactor() *
+        marchSlow(ctx.weather, from, target.home, now);
       // A lead with id 0 is research alone, without a commander.
       if (lead && lead.id > 0) rules.gear.commander(castle, lead.id)!.away_until = now + 2 * travel;
       raid = { attacker_name: stored.name, defender_name: target.name, army, from, to: target.home, depart: now,
@@ -524,7 +529,8 @@ export function act(rules: Rules, given: PlayerState, req: Request, now: number,
       }
       const from: [number, number] = [stored.home_x, stored.home_y];
       const to = v.info.position;
-      const travel = rules.barons.marchTime(Math.hypot(to[0] - from[0], to[1] - from[1])) * castle.marchFactor();
+      const travel = rules.barons.marchTime(Math.hypot(to[0] - from[0], to[1] - from[1])) * castle.marchFactor() *
+        marchSlow(ctx.weather, from, [to[0], to[1]], now);
       if (lead && lead.id > 0) rules.gear.commander(castle, lead.id)!.away_until = now + 2 * travel;
       raid = { attacker_name: stored.name, defender_name: v.info.name, village: v.info.id,
         mission: attack ? "attack" : "station", army, from, to: [to[0], to[1]], depart: now, arrive: now + travel,

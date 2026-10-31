@@ -52,6 +52,10 @@ func _ready() -> void:
 	encounters.name = "Encounters"
 	add_child(encounters)
 	encounters.build()
+	var weather := preload("res://scripts/world/weather_layer.gd").new()
+	weather.name = "Weather"
+	add_child(weather)
+	weather.build()
 	parties.barons = barons
 	parties.encounters = encounters
 	parties.villages = villages

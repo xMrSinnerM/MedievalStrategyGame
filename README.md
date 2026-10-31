@@ -562,6 +562,25 @@ so `EncounterRules` (`scripts/economy/encounter_rules.gd`) and the server's
 `server/rules/encounters.ts` agree without keeping a list (order
 `encounter`). The numbers live in `data/encounters.json`.
 
+## Weather and the time of day
+
+The world map has days and nights: a whole day takes two hours, with the
+sun swinging across the sky, warm light at dawn and dusk and a blue night
+in between. The quest box shows the time of day and the weather.
+
+Banks of **rain** and **storm** cloud drift across the map, six cells at a
+time, each lasting three hours on its own staggered clock. Rain falls under
+them and storms flash with lightning. An army marching out through one is
+slowed for the whole march: **rain by 10%, a storm by 30%** (the worst on the
+way counts). The attack screen says so next to the march time. Armies
+already on the road aren't affected, so it's worth waiting for a storm to
+pass.
+
+The weather is worked out from the time alone, so `WeatherRules`
+(`scripts/economy/weather_rules.gd`) and the server's
+`server/rules/weather.ts` agree on every march. The light is only drawn by
+the game. The numbers live in `data/weather.json`.
+
 ## Achievements and titles
 
 Press **Y** (or **Achievements** at the top of the quest screen) for 14
