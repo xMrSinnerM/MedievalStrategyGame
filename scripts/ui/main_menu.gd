@@ -56,6 +56,14 @@ func _ready() -> void:
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	column.add_child(sub)
+	# On a short screen (a phone turned sideways) the tagline makes room for the buttons.
+	var divider := column.get_child(2) as Control
+	var fit := func() -> void:
+		var short: bool = banner.get_viewport_rect().size.y < 700.0
+		sub.visible = not short
+		divider.visible = not short
+	banner.get_viewport().size_changed.connect(fit)
+	fit.call()
 	var gap := Control.new()
 	gap.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	gap.custom_minimum_size = Vector2(0, 14)

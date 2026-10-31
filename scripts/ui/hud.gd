@@ -334,11 +334,11 @@ func _process(delta: float) -> void:
 	if Economy.online:
 		if Economy.is_protected():
 			status = "Beginner protection: %s left (ends if you attack a player)" % _hours(Economy.protected_until - Economy.now())
-		_controls.keys = "Click: pick your castle, another player's, a robber baron camp, a village or a town\nC: your castle   L: leaderboard   G: alliance   V: events   T: market   I: mail   K: alliance war   J: quests   Y: achievements   H: commanders   P: outpost   B: villages   Enter: chat" + ("   O: owner tools" if Economy.is_admin else "") + "\nWASD / drag: pan   Q E / right-drag: rotate   wheel: zoom\nM: parchment map   N: minimap   Home: recentre   F1: hide   Esc: menu\n\nOnline as " + Online.email
+		_controls.keys = "Click: pick your castle, another player's, a robber baron camp, a village or a town\nC: your castle   L: leaderboard   G: alliance   V: events   T: market   I: mail   K: alliance war   J: quests   Y: achievements   H: commanders   P: outpost   B: villages   Enter: chat" + ("   O: owner tools" if Economy.is_admin else "") + "\nWASD / drag: pan   Q E / right-drag: rotate   wheel: zoom\nTouch: drag to pan, pinch to zoom, twist two fingers to rotate, tap to pick\nM: parchment map   N: minimap   Home: recentre   F1: hide   Esc: menu\n\nOnline as " + Online.email
 	else:
 		if _party_status != "":
 			status = "Your party: %s" % _party_status
-		_controls.keys = "Click: travel there, or pick a castle, town, party or village\nF: find your party   C: your castle   K: diplomacy   J: quests   Y: achievements   H: commanders   P: outpost   B: villages\nWASD / drag: pan   Q E / right-drag: rotate   wheel: zoom\nM: parchment map   N: minimap   Home: recentre   F1: hide   Esc: menu"
+		_controls.keys = "Click: travel there, or pick a castle, town, party or village\nF: find your party   C: your castle   K: diplomacy   J: quests   Y: achievements   H: commanders   P: outpost   B: villages\nWASD / drag: pan   Q E / right-drag: rotate   wheel: zoom\nTouch: drag to pan, pinch to zoom, twist two fingers to rotate, tap to pick\nM: parchment map   N: minimap   Home: recentre   F1: hide   Esc: menu"
 	if _status.text != status:
 		_status.text = status
 	_status.get_parent().visible = status != ""

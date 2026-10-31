@@ -18,7 +18,8 @@ func _ready() -> void:
 	_rows.add_theme_constant_override("separation", 10)
 	box.add_child(_rows)
 	_toggle("Fullscreen", "fullscreen")
-	_toggle("Vertical sync", "vsync")
+	if not Settings.is_touch():
+		_toggle("Vertical sync", "vsync")
 	_toggle("Shadows", "shadows")
 	_toggle("Ambient occlusion", "ambient_occlusion")
 	_slider("3D resolution", "render_scale", 0.5, 1.0, 0.05, "%d%%", 100.0)
@@ -28,7 +29,8 @@ func _ready() -> void:
 	_slider("Sound effects", "effects_volume", 0.0, 1.0, 0.05, "%d%%", 100.0)
 	_slider("Ambience", "ambience_volume", 0.0, 1.0, 0.05, "%d%%", 100.0)
 	_toggle("Notices (attacks, finished work)", "notices")
-	_toggle("Desktop notices in the background", "desktop_notices")
+	if not Settings.is_touch():
+		_toggle("Desktop notices in the background", "desktop_notices")
 	var back := MenuStyle.button("Back", func() -> void: closed.emit(), 200.0)
 	back.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	box.add_child(back)
