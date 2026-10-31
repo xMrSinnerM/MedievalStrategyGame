@@ -1,11 +1,11 @@
 {
-	"_comment": "Achievements. Each has three tiers; a tier is earned for good once its `needs` is reached (even if the count falls again later, like soldiers at home), and then gives its title to pick and its reward to claim. `measure`: levels (all building levels added up), keep (keep level), stat:<name> (a lifetime count: trained, spent, barons, looted, pvp_won, pvp_held), story (story quests done), streak (days in a row the Steward's Coffer was opened), logins (days the Royal Gift was taken, in all), research (all study levels added up), commander (highest commander level), soldiers (in the garrison). `online` ones only count in the online game. `rewards` and `points` are per tier and the same for every achievement; rewards are given in full, even past the storage cap. Nothing here can be bought.",
+	"_comment": "Achievements. Each has three tiers; a tier is earned for good once its `needs` is reached (even if the count falls again later, like soldiers at home), and then gives its title to pick and its reward to claim. `measure`: levels (all building levels added up), keep (keep level), stat:<name> (a lifetime count: trained, spent, barons, looted, pvp_won, pvp_held), story (story quests done), streak (days in a row the Steward's Coffer was opened), logins (days the Royal Gift was taken, in all), research (all study levels added up), commander (highest commander level), soldiers (in the garrison). `online` ones only count in the online game. `rewards` and `points` are per tier and the same for every achievement; rewards are given in full, even past the storage cap, and each tier adds a treasure chest (data/chests.json). Nothing here can be bought.",
 	"points": [10, 25, 50],
 	"tier_names": ["Bronze", "Silver", "Gold"],
 	"rewards": [
-		{"resources": {"wood": 300, "stone": 300, "food": 200}},
-		{"resources": {"wood": 1500, "stone": 1500, "food": 1000, "gold": 300}},
-		{"resources": {"wood": 5000, "stone": 5000, "food": 4000, "gold": 1500}}
+		{"resources": {"wood": 300, "stone": 300, "food": 200}, "chests": {"wooden": 1}},
+		{"resources": {"wood": 1500, "stone": 1500, "food": 1000, "gold": 300}, "chests": {"iron": 1}},
+		{"resources": {"wood": 5000, "stone": 5000, "food": 4000, "gold": 1500}, "chests": {"golden": 1}}
 	],
 	"list": [
 		{

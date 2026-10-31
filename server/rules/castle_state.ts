@@ -119,6 +119,16 @@ export function newSeasonLog(): SeasonLog {
   return { key: -1, base: {}, track: 0, last: {}, honours: [] };
 }
 
+/** Treasure chests (chests.ts): chests to open by kind, and how many were opened in all. */
+export interface ChestLog {
+  have: Dict;
+  opened: number;
+}
+
+export function newChestLog(): ChestLog {
+  return { have: {}, opened: 0 };
+}
+
 export function newQuestLog(): QuestLog {
   return { story: 0, day: -1, keep: 1, picks: [], base: {}, claimed: [], chest: false, streak: 0, chest_day: -1 };
 }
@@ -142,6 +152,7 @@ export interface CastleData {
   achievements: AchievementLog;
   login: LoginLog;
   season: SeasonLog;
+  chests: ChestLog;
   tools: Dict;
   crafting: Craft[];
   defence_tools: Tools;
@@ -181,6 +192,8 @@ export class CastleState {
   login: LoginLog = newLoginLog();
   /** Renown this month and the season titles won (seasons.ts). */
   season: SeasonLog = newSeasonLog();
+  /** Treasure chests to open (chests.ts). */
+  chests: ChestLog = newChestLog();
   /** Siege tools in store, the workshop's queue, and the defence tools posted on each wall. */
   tools: Dict = {};
   crafting: Craft[] = [];
@@ -751,6 +764,7 @@ export class CastleState {
       achievements: structuredClone(this.achievements),
       login: { ...this.login },
       season: structuredClone(this.season),
+      chests: structuredClone(this.chests),
       tools: { ...this.tools },
       crafting: this.crafting.map((c) => ({ ...c })),
       defence_tools: structuredClone(this.defenceTools),
@@ -832,6 +846,11 @@ export class CastleState {
       last: "key" in l ? { key: Math.trunc(Number(l.key)), points: Math.trunc(Number(l.points ?? 0)), claimed: Boolean(l.claimed ?? false) } : {},
       honours: (sea.honours ?? []).filter((h: unknown) => typeof h === "string"),
     };
+    // Castles saved before treasure chests have none.
+    const box = data.chests ?? {};
+    const have: Dict = {};
+    for (const k of Object.keys(box.have ?? {})) if (Math.trunc(Number(box.have[k])) > 0) have[k] = Math.trunc(Number(box.have[k]));
+    castle.chests = { have, opened: Math.trunc(Number(box.opened ?? 0)) };
     for (const tool of Object.keys(data.tools ?? {})) {
       const n = Math.trunc(Number(data.tools[tool]));
       if (rules.hasTool(tool) && n > 0) castle.tools[tool] = n;

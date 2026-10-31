@@ -67,6 +67,8 @@ func _refresh() -> void:
 	if Economy.season_rules != null:
 		lines.append("Season renown: %d%s" % [Economy.season_rules.renown(castle),
 			"    reward waiting" if Economy.season_waiting() else ""])
+	if Economy.chest_rules != null and Economy.chest_rules.total(castle) > 0:
+		lines.append("Treasure chests to open: %d" % Economy.chest_rules.total(castle))
 	if Economy.login_waiting():
 		lines.append("Today's Royal Gift is waiting")
 	_ready_glow = book.can_claim_anything(castle) or _achievement_waiting() or Economy.login_waiting() or Economy.season_waiting()

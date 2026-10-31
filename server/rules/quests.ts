@@ -15,6 +15,9 @@ export const DAY = 86400;
 export interface Reward {
   resources?: Dict;
   troops?: Dict;
+  /** Siege tools, and treasure chests by kind (chests.ts). */
+  tools?: Dict;
+  chests?: Dict;
 }
 
 export interface Goal {
@@ -53,7 +56,7 @@ export interface QuestRules {
     picks: number;
     scale: number[];
     kinds: Record<string, DailyKind>;
-    coffer: { name: string; reward: Dict; streak_bonus: number; max_streak: number; streak_troops: Dict };
+    coffer: { name: string; reward: Dict; streak_bonus: number; max_streak: number; streak_troops: Dict; chests?: Dict };
   };
 }
 
@@ -173,6 +176,7 @@ export function cofferReward(rules: QuestRules, keep: number, streak: number): R
     reward.troops = {};
     for (const [u, n] of Object.entries(c.streak_troops)) reward.troops[u] = round(n * scale);
   }
+  if (c.chests) reward.chests = { ...c.chests };
   return reward;
 }
 
@@ -204,7 +208,7 @@ export function checkClaim(castle: CastleState, rules: QuestRules, kind: unknown
   return "There's no such quest.";
 }
 
-/** Gives a quest reward in full (even past the storage cap). */
+/** Gives a reward in full (even past the storage cap): resources, soldiers, siege tools and treasure chests. */
 export function give(castle: CastleState, reward: Reward): void {
   for (const [r, n] of Object.entries(reward.resources ?? {})) {
     if (r in castle.resources) castle.resources[r] += n;
@@ -212,6 +216,10 @@ export function give(castle: CastleState, reward: Reward): void {
   for (const [unit, n] of Object.entries(reward.troops ?? {})) {
     if (castle.rules.hasUnit(unit)) castle.troops[unit] = (castle.troops[unit] ?? 0) + n;
   }
+  for (const [tool, n] of Object.entries(reward.tools ?? {})) {
+    if (castle.rules.hasTool(tool)) castle.tools[tool] = (castle.tools[tool] ?? 0) + n;
+  }
+  for (const [kind, n] of Object.entries(reward.chests ?? {})) castle.chests.have[kind] = (castle.chests.have[kind] ?? 0) + n;
 }
 
 /** Claims the story quest, daily task `index` or the coffer ("story", "daily", "chest"). Returns "" or why not. */

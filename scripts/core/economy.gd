@@ -88,6 +88,8 @@ var achievements: Achievements
 var login_rewards: LoginRewards
 ## Seasons: renown each month, its track and, online, the ranked prizes (data/seasons.json).
 var season_rules: SeasonRules
+## Treasure chests and their Wheel of Fortune (data/chests.json).
+var chest_rules: ChestRules
 ## The achievement tiers already announced (null: take the next ones silently).
 var _known_tiers: Variant = null
 ## Commanders and gear (data/gear.json).
@@ -259,6 +261,7 @@ func ensure_loaded() -> void:
 	quest_book = QuestBook.load_default()
 	login_rewards = LoginRewards.load_default()
 	season_rules = SeasonRules.load_default()
+	chest_rules = ChestRules.load_default()
 	achievements = Achievements.load_default()
 	gear_rules = GearRules.load_default()
 	outpost_rules = OutpostRules.load_default()
@@ -331,6 +334,7 @@ func begin_new(n := 1) -> void:
 	quest_book = QuestBook.load_default()
 	login_rewards = LoginRewards.load_default()
 	season_rules = SeasonRules.load_default()
+	chest_rules = ChestRules.load_default()
 	achievements = Achievements.load_default()
 	gear_rules = GearRules.load_default()
 	outpost_rules = OutpostRules.load_default()
@@ -349,6 +353,7 @@ func begin_load(n := 1) -> void:
 	quest_book = QuestBook.load_default()
 	login_rewards = LoginRewards.load_default()
 	season_rules = SeasonRules.load_default()
+	chest_rules = ChestRules.load_default()
 	achievements = Achievements.load_default()
 	gear_rules = GearRules.load_default()
 	outpost_rules = OutpostRules.load_default()
@@ -918,6 +923,7 @@ func begin_online(answer: Dictionary) -> void:
 	quest_book = QuestBook.load_default()
 	login_rewards = LoginRewards.load_default()
 	season_rules = SeasonRules.load_default()
+	chest_rules = ChestRules.load_default()
 	achievements = Achievements.load_default()
 	_known_tiers = null
 	gear_rules = GearRules.load_default()
@@ -2233,6 +2239,21 @@ func season_waiting() -> bool:
 	return season_rules.check_track(player_castle) == "" or (online and SeasonRules.check_prize(player_castle) == "")
 
 
+func open_chest(kind: String) -> Dictionary:
+	## Opens a treasure chest: {"error"} or {"error": "", "slot", "reward"}.
+	## Online the server opens it too (the spin comes out the same), and its
+	## answer replaces the castle.
+	var out := chest_rules.open(player_castle, kind)
+	if out.error != "":
+		return out
+	if online:
+		get_node("/root/Online").order({"action": "open_chest", "kind": kind})
+	else:
+		save_game()
+	changed.emit()
+	return out
+
+
 func claim_achievement(id: String) -> String:
 	## Claims the next earned reward of an achievement. Online the server
 	## gives it too, and its answer replaces the castle.
@@ -2295,7 +2316,7 @@ func ask_event_board() -> void:
 
 
 func reward_text(tier: Dictionary) -> String:
-	## "300 wood, 300 stone" or "20 Spearmen".
+	## "300 wood, 300 stone", "20 Spearmen", "2 Ladders" or "1 iron chest".
 	var parts: PackedStringArray = []
 	var res: Dictionary = tier.get("resources", {})
 	for r: String in res:
@@ -2303,6 +2324,14 @@ func reward_text(tier: Dictionary) -> String:
 	var troops: Dictionary = tier.get("troops", {})
 	for unit: String in troops:
 		parts.append("%d %s" % [int(troops[unit]), rules.unit_plural(unit) if rules.has_unit(unit) else unit])
+	var tools: Dictionary = tier.get("tools", {})
+	for tool: String in tools:
+		var tool_name := String(rules.tools[tool].get("name", tool)) if rules.has_tool(tool) else tool
+		parts.append("%d %s" % [int(tools[tool]), tool_name.to_lower() + ("s" if int(tools[tool]) != 1 and not tool_name.ends_with("s") else "")])
+	var chests: Dictionary = tier.get("chests", {})
+	for kind: String in chests:
+		var chest_name := String(chest_rules.kinds[kind].name).to_lower() if chest_rules != null and chest_rules.kinds.has(kind) else kind + " chest"
+		parts.append("%d %s%s" % [int(chests[kind]), chest_name, "s" if int(chests[kind]) != 1 else ""])
 	return ", ".join(parts)
 
 

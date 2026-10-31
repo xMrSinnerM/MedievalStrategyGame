@@ -1,0 +1,48 @@
+{
+	"_comment": "Treasure chests and the Wheel of Fortune. Chests come as rewards: the Steward's Coffer gives a wooden chest, day 7 of the Royal Gift an iron chest, achievement tiers a wooden, iron or golden chest, and the season track and season prizes golden chests. Opening a chest spins its wheel: one of its eight `wheel` slots wins, picked by `weight` (out of all the slot weights added up). Resources are multiplied by `scale` for the keep level (keep 1, 2, ...), like the daily tasks; soldiers, siege tools and chests are not. Rewards are given in full, even past the storage cap. The spin is decided by the castle and how many chests it has opened, so the game and the server agree on it. Nothing here can be bought.",
+	"scale": [1, 2, 5, 12, 25],
+	"kinds": {
+		"wooden": {
+			"name": "Wooden Chest",
+			"color": "#9a6232",
+			"wheel": [
+				{"weight": 20, "reward": {"resources": {"wood": 400}}},
+				{"weight": 20, "reward": {"resources": {"stone": 400}}},
+				{"weight": 18, "reward": {"resources": {"food": 500}}},
+				{"weight": 14, "reward": {"resources": {"gold": 150}}},
+				{"weight": 10, "reward": {"troops": {"spearman": 15}}},
+				{"weight": 8, "reward": {"tools": {"ladder": 2}}},
+				{"weight": 7, "reward": {"resources": {"wood": 600, "stone": 600}}},
+				{"weight": 3, "jackpot": true, "reward": {"resources": {"wood": 1000, "stone": 1000, "food": 1000, "gold": 400}}}
+			]
+		},
+		"iron": {
+			"name": "Iron Chest",
+			"color": "#8a96a8",
+			"wheel": [
+				{"weight": 18, "reward": {"resources": {"wood": 1200}}},
+				{"weight": 18, "reward": {"resources": {"stone": 1200}}},
+				{"weight": 14, "reward": {"resources": {"gold": 450}}},
+				{"weight": 12, "reward": {"troops": {"archer": 20}}},
+				{"weight": 10, "reward": {"tools": {"mantlet": 2}}},
+				{"weight": 12, "reward": {"troops": {"swordsman": 15}}},
+				{"weight": 10, "reward": {"resources": {"wood": 1500, "stone": 1500, "food": 1500}}},
+				{"weight": 6, "jackpot": true, "reward": {"resources": {"wood": 4000, "stone": 4000, "food": 4000, "gold": 1500}, "troops": {"horseman": 10}}}
+			]
+		},
+		"golden": {
+			"name": "Golden Chest",
+			"color": "#e0b048",
+			"wheel": [
+				{"weight": 18, "reward": {"resources": {"wood": 3000, "stone": 3000}}},
+				{"weight": 16, "reward": {"resources": {"gold": 1500}}},
+				{"weight": 14, "reward": {"troops": {"horseman": 20}}},
+				{"weight": 12, "reward": {"tools": {"ram": 2}}},
+				{"weight": 14, "reward": {"troops": {"swordsman": 40}}},
+				{"weight": 12, "reward": {"resources": {"wood": 3000, "stone": 3000, "food": 3000, "gold": 1000}}},
+				{"weight": 8, "reward": {"chests": {"iron": 2}}},
+				{"weight": 6, "jackpot": true, "reward": {"resources": {"wood": 10000, "stone": 10000, "food": 10000, "gold": 4000}, "troops": {"horseman": 30}}}
+			]
+		}
+	}
+}

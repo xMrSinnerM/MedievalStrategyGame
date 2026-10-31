@@ -46,6 +46,9 @@ var login := new_login_log()
 ## from, track rewards claimed, last season's renown ({key, points, claimed})
 ## and the season titles won.
 var season := new_season_log()
+## Treasure chests to open (kind -> count) and how many were opened in all,
+## which picks each spin of the Wheel of Fortune (ChestRules).
+var chests := new_chest_log()
 ## Siege tools in store (tool -> count), the workshop's queue (batches
 ## {tool, remaining, unit_time, next}, like training) and the defence tools
 ## posted on each wall (wall -> {tool: count}, Battle.siege()).
@@ -102,6 +105,10 @@ static func new_login_log() -> Dictionary:
 
 static func new_season_log() -> Dictionary:
 	return {"key": -1, "base": {}, "track": 0, "last": {}, "honours": []}
+
+
+static func new_chest_log() -> Dictionary:
+	return {"have": {}, "opened": 0}
 
 
 static func new_quest_log() -> Dictionary:
@@ -825,6 +832,7 @@ func copy_from(other: CastleState) -> void:
 	achievements = other.achievements
 	login = other.login
 	season = other.season
+	chests = other.chests
 	tools = other.tools
 	crafting = other.crafting
 	defence_tools = other.defence_tools
@@ -853,6 +861,7 @@ func to_dict() -> Dictionary:
 		"field": field.duplicate(), "field_ready": field_ready, "layout": layout.duplicate(),
 		"stats": stats.duplicate(), "quests": quests.duplicate(true), "achievements": achievements.duplicate(true),
 		"login": login.duplicate(), "season": season.duplicate(true),
+		"chests": chests.duplicate(true),
 		"tools": tools.duplicate(), "crafting": crafting.duplicate(true), "defence_tools": defence_tools.duplicate(true),
 		"armoury": armoury.duplicate(true),
 		"boost": boost.duplicate(), "limits": limits.duplicate(true) if not limits.is_empty() else null,
@@ -943,6 +952,13 @@ static func from_dict(p_rules: BuildingRules, data: Dictionary) -> CastleState:
 				honours.append(h)
 		castle.season = {"key": int(sea.get("key", -1)), "base": sbase, "track": int(sea.get("track", 0)),
 			"last": last, "honours": honours}
+	# Castles saved before treasure chests have none.
+	var box: Variant = data.get("chests", {})
+	if box is Dictionary:
+		for kind: String in box.get("have", {}):
+			if int(box.have[kind]) > 0:
+				castle.chests.have[kind] = int(box.have[kind])
+		castle.chests.opened = int(box.get("opened", 0))
 	var stock: Dictionary = data.get("tools", {})
 	for tool: String in stock:
 		if p_rules.has_tool(tool) and int(stock[tool]) > 0:

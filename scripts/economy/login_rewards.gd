@@ -80,8 +80,9 @@ func reward(day: int, keep: int, weeks := 0) -> Dictionary:
 	for r: String in base.get("resources", {}):
 		resources[r] = roundi(float(base.resources[r]) * mult)
 	var out := {"resources": resources}
-	if base.has("troops"):
-		out["troops"] = base.troops.duplicate()
+	for k: String in ["troops", "chests"]:
+		if base.has(k):
+			out[k] = base[k].duplicate()
 	return out
 
 

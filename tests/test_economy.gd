@@ -54,6 +54,7 @@ func _initialize() -> void:
 	test_notices()
 	test_login()
 	test_seasons()
+	test_chests()
 	print("%d checks, %d failed" % [checks, failures])
 	quit(1 if failures > 0 else 0)
 
@@ -1642,3 +1643,42 @@ func test_seasons() -> void:
 	var old := c.to_dict()
 	old.erase("season")
 	check(int(CastleState.from_dict(rules, old).season.key) == -1, "old saves start counting when next played")
+
+
+func test_chests() -> void:
+	var cr := ChestRules.load_default()
+	for kind: String in ChestRules.ORDER:
+		check(cr.kinds.has(kind) and cr.kinds[kind].wheel.size() == 8, "%s chest has eight slices" % kind)
+	var c := fresh()
+	check(cr.check_open(c, "wooden") != "" and cr.check_open(c, "nope") == "There's no such chest.", "no chests yet")
+	QuestBook.give(c, {"chests": {"wooden": 3, "golden": 1}, "tools": {"ladder": 2}})
+	check(cr.count(c, "wooden") == 3 and cr.total(c) == 4 and int(c.tools.ladder) == 2, "rewards give chests and siege tools")
+	var first := cr.spin(c, "wooden")
+	check(cr.spin(c, "wooden") == first, "a spin is decided before it's made")
+	var out := cr.open(c, "wooden")
+	check(out.error == "" and int(out.slot) == first and int(c.chests.opened) == 1 and cr.count(c, "wooden") == 2, "opening one: slot %d" % first)
+	# Over many spins every slice comes up, about as often as its weight says.
+	var hits := {}
+	var d := fresh()
+	d.chests.have["iron"] = 2000
+	for i in 2000:
+		var slot := int(cr.open(d, "iron").slot)
+		hits[slot] = int(hits.get(slot, 0)) + 1
+	check(hits.size() == 8, "every slice comes up: %s" % [hits])
+	check(absi(int(hits.get(0, 0)) - 360) < 80 and absi(int(hits.get(7, 0)) - 120) < 50, "by weight: %s" % [hits])
+	check(not d.chests.have.has("iron"), "an empty kind goes away")
+	# Where chests come from.
+	check(QuestBook.load_default().coffer_reward(1, 1).get("chests", {}).get("wooden", 0) == 1, "the coffer gives a wooden chest")
+	check(LoginRewards.load_default().reward(6, 1).get("chests", {}).get("iron", 0) == 1, "day 7 of the Royal Gift an iron one")
+	check(Achievements.load_default().reward(3).get("chests", {}).get("golden", 0) == 1, "a gold achievement tier a golden one")
+	var saved := CastleState.from_dict(rules, JSON.parse_string(JSON.stringify(c.to_dict())))
+	check(saved.chests == c.chests, "chests are saved")
+	# Offline, the economy opens them and saves.
+	var eco = load("res://scripts/core/economy.gd").new()
+	eco.save_dir = "user://test_saves"
+	eco.begin_new(1)
+	check(eco.open_chest("wooden").error != "", "a new game has no chests")
+	eco.player_castle.chests.have["wooden"] = 1
+	var got: Dictionary = eco.open_chest("wooden")
+	check(got.error == "" and eco.reward_text(got.reward) != "", "the economy opens one: %s" % eco.reward_text(got.reward))
+	eco.free()
