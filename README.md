@@ -498,6 +498,32 @@ The numbers live in `data/login.json`. `LoginRewards`
 (`scripts/economy/login_rewards.gd`) and the server's `server/rules/login.ts`
 are the same rules; online the server gives it with the `claim_login` order.
 
+## Seasons
+
+Every calendar month (UTC) is a **season**: the *Season* tab of the quest
+window shows how much **renown** you've earned in it and what earned it. You
+get 10 renown per building level finished, 1 per 2 soldiers trained, 25 per
+robber baron beaten, 1 per 50 loot brought home and, online, 60 per battle won
+against a player's castle and 40 per attack held off. Renown milestones on
+the season's track (250 up to 12,000) give rewards to claim, bigger for
+bigger keeps, and the whole track gives a title for that season, such as
+*the Renowned of October 2026*. When the month ends, renown and the track
+start again from 0.
+
+Online, the season also has a ranking of lords and of alliances (an
+alliance's renown is its members' added up). When the month ends the best
+win prizes and a title for that season, claimed from the same tab during the
+next month: 1st *Champion*, 2nd-3rd *Hero*, 4th-10th *Vanguard*, 11th-25th
+*Contender*, and every member of the top three alliances *First*, *Second*
+or *Third Banner* (so a title like *Champion of October 2026*). Season
+titles can be picked like achievement titles, and nothing here can be
+bought.
+
+The numbers live in `data/seasons.json`. `SeasonRules`
+(`scripts/economy/season_rules.gd`) and the server's `server/rules/seasons.ts`
+count renown from the castle's lifetime stats as they were when the season
+began.
+
 ## Achievements and titles
 
 Press **Y** (or **Achievements** at the top of the quest screen) for 14

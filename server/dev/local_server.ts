@@ -40,6 +40,7 @@ import { capitalBoost, resolveVillageRaid, type VillageTarget } from "../../supa
 import type { QuestRules } from "../rules/quests.ts";
 import type { AchievementRules } from "../rules/achievements.ts";
 import type { LoginRules } from "../rules/login.ts";
+import { allianceStandings, placeIn, renown, seasonColumns, seasonEnd, seasonKey, type SeasonRules } from "../rules/seasons.ts";
 import {
   adminEvents, checkGift, giftReport, giveCastle, NOT_ADMIN, startEvent, stopEvent, type AdminLogEntry,
 } from "../../supabase/functions/game/admin.ts";
@@ -63,6 +64,7 @@ const warRules: WarRules = json("data/wars.json");
 if (process.env.WAR_DAYS !== undefined) warRules.days = Number(process.env.WAR_DAYS);
 const achievementRules: AchievementRules = json("data/achievements.json");
 const loginRules: LoginRules = json("data/login.json");
+const seasonRules: SeasonRules = json("data/seasons.json");
 // The calendar with the owner's changes (kept on the shifted clock below).
 let eventRules: EventRules = eventRules0;
 // For testing: run the event calendar this many hours ahead, to see an event on.
@@ -348,6 +350,27 @@ function claimWarPrize(user: string): string {
   return "";
 }
 
+/** Every player's season columns, as the database keeps them. */
+function seasonRows() {
+  return [...players.entries()].map(([id, p]) => ({ id, name: p.name, alliance_id: store.membership.get(id)?.alliance_id ?? null,
+    ...seasonColumns(p.castle, seasonRules) }));
+}
+
+/** What a player earned in the season before this one: {key, points, claimed}, or null. */
+function lastSeasonOf(p: PlayerState, t: number) {
+  const s = p.castle.season;
+  if (!s) return null;
+  if (s.key >= 0 && s.key !== seasonKey(t)) return { key: s.key, points: renown(p.castle, seasonRules), claimed: false };
+  return s.last && "key" in s.last ? s.last : null;
+}
+
+function seasonPlaces(user: string, key: number, points: number) {
+  const rows = seasonRows();
+  const mine = store.membership.get(user)?.alliance_id;
+  const at = mine === undefined ? -1 : allianceStandings(rows, key).findIndex(([id]) => id === mine);
+  return { player: placeIn(rows, key, points), alliance: at < 0 ? 0 : at + 1 };
+}
+
 /** The event view with times moved back from the shifted calendar to the real clock. */
 /** The players with horde points in the Ember Horde run starting at `key` (on the real clock), most first. */
 function hordeRanking(key: number) {
@@ -568,6 +591,25 @@ createServer(async (req, res) => {
       return send(res, 200, { ok: true, now: now(), error: "",
         result: { players: all.slice(0, 50).map(strip), me: mine ? strip(mine) : null, rank, total: all.length } });
     }
+    if (body.action === "season_board") {
+      const t = now();
+      const key = seasonKey(t);
+      const rows = seasonRows();
+      const players_ = rows.filter((r) => r.season_key === key && r.season_points > 0)
+        .sort((a, b) => b.season_points - a.season_points || a.name.localeCompare(b.name)).slice(0, 50)
+        .map((r) => ({ name: r.name, points: r.season_points, tag: tagOf(r.id) }));
+      const alliances = allianceStandings(rows, key).slice(0, 5).map(([id, points]) => {
+        const a = store.alliancesById.get(id);
+        return { tag: a?.tag ?? "", name: a?.name ?? "", points };
+      });
+      const p = players.get(user)!;
+      const points = p.castle.season?.key === key ? renown(p.castle, seasonRules) : 0;
+      const prev = lastSeasonOf(p, t);
+      const places = prev ? seasonPlaces(user, prev.key, prev.points) : null;
+      return send(res, 200, { ok: true, now: t, error: "", result: { key, end: seasonEnd(key), players: players_, alliances,
+        me: { points, place: points > 0 ? placeIn(rows, key, points) : 0 },
+        last: prev && places ? { key: prev.key, points: prev.points, place: places.player, alliance_place: places.alliance, claimed: prev.claimed } : {} } });
+    }
     if (body.action === "event_board") {
       const inv = lastInvasion(eventRules, now() + EVENTS_OFFSET);
       const key = inv === undefined ? -1 : inv.start - EVENTS_OFFSET;
@@ -675,9 +717,14 @@ createServer(async (req, res) => {
     if (body.action === "claim_horde_prize" && (me.horde_points ?? 0) > 0) {
       hordePlace = hordeRanking(me.horde_key ?? 0).filter((r) => r.points > (me.horde_points ?? 0)).length + 1;
     }
+    let seasonPlace: { player: number; alliance: number } | undefined;
+    if (body.action === "claim_season_prize") {
+      const prev = lastSeasonOf(me, t);
+      seasonPlace = prev && prev.points > 0 ? seasonPlaces(user, prev.key, prev.points) : { player: 0, alliance: 0 };
+    }
     const outcome = act(rules, me, body, t,
       { pvp, outpostSpot, target: target?.target, homecomings, alliances: allianceRules, aid: aidRules,
-        events: { rules: eventRules, world, offset: EVENTS_OFFSET }, quests: questRules, achievements: achievementRules, login: loginRules, village: village?.target, villageIncome,
+        events: { rules: eventRules, world, offset: EVENTS_OFFSET }, quests: questRules, achievements: achievementRules, login: loginRules, seasons: seasonRules, seasonPlace, village: village?.target, villageIncome,
         capitalBoost: capitalBoost(rules, allianceCapitals(user).levels, allianceCapitals(user).guilds), fortresses: world.fortresses, hordeRank: hordePlace,
         market: { rules: marketRules, open: offers.filter((o) => o.seller === user && o.state === "open" && o.expires > t).length,
           offer: bought ? offerOf(bought) : undefined }, marketIncome: market.income });

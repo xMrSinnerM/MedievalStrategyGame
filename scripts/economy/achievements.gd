@@ -161,7 +161,11 @@ static func title_key(id: String, tier: int) -> String:
 
 
 func title_text(key: String) -> String:
-	## "the Builder" for "builder:1"; "" for no title or one that doesn't exist.
+	## "the Builder" for "builder:1", "Champion of October 2026" for a season
+	## title ("season:<month>:champion", SeasonRules); "" for no title or one
+	## that doesn't exist.
+	if key.begins_with("season:"):
+		return SeasonRules.shared().title_text(key)
 	var parts := key.split(":")
 	if parts.size() != 2 or not parts[1].is_valid_int():
 		return ""
@@ -176,6 +180,8 @@ func check_title(castle: CastleState, key: String) -> String:
 		return ""
 	if title_text(key) == "":
 		return "There's no such title."
+	if key.begins_with("season:"):
+		return "" if castle.season.honours.has(key) else "You haven't earned that title yet."
 	var parts := key.split(":")
 	return "" if earned(castle, parts[0]) >= int(parts[1]) else "You haven't earned that title yet."
 

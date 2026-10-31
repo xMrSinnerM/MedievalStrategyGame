@@ -53,6 +53,7 @@ func _initialize() -> void:
 	test_achievements()
 	test_notices()
 	test_login()
+	test_seasons()
 	print("%d checks, %d failed" % [checks, failures])
 	quit(1 if failures > 0 else 0)
 
@@ -1602,3 +1603,42 @@ func test_login() -> void:
 	check(eco.claim_login() == "" and not eco.login_waiting(), "the economy takes it")
 	check(eco.claim_login() != "", "only once")
 	eco.free()
+
+
+func test_seasons() -> void:
+	var sr := SeasonRules.load_default()
+	var oct := float(Time.get_unix_time_from_datetime_dict({"year": 2026, "month": 10, "day": 15, "hour": 0, "minute": 0, "second": 0}))
+	var nov := float(Time.get_unix_time_from_datetime_dict({"year": 2026, "month": 11, "day": 2, "hour": 0, "minute": 0, "second": 0}))
+	var k := SeasonRules.key_of(oct)
+	check(k == 2026 * 12 + 9 and SeasonRules.name_of(k) == "October 2026", "seasons are months: %s" % SeasonRules.name_of(k))
+	check(SeasonRules.key_of(SeasonRules.end_of(k)) == k + 1 and SeasonRules.key_of(SeasonRules.end_of(k) - 1) == k, "a season ends when the month does")
+	check(SeasonRules.end_of(2026 * 12 + 11) == float(Time.get_unix_time_from_datetime_dict({"year": 2027, "month": 1, "day": 1})), "December ends at New Year")
+	var c := fresh()
+	check(sr.roll(c, oct) and not sr.roll(c, oct + 100), "one roll a month")
+	c.stats.barons += 8
+	c.stats.trained += 100
+	for b in c.buildings:
+		if b.type == "farm":
+			b.level += 3
+			break
+	check(sr.renown(c) == 8 * 25 + 50 + 30, "renown from this month's work: %d" % sr.renown(c))
+	check(sr.claim_track(c, oct) == "" and sr.claim_track(c, oct) == "You need 750 renown for that.", "the track pays out by renown")
+	c.stats.barons += 1000
+	for i in range(1, sr.track.size()):
+		sr.claim_track(c, oct)
+	check(int(c.season.track) == sr.track.size() and c.season.honours == ["season:%d:renowned" % k], "the whole track gives the season's title")
+	check(sr.title_text("season:%d:renowned" % k) == "the Renowned of October 2026", "its name")
+	var earned := sr.renown(c)
+	check(sr.roll(c, nov) and sr.renown(c) == 0 and int(c.season.track) == 0, "a new month starts over")
+	check(c.season.last == {"key": k, "points": earned, "claimed": false}, "keeping last month's renown for the ranking")
+	var gold: float = c.resources.gold
+	check(sr.claim_prize(c, 2, 1, nov) == "" and roundi(c.resources.gold - gold) == 8000, "Hero and First Banner prizes")
+	check(sr.claim_prize(c, 2, 1, nov) != "", "once")
+	var book := Achievements.load_default()
+	check(book.set_title(c, "season:%d:hero" % k) == "" and book.shown_title(c) == "Hero of October 2026", "season titles can be shown")
+	check(book.set_title(c, "season:%d:champion" % k) != "", "but only those won")
+	var saved := CastleState.from_dict(rules, JSON.parse_string(JSON.stringify(c.to_dict())))
+	check(saved.season == c.season, "the season log is saved")
+	var old := c.to_dict()
+	old.erase("season")
+	check(int(CastleState.from_dict(rules, old).season.key) == -1, "old saves start counting when next played")

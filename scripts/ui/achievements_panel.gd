@@ -112,7 +112,7 @@ func _fill() -> void:
 	var values: Array = []
 	for def: Dictionary in book.shown(Economy.online):
 		values.append(Achievements.measure(castle, def))
-	var sig := str([castle.achievements, values])
+	var sig := str([castle.achievements, values, castle.season.honours])
 	if sig == _signature:
 		return
 	_signature = sig
@@ -132,6 +132,9 @@ func _fill_titles() -> void:
 			var key := Achievements.title_key(String(def.id), t + 1)
 			_title_keys.append(key)
 			_title_pick.add_item("%s  (%s)" % [book.title_text(key), def.name])
+	for key: String in castle.season.honours:
+		_title_keys.append(key)
+		_title_pick.add_item("%s  (season)" % book.title_text(key))
 	_title_pick.select(maxi(0, _title_keys.find(String(castle.achievements.title))))
 	_title_pick.disabled = _title_keys.size() <= 1
 
