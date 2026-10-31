@@ -7,6 +7,7 @@ extends Node3D
 ##   left or middle drag .... pan
 ##   right drag / Q, E ...... rotate
 ##   mouse wheel ............ zoom (tilts towards top-down as it zooms out)
+##   touch: one finger drags, two fingers pinch to zoom, twist to rotate
 ##   Home ................... recentre on the map
 
 @export var min_distance := 35.0
@@ -33,6 +34,7 @@ var _pan_drag := false
 var _rotate_drag := false
 var _last_zoom_t := -1.0
 var _typing := false
+var _touch := TouchGestures.new()
 
 
 func _ready() -> void:
@@ -72,6 +74,18 @@ func zoom_by(steps: int) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventScreenTouch or event is InputEventScreenDrag:
+		var g := _touch.feed(event)
+		if TouchGestures.busy():
+			_pan_drag = false
+		if not g.is_empty():
+			_distance = clampf(_distance / float(g.zoom), min_distance, max_distance)
+			_yaw += float(g.twist)
+			_pan_by_pixels(-(g.pan as Vector2))
+		return
+	if event is InputEventMagnifyGesture:
+		_distance = clampf(_distance / (event as InputEventMagnifyGesture).factor, min_distance, max_distance)
+		return
 	if event is InputEventMouseButton:
 		var mb := event as InputEventMouseButton
 		match mb.button_index:
@@ -87,7 +101,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				_rotate_drag = mb.pressed
 	elif event is InputEventMouseMotion:
 		var mm := event as InputEventMouseMotion
-		if _pan_drag:
+		if _pan_drag and not TouchGestures.busy():
 			_pan_by_pixels(-mm.relative)
 		if _rotate_drag:
 			_yaw -= mm.relative.x * drag_rotate_speed

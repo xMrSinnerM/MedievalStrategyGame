@@ -49,6 +49,7 @@ var _rng := RandomNumberGenerator.new()
 var _lord_timers := {}           ## Party -> seconds left resting
 var _press_pos := Vector2.ZERO
 var _pressed := false
+var _press_ms := 0              ## when the press began, to tell a tap from a pinch
 var _route: MeshInstance3D
 var _route_material: ShaderMaterial
 var _marker: MeshInstance3D
@@ -159,9 +160,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		if event.pressed:
 			_pressed = true
 			_press_pos = event.position
+			_press_ms = Time.get_ticks_msec()
 		elif _pressed:
 			_pressed = false
-			if event.position.distance_to(_press_pos) <= CLICK_SLOP:
+			if event.position.distance_to(_press_pos) <= CLICK_SLOP and not TouchGestures.gesture_since(_press_ms):
 				_on_click(event.position)
 	elif event is InputEventKey and event.pressed and not event.echo and event.physical_keycode == KEY_F:
 		if player and camera_rig:

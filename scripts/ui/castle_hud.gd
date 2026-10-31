@@ -41,6 +41,7 @@ var _queue_list: VBoxContainer
 var _queue_rows := {}          ## building id -> ProgressBar
 var _queue_signature := "?"   ## "?" forces the first rebuild
 var _hint: Label
+var _stop_button: Button        ## stops placing or moving: there's no right-click on a touch screen
 var _toast: Label
 var _toast_time := 0.0
 
@@ -61,6 +62,20 @@ func _ready() -> void:
 	_hint.add_theme_constant_override("outline_size", 6)
 	_hint.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
 	add_child(_hint)
+	_stop_button = Button.new()
+	_stop_button.text = "Stop"
+	_stop_button.tooltip_text = "Stop placing (right-click or Esc)"
+	_stop_button.focus_mode = Control.FOCUS_NONE
+	_stop_button.custom_minimum_size = Vector2(140, 40)
+	_stop_button.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
+	_stop_button.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_stop_button.offset_top = -196
+	_stop_button.offset_bottom = -156
+	_stop_button.offset_left = -70
+	_stop_button.offset_right = 70
+	_stop_button.visible = false
+	_stop_button.pressed.connect(func() -> void: view.stop_placing())
+	add_child(_stop_button)
 	_toast = _label("", 17, Color(1.0, 0.85, 0.6))
 	_toast.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 	_toast.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -70,7 +85,7 @@ func _ready() -> void:
 	_toast.add_theme_constant_override("outline_size", 7)
 	_toast.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.85))
 	add_child(_toast)
-	var controls := _label("WASD / drag: pan    Q E / right-drag: rotate    wheel: zoom    Esc: deselect    C: world map    J: quests    Y: achievements", 13, MUTED)
+	var controls := _label("WASD / drag: pan    Q E / right-drag: rotate    wheel: zoom (touch: pinch, twist)    Esc: deselect    C: world map    J: quests    Y: achievements", 13, MUTED)
 	controls.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
 	controls.offset_left = 12
 	controls.offset_top = -26
@@ -588,12 +603,13 @@ func _on_mode_changed(mode: int) -> void:
 	var rules: BuildingRules = view.castle.rules if view.castle else Economy.rules
 	match mode:
 		1:
-			_hint.text = "Placing a %s: click a free spot. Right-click or Esc to stop." % rules.display_name(view.placing_type).to_lower()
+			_hint.text = "Placing a %s: click a free spot. Right-click, Esc or Stop to stop." % rules.display_name(view.placing_type).to_lower()
 		2:
-			_hint.text = "Moving the %s: click its new spot. Right-click or Esc to stop." % rules.display_name(view.placing_type).to_lower()
+			_hint.text = "Moving the %s: click its new spot. Right-click, Esc or Stop to stop." % rules.display_name(view.placing_type).to_lower()
 		_:
 			_hint.text = "" if view.editable else "You're visiting this castle; only its lord can build here."
 	_build_menu.modulate.a = 0.5 if mode != 0 else 1.0
+	_stop_button.visible = mode != 0
 
 
 func _on_order_failed(message: String) -> void:

@@ -7,6 +7,7 @@ extends Node3D
 ##   left or middle drag .... pan
 ##   right drag / Q, E ...... rotate
 ##   mouse wheel ............ zoom
+##   touch: one finger drags, two fingers pinch to zoom, twist to rotate
 
 @export var min_distance := 22.0
 @export var max_distance := 120.0
@@ -32,6 +33,7 @@ var _distance_now := 78.0
 var _pan_drag := false
 var _rotate_drag := false
 var _typing := false
+var _touch := TouchGestures.new()
 
 
 func _ready() -> void:
@@ -62,6 +64,18 @@ func ground_point(screen_pos: Vector2) -> Variant:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventScreenTouch or event is InputEventScreenDrag:
+		var g := _touch.feed(event)
+		if TouchGestures.busy():
+			_pan_drag = false
+		if not g.is_empty():
+			_distance = clampf(_distance / float(g.zoom), min_distance, max_distance)
+			_yaw += float(g.twist)
+			_pan_by_pixels(g.pan as Vector2)
+		return
+	if event is InputEventMagnifyGesture:
+		_distance = clampf(_distance / (event as InputEventMagnifyGesture).factor, min_distance, max_distance)
+		return
 	if event is InputEventMouseButton:
 		match event.button_index:
 			MOUSE_BUTTON_WHEEL_UP:
@@ -77,13 +91,13 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event is InputEventMouseMotion:
 		if _rotate_drag:
 			_yaw -= event.relative.x * drag_rotate_speed
-		elif _pan_drag:
+		elif _pan_drag and not TouchGestures.busy():
 			_pan_by_pixels(event.relative)
 
 
 func _process(delta: float) -> void:
 	# Keys don't move the camera while you type in a text field (chat, alliance names).
-	_typing = get_viewport().gui_get_focus_owner() is LineEdit
+	_typing = get_viewport().gui_get_focus_owner() is LineEdit or get_viewport().gui_get_focus_owner() is TextEdit
 	var move := Vector2.ZERO
 	if _key(KEY_W) or _key(KEY_UP):
 		move.y -= 1.0

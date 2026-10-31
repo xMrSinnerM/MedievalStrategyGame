@@ -42,6 +42,7 @@ var _selection_mesh: MeshInstance3D
 var _team := PLAYER_COLOR      ## roof and flag colour of the castle on show
 var _press_pos := Vector2.ZERO
 var _pressed := false
+var _press_ms := 0              ## when the press began, to tell a tap from a pinch
 
 
 func _ready() -> void:
@@ -244,9 +245,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			if event.pressed:
 				_pressed = true
 				_press_pos = event.position
+				_press_ms = Time.get_ticks_msec()
 			elif _pressed:
 				_pressed = false
-				if event.position.distance_to(_press_pos) <= CLICK_SLOP:
+				if event.position.distance_to(_press_pos) <= CLICK_SLOP and not TouchGestures.gesture_since(_press_ms):
 					_click(event.position)
 		elif event.button_index == MOUSE_BUTTON_RIGHT and event.pressed and mode != Mode.SELECT:
 			_set_mode(Mode.SELECT)
@@ -478,6 +480,12 @@ func _update_selection_mesh() -> void:
 	kit.box(gold, Transform3D(Basis(), Vector3(rect.end.x, y, c.y)), Vector3(0.18, 0.05, rect.size.y))
 	_selection_mesh.mesh = kit.commit(true)
 	_selection_mesh.visible = true
+
+
+func stop_placing() -> void:
+	## Back to picking buildings, as right-click and Esc do.
+	if mode != Mode.SELECT:
+		_set_mode(Mode.SELECT)
 
 
 func _set_mode(new_mode: Mode) -> void:
