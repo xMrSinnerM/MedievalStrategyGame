@@ -21,6 +21,14 @@ export interface Sabotage {
   walls_cut: number;
 }
 
+/** Alliance tournaments (tournaments.ts): the round counted (its start), the castle's lifetime renown when it began, and the round before. */
+export interface TourneyLog {
+  key: number;
+  base: number;
+  last_key: number;
+  last_points: number;
+}
+
 export interface Building {
   id: number;
   type: string;
@@ -163,6 +171,7 @@ export interface CastleData {
   chests: ChestLog;
   encounters: { done: string[] };
   sabotage: Sabotage;
+  tourney: TourneyLog;
   tools: Dict;
   crafting: Craft[];
   defence_tools: Tools;
@@ -208,6 +217,8 @@ export class CastleState {
   encounters: { done: string[] } = { done: [] };
   /** Spies and sabotage (sabotage.ts): missions sent, and this castle's own weakened walls. */
   sabotage: Sabotage = { sent: {}, count: 0, walls_until: 0, walls_cut: 0 };
+  /** Alliance tournaments (tournaments.ts): the renown this castle counts from in the round on. */
+  tourney: TourneyLog = { key: 0, base: 0, last_key: 0, last_points: 0 };
   /** Siege tools in store, the workshop's queue, and the defence tools posted on each wall. */
   tools: Dict = {};
   crafting: Craft[] = [];
@@ -781,6 +792,7 @@ export class CastleState {
       chests: structuredClone(this.chests),
       encounters: { done: [...this.encounters.done] },
       sabotage: structuredClone(this.sabotage),
+      tourney: { ...this.tourney },
       tools: { ...this.tools },
       crafting: this.crafting.map((c) => ({ ...c })),
       defence_tools: structuredClone(this.defenceTools),
@@ -873,6 +885,9 @@ export class CastleState {
     for (const [k, v] of Object.entries(agents.sent ?? {})) if (typeof v === "number") sent[k] = v;
     castle.sabotage = { sent, count: Math.trunc(Number(agents.count ?? 0)), walls_until: Number(agents.walls_until ?? 0),
       walls_cut: Number(agents.walls_cut ?? 0) };
+    const tr = data.tourney ?? {};
+    castle.tourney = { key: Number(tr.key ?? 0), base: Number(tr.base ?? 0), last_key: Number(tr.last_key ?? 0),
+      last_points: Math.trunc(Number(tr.last_points ?? 0)) };
     for (const tool of Object.keys(data.tools ?? {})) {
       const n = Math.trunc(Number(data.tools[tool]));
       if (rules.hasTool(tool) && n > 0) castle.tools[tool] = n;

@@ -15,6 +15,9 @@
 // POST { "action": "war_board" }                 the alliance war: this season's and the last season's standings, the capitals
 //   and who holds them, your alliance's place and the prize you can claim (data/wars.json)
 // POST { "action": "claim_war_prize" }           your prize for your alliance's place in the last war season
+// POST { "action": "tournament" }               this week's alliance tournament: the bracket with its scores, your alliance's
+//   run and the prize you can claim from the last finished one (data/tournaments.json)
+// POST { "action": "claim_tournament_prize" }    your prize for how far your alliance got in the last finished tournament
 // POST { "action": "claim_quest", "kind": "story" | "daily" | "chest", "index": n }   a quest reward (data/quests.json)
 // POST { "action": "open_chest", "kind": "wooden" | "iron" | "golden" }   spins a treasure chest's wheel (data/chests.json)
 // POST { "action": "encounter", "id": id, "choice": "quarter" | "half" | "all" }   a bandit camp, caravan or treasure site on the map (data/encounters.json)
@@ -135,6 +138,7 @@ import capitalsData from "../../../data/capitals.json" with { type: "json" };
 import fortressesData from "../../../data/fortresses.json" with { type: "json" };
 import hordeData from "../../../data/horde.json" with { type: "json" };
 import warsData from "../../../data/wars.json" with { type: "json" };
+import tournamentsData from "../../../data/tournaments.json" with { type: "json" };
 import world from "../../../server/world/world.json" with { type: "json" };
 import { makeRules } from "../../../server/rules/load.ts";
 import { effectAt, eventsView, lastHorde, lastInvasion, withOverrides, type EventOverride, type EventRules } from "../../../server/rules/events.ts";
@@ -158,6 +162,10 @@ import {
   captureEntry, checkClaim, defenceEntry, givePrize, holdDue, holdEntries, hourStart, lastSeason, ranked, seasonAt, warBoard,
   type CapitalHold, type Standing, type WarAlliance, type WarEntry, type WarRules,
 } from "./wars.ts";
+import {
+  bracket, checkClaim as checkTourneyClaim, claimableWeek, draw, roundScores, tourneyBoard, tourneyColumns, weekAt,
+  type Entrant, type Round, type TourneyMember, type TourneyRow, type TourneyRules,
+} from "./tournaments.ts";
 import type { QuestRules } from "../../../server/rules/quests.ts";
 import type { AchievementRules } from "../../../server/rules/achievements.ts";
 import type { LoginRules } from "../../../server/rules/login.ts";
@@ -182,6 +190,7 @@ const marketRules = marketData as unknown as MarketRules;
 const eventRules = eventsData as EventRules;
 const questRules = questsData as unknown as QuestRules;
 const warRules = warsData as WarRules;
+const tourneyRules = tournamentsData as unknown as TourneyRules;
 // Up to when this server has given out the capitals' hold points (scoreCapitals()).
 let scoredUntil = 0;
 const achievementRules = achievementsData as unknown as AchievementRules;
@@ -512,7 +521,8 @@ async function refund(userId: string, cost: Record<string, number>): Promise<Pla
 
 /** The columns other players can see, worked out from a player's state. */
 function publicColumns(state: PlayerState) {
-  return { level: castleLevel(state.castle), might: might(state.castle, pvp), ...seasonColumns(state.castle, seasonRules) };
+  return { level: castleLevel(state.castle), might: might(state.castle, pvp), ...seasonColumns(state.castle, seasonRules),
+    ...tourneyColumns(state.castle, seasonRules) };
 }
 
 /** Every spot a castle stands on: players' homes and their outposts. */
@@ -903,6 +913,91 @@ async function claimWarPrize(userId: string): Promise<string> {
   return "The server is busy, try again.";
 }
 
+// --- Weekly alliance tournaments (tournaments.ts) ---------------------------
+
+/**
+ * A week's tournament as stored: its entrants and the scores of the rounds
+ * already over. This week's bracket is drawn by the first request after the
+ * week starts; an earlier week without one had no tournament.
+ */
+async function tournamentOf(week: number, t: number): Promise<{ entrants: Entrant[]; results: Record<string, Record<string, number>> }> {
+  const read = async () => (await admin.from("tournaments").select("entrants, results").eq("week", week).maybeSingle()).data;
+  let row = await read();
+  if (!row && week === weekAt(tourneyRules, t)) {
+    const { data } = await admin.from("alliance_summaries").select("id, name, tag, members, might");
+    const entrants = draw(tourneyRules, (data ?? []).map((r: Row) => ({ id: Number(r.id), name: String(r.name), tag: String(r.tag),
+      members: Number(r.members), might: Number(r.might) })));
+    await admin.from("tournaments").upsert({ week, entrants, results: {}, drawn_at: t }, { onConflict: "week", ignoreDuplicates: true });
+    row = await read();
+  }
+  return { entrants: (row?.entrants ?? []) as Entrant[], results: (row?.results ?? {}) as Record<string, Record<string, number>> };
+}
+
+/** A week's bracket as it stands at `t`. Rounds that are over keep the scores they ended with (stored the first time they're read). */
+async function tournamentRounds(week: number, t: number): Promise<{ entrants: Entrant[]; rounds: Round[] }> {
+  const { entrants, results } = await tournamentOf(week, t);
+  if (entrants.length === 0) return { entrants, rounds: [] };
+  const { data } = await admin.from("players")
+    .select("alliance_id, alliance_joined, tourney_key, tourney_points, last_tourney_key, last_tourney_points")
+    .in("alliance_id", entrants.map((e) => e.id)).limit(10000);
+  const rows = (data ?? []) as TourneyRow[];
+  const settled = { ...results };
+  let fresh = false;
+  const rounds = bracket(tourneyRules, week, entrants, t, (start) => {
+    const kept = settled[String(start)];
+    if (kept) return new Map(Object.entries(kept).map(([id, n]) => [Number(id), Number(n)]));
+    return roundScores(rows, start);
+  });
+  for (const r of rounds) {
+    if (t < r.end || settled[String(r.start)]) continue;
+    settled[String(r.start)] = Object.fromEntries(roundScores(rows, r.start));
+    fresh = true;
+  }
+  if (fresh) await admin.from("tournaments").update({ results: settled }).eq("week", week);
+  return { entrants, rounds };
+}
+
+async function tourneyMember(userId: string): Promise<TourneyMember | null> {
+  const { data: me } = await admin.from("players").select("alliance_id, alliance_joined, tourney_claimed").eq("user_id", userId).maybeSingle();
+  return me ? { alliance_id: me.alliance_id === null ? null : Number(me.alliance_id), joined: Number(me.alliance_joined),
+    claimed: Number(me.tourney_claimed) } : null;
+}
+
+/** The tournament screen (tourneyBoard() in tournaments.ts) for this player. */
+async function tournamentView(userId: string) {
+  const t = now();
+  const week = weekAt(tourneyRules, t);
+  const { entrants, rounds } = await tournamentRounds(week, t);
+  const prizeWeek = claimableWeek(tourneyRules, t);
+  const prize = prizeWeek === week ? { week, rounds } : { week: prizeWeek, rounds: (await tournamentRounds(prizeWeek, t)).rounds };
+  return tourneyBoard(tourneyRules, t, week, entrants, rounds, await tourneyMember(userId), prize);
+}
+
+/** Gives this player their prize for how far their alliance got in the last finished tournament; the error, or "" when done. */
+async function claimTournamentPrize(userId: string): Promise<string> {
+  const t = now();
+  const week = claimableWeek(tourneyRules, t);
+  const { rounds } = await tournamentRounds(week, t);
+  for (let attempt = 0; attempt < RETRIES; attempt++) {
+    const { data: row } = await admin.from("players").select(`alliance_id, alliance_joined, tourney_claimed, ${COLUMNS}`)
+      .eq("user_id", userId).maybeSingle();
+    if (!row) return "No castle yet.";
+    const { version, alliance_id, alliance_joined, tourney_claimed, ...stored } = row as Row;
+    const prize = checkTourneyClaim(tourneyRules, { alliance_id: alliance_id === null ? null : Number(alliance_id),
+      joined: Number(alliance_joined), claimed: Number(tourney_claimed) }, week, rounds);
+    if (typeof prize === "string") return prize;
+    const castle = CastleState.fromDict(rules.buildings, stored.castle);
+    givePrize(castle, prize);
+    const state = { ...stored, castle: castle.toDict() } as PlayerState;
+    const { data: saved } = await admin.from("players")
+      .update({ castle: state.castle, tourney_claimed: week, ...publicColumns(state), version: version + 1,
+        updated_at: new Date().toISOString() })
+      .eq("user_id", userId).eq("version", version).select("version");
+    if (saved && saved.length > 0) return "";
+  }
+  return "The server is busy, try again.";
+}
+
 // --- The game owner's tools (admin.ts) --------------------------------------
 
 async function loadCalendar(): Promise<EventRules> {
@@ -1074,6 +1169,10 @@ Deno.serve(async (req: Request) => {
     return reply({ ok: true, now: now(), error: "", result });
   }
 
+  if (body.action === "tournament") {
+    return reply({ ok: true, now: now(), error: "", result: { tournament: await tournamentView(userId) } });
+  }
+
   if (body.action === "war_board") {
     return reply({ ok: true, now: now(), error: "", result: { war: await warView(userId) } });
   }
@@ -1225,6 +1324,10 @@ Deno.serve(async (req: Request) => {
     warError = await claimWarPrize(userId);
     body = { action: "state" };
   }
+  if (body.action === "claim_tournament_prize") {
+    warError = await claimTournamentPrize(userId);
+    body = { action: "state" };
+  }
   // What your villages made: taken before anything can change who holds them.
   const villageIncome = await collectVillages(userId);
   const market = await collectMarket(userId);
@@ -1305,7 +1408,7 @@ Deno.serve(async (req: Request) => {
       outpostSpot = nearestSpot((world as World).spots, [stored.home_x, stored.home_y], taken);
     }
     const outcome = act(rules, stored, body, t, { pvp, outpostSpot, target: target?.target, homecomings, alliances: allianceRules, aid: aidRules,
-      events: { rules: calendar, world: world as World }, quests: questRules, achievements: achievementRules, login: loginRules, seasons: seasonRules, seasonPlace, chests: chestRules, encounters, weather,
+      events: { rules: calendar, world: world as World }, quests: questRules, achievements: achievementRules, login: loginRules, seasons: seasonRules, tourney: tourneyRules, seasonPlace, chests: chestRules, encounters, weather,
       sabotage: sabotageRules, targetCastle: target ? (target.row as PlayerState).castle : undefined, village: village?.target, villageIncome,
       capitalBoost: boost, fortresses: (world as World).fortresses, hordeRank: hordePlace,
       market: { rules: marketRules, open: openOffers, offer: bought?.offer }, marketIncome: market.income });

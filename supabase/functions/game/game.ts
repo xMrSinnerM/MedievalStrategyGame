@@ -26,6 +26,7 @@ import { deliverCarts, OUTPOST_ID, unload, type Cart, type OutpostData } from ".
 import { rulesFor, type VillageInfo, type VillageState } from "../../../server/rules/villages.ts";
 import { checkVillageAttack, type VillageTarget } from "./villages.ts";
 import { marchSlow, type WeatherRules } from "../../../server/rules/weather.ts";
+import { rollTourney, type TourneyRules } from "./tournaments.ts";
 import { againstCamp, campKey, checkSabotage, hitPlayer, playerChance, playerKey, roll, seedFor, sendAgents, wallsFactor, type SabotageRules } from "../../../server/rules/sabotage.ts";
 
 /** A player as stored in the players table (the game columns). */
@@ -164,6 +165,8 @@ export interface Context {
   login?: LoginRules;
   /** Seasons: renown each month and its prizes (data/seasons.json). */
   seasons?: SeasonRules;
+  /** Weekly alliance tournaments (data/tournaments.json): renown is counted for the round on (needs `seasons`). */
+  tourney?: TourneyRules;
   /** Treasure chests and their Wheel of Fortune (data/chests.json). */
   chests?: ChestRules;
   /** Bandit camps, merchant caravans and treasure sites along the roads (data/encounters.json). */
@@ -382,6 +385,7 @@ export function act(rules: Rules, given: PlayerState, req: Request, now: number,
   rules.gear.sync(castle);
   if (ctx.quests) rollDay(castle, ctx.quests, now);
   if (ctx.seasons) rollSeason(castle, ctx.seasons, now);
+  if (ctx.seasons && ctx.tourney) rollTourney(castle, ctx.tourney, ctx.seasons, now);
   if (ctx.achievements) note(castle, ctx.achievements, true);
   let error = "";
   let result: unknown = undefined;
