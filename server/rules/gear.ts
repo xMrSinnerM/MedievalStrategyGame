@@ -31,6 +31,8 @@ export interface Commander {
   xp: number;
   /** Slot -> the item worn there. */
   gear: Record<string, Item>;
+  /** Skill -> rank learned. */
+  skills: Dict;
   /** Unix time the commander's army is home again. */
   away_until: number;
 }
@@ -62,6 +64,21 @@ export interface LeadReport {
   leveled: boolean;
 }
 
+/** A skill commanders learn with the points they earn by levelling up. */
+export interface Skill {
+  id: string;
+  name: string;
+  branch: string;
+  /** Commander level it needs. */
+  needs: number;
+  /** The skill before it in its branch ("" for none). */
+  after: string;
+  max: number;
+  /** Stat -> percent per rank (the fight stats, and xp). */
+  per_rank: Dict;
+  text: string;
+}
+
 export function newArmoury(): Armoury {
   return { commanders: [], castellan: {}, bag: [], next_item: 1 };
 }
@@ -85,6 +102,8 @@ export class GearRules {
   xpLoss: number;
   commanderNames: string[];
   names: Json;
+  skills: Skill[];
+  retrainGold: number;
 
   constructor(data: Json = {}) {
     this.slots = (data.slots ?? []).map(String);
@@ -105,6 +124,8 @@ export class GearRules {
     this.xpLoss = Number(data.xp_loss ?? 0);
     this.commanderNames = (data.commander_names ?? []).map(String);
     this.names = data.names ?? {};
+    this.skills = data.skills ?? [];
+    this.retrainGold = Number(data.retrain_gold ?? 0);
   }
 
   commanderSlots(keep: number): number {
@@ -131,7 +152,7 @@ export class GearRules {
       const i = a.commanders.length;
       const base = this.commanderNames.length > 0 ? this.commanderNames[i % this.commanderNames.length] : "Commander";
       a.commanders.push({ id: i + 1, name: i < this.commanderNames.length ? base : `${base} the Younger`, level: 1, xp: 0, gear: {},
-        away_until: 0 });
+        skills: {}, away_until: 0 });
     }
   }
 
@@ -159,6 +180,15 @@ export class GearRules {
     return withResearch(this.effects(castle.armoury.castellan), castle.researchEffects("defence"));
   }
 
+  /** Gear and level, plus skills on top (past the gear caps). */
+  commanderEffects(c: Commander): Dict {
+    const fx = this.effects(c.gear, c.level);
+    for (const [stat, n] of Object.entries(this.skillBonus(c))) {
+      if (Object.hasOwn(this.stats, stat)) fx[stat] = (fx[stat] ?? 0) + n / 100;
+    }
+    return fx;
+  }
+
   commander(castle: CastleState, id: unknown): Commander | undefined {
     return castle.armoury.commanders.find((c) => c.id === id);
   }
@@ -175,7 +205,7 @@ export class GearRules {
     const c = this.commander(castle, id);
     if (c === undefined) return "No such commander.";
     if (c.away_until > now) return `${c.name} is still away with an army.`;
-    return { id: c.id, name: c.name, fx: withResearch(this.effects(c.gear, c.level), research) };
+    return { id: c.id, name: c.name, fx: withResearch(this.commanderEffects(c), research) };
   }
 
   /** Gives a commander xp; returns the report line for it. */
@@ -183,9 +213,70 @@ export class GearRules {
     const c = this.commander(castle, id);
     if (c === undefined) return undefined;
     const before = c.level;
+    xp = Math.round(xp * (1 + (this.skillBonus(c).xp ?? 0) / 100));
     c.xp += xp;
     c.level = this.levelFor(c.xp);
     return { id: c.id, name: c.name, xp, level: c.level, leveled: c.level > before };
+  }
+
+  skill(id: unknown): Skill | undefined {
+    return this.skills.find((k) => k.id === id);
+  }
+
+  /** What a commander's skills add: stat -> percent (fight stats and xp). */
+  skillBonus(c: Commander): Dict {
+    const out: Dict = {};
+    for (const [id, rank] of Object.entries(c.skills)) {
+      const k = this.skill(id);
+      if (k === undefined) continue;
+      for (const [stat, n] of Object.entries(k.per_rank)) out[stat] = (out[stat] ?? 0) + n * rank;
+    }
+    return out;
+  }
+
+  /** Why this commander can't learn a rank of this skill now ("" if they can). */
+  checkLearn(castle: CastleState, id: unknown, skillId: unknown): string {
+    const c = this.commander(castle, id);
+    if (c === undefined) return "No such commander.";
+    const k = this.skill(skillId);
+    if (k === undefined) return "There's no such skill.";
+    if (skillRank(c, k.id) >= k.max) return `${c.name} has mastered ${k.name}.`;
+    if (c.level < k.needs) return `${k.name} needs level ${k.needs}.`;
+    if (k.after !== "" && skillRank(c, k.after) <= 0) return `Learn ${this.skill(k.after)?.name ?? k.after} first.`;
+    if (skillPoints(c) <= 0) return `${c.name} has no skill points left. They earn one each level.`;
+    return "";
+  }
+
+  learn(castle: CastleState, id: unknown, skillId: unknown): string {
+    const why = this.checkLearn(castle, id, skillId);
+    if (why === "") {
+      const c = this.commander(castle, id)!;
+      c.skills[skillId as string] = skillRank(c, skillId as string) + 1;
+    }
+    return why;
+  }
+
+  retrainCost(c: Commander): Dict {
+    return { gold: this.retrainGold * c.level };
+  }
+
+  checkRetrain(castle: CastleState, id: unknown): string {
+    const c = this.commander(castle, id);
+    if (c === undefined) return "No such commander.";
+    if (Object.keys(c.skills).length === 0) return `${c.name} hasn't learned any skills yet.`;
+    if (!castle.canAfford(this.retrainCost(c))) return "Not enough gold.";
+    return "";
+  }
+
+  /** Forgets every skill, handing the points back, for gold. */
+  retrain(castle: CastleState, id: unknown): string {
+    const why = this.checkRetrain(castle, id);
+    if (why === "") {
+      const c = this.commander(castle, id)!;
+      castle.pay(this.retrainCost(c));
+      c.skills = {};
+    }
+    return why;
   }
 
   dropChance(level: number): number {
@@ -320,9 +411,15 @@ export function readArmoury(data: any): Armoury {
     }
     return out;
   };
+  const skills = (x: Json): Dict => {
+    const out: Dict = {};
+    if (x === null || typeof x !== "object" || Array.isArray(x)) return out;
+    for (const [id, n] of Object.entries(x)) if (typeof n === "number" && Math.trunc(n) > 0) out[id] = Math.trunc(n);
+    return out;
+  };
   for (const c of Array.isArray(data.commanders) ? data.commanders : []) {
     a.commanders.push({ id: Math.trunc(Number(c.id ?? 0)), name: String(c.name ?? ""), level: Math.trunc(Number(c.level ?? 1)),
-      xp: Math.trunc(Number(c.xp ?? 0)), gear: gear(c.gear), away_until: Number(c.away_until ?? 0) });
+      xp: Math.trunc(Number(c.xp ?? 0)), gear: gear(c.gear), skills: skills(c.skills), away_until: Number(c.away_until ?? 0) });
   }
   a.castellan = gear(data.castellan);
   for (const x of Array.isArray(data.bag) ? data.bag : []) {
@@ -331,6 +428,15 @@ export function readArmoury(data: any): Armoury {
   }
   a.next_item = Math.trunc(Number(data.next_item ?? 1));
   return a;
+}
+
+export function skillRank(c: Commander, id: string): number {
+  return Object.hasOwn(c.skills, id) ? c.skills[id] : 0;
+}
+
+/** Skill points not yet spent: one for each level past the first. */
+export function skillPoints(c: Commander): number {
+  return c.level - 1 - Object.values(c.skills).reduce((a, b) => a + b, 0);
 }
 
 /** Gear effects with research's added on top. */

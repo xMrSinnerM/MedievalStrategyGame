@@ -1015,6 +1015,34 @@ func test_gear() -> void:
 	check(saved.armoury == c.armoury, "the armoury is saved")
 	check(gear.unequip(c, 1, "helmet", T0) == "" and gear.sell(c, 1) == "", "taken off and sold")
 	near(c.resources.gold, start("gold") + 250.0, "a rare item sells for 250 gold")
+	# Skills: a point a level, each needing a level and the skill above it.
+	var cmd: Dictionary = c.armoury.commanders[0]
+	check(GearRules.skill_points(cmd) == 3, "level 4 has 3 skill points")
+	check(gear.learn(c, 1, "wallbreaker") == "Learn Sapper first.", "the branch goes in order")
+	check(gear.learn(c, 1, "breach_master") == "Master of the Breach needs level 7.", "deep skills need a higher level")
+	check(gear.learn(c, 1, "nope") == "There's no such skill." and gear.learn(c, 7, "sapper") == "No such commander.", "bad orders")
+	check(gear.learn(c, 1, "sapper") == "" and gear.learn(c, 1, "sapper") == "" and gear.learn(c, 1, "wallbreaker") == "", "learned")
+	check(cmd.skills == {"sapper": 2, "wallbreaker": 1} and GearRules.skill_points(cmd) == 0, "points spent: %s" % [cmd.skills])
+	check(gear.learn(c, 1, "brawler").begins_with("Sir Edric Vane has no skill points left"), "no points left")
+	var sfx := gear.commander_effects(cmd)
+	near(sfx.wall_attack, 0.10, "level 4 (6%) and a rank of Wallbreaker (4%)")
+	near(sfx.wall_cut, 0.10, "two ranks of Sapper")
+	check(gear.skill_text(gear.skill("sapper"), 2) == "Digs under the wall: +10% off the wall's bonus.", gear.skill_text(gear.skill("sapper"), 2))
+	var kept := CastleState.from_dict(rules, JSON.parse_string(JSON.stringify(c.to_dict())))
+	check(kept.armoury.commanders[0].skills == cmd.skills, "skills are saved")
+	c.resources.gold = 100.0
+	check(gear.retrain(c, 1) == "Not enough gold.", "retraining costs gold")
+	c.resources.gold = 1000.0
+	check(gear.retrain(c, 1) == "" and cmd.skills.is_empty() and GearRules.skill_points(cmd) == 3, "retrained")
+	near(c.resources.gold, 400.0, "150 gold a level")
+	check(gear.retrain(c, 1) == "Sir Edric Vane hasn't learned any skills yet.", "nothing to forget")
+	cmd.level = 10
+	for k in 3:
+		gear.learn(c, 1, "brawler")
+	gear.learn(c, 1, "drillmaster")
+	check(gear.add_xp(c, 1, 10).xp == 12, "Drillmaster: 20% more xp")
+	cmd.skills = {}
+	cmd.level = gear.level_for(int(cmd.xp))
 	# Offline: a commander leads an attack, earns xp and is away meanwhile.
 	var eco = load("res://scripts/core/economy.gd").new()
 	eco.save_dir = "user://test_saves"

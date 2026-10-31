@@ -729,6 +729,31 @@ The numbers live in `data/gear.json`. `GearRules`
 (`scripts/economy/gear_rules.gd`) and the server's `server/rules/gear.ts`
 give the same drops, bonuses and xp (checked by the server fixtures).
 
+### Commander skills
+
+Each level past the first gives a commander a **skill point**, nine in all
+by level 10. Spend them in the *Skills* tab of the Army window, in three
+branches of three skills. Each skill needs a commander level and a rank of
+the skill above it, and most have three ranks, so no commander can take
+everything:
+
+| Branch | Skill (level, ranks) | Each rank |
+|---|---|---|
+| Siegecraft | Sapper (2, 3) | +5% off the wall's bonus |
+| | Wallbreaker (4, 3) | +4% attack at the walls |
+| | Master of the Breach (7, 1) | +6% attack at the walls, +6% off the wall's bonus |
+| Warfare | Brawler (2, 3) | +4% attack in the courtyard |
+| | Drillmaster (4, 3) | +20% more xp from every fight |
+| | Warlord (7, 1) | +4% at the walls, +6% in the courtyard |
+| Plunder | Deep Wagons (2, 3) | +8% loot carried |
+| | Forager (4, 3) | +5% loot, +2% in the courtyard |
+| | Robber Knight (7, 1) | +15% loot, +20% more xp |
+
+Skills add to the commander's gear, on top of its caps, in every attack they
+lead. **Retraining** hands every point back for 150 gold per commander
+level. Orders `learn_skill` and `retrain_commander`; the skills live in
+`data/gear.json` next to the gear.
+
 ## Outpost: your second castle
 
 Press **P** (or the **Outpost** button on the map). Once your keep reaches
@@ -1070,6 +1095,7 @@ How the parts work:
 - [x] Quests and daily tasks
 - [x] Siege workshop: attack and defence tools
 - [x] Commanders and gear
+- [x] Commander skills
 - [x] Academy and research tree
 - [x] Decorations and public order
 

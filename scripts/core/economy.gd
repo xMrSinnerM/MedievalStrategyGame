@@ -1673,6 +1673,17 @@ func sell_gear(item_id: int) -> String:
 	return _gear_order(gear_rules.sell(player_castle, item_id), {"action": "sell_gear", "item": item_id})
 
 
+func learn_skill(commander_id: int, skill_id: String) -> String:
+	## Spends a commander's skill point on a skill.
+	return _gear_order(gear_rules.learn(player_castle, commander_id, skill_id),
+			{"action": "learn_skill", "commander": commander_id, "skill": skill_id})
+
+
+func retrain_commander(commander_id: int) -> String:
+	## Forgets a commander's skills for gold, handing the points back.
+	return _gear_order(gear_rules.retrain(player_castle, commander_id), {"action": "retrain_commander", "commander": commander_id})
+
+
 func _gear_order(why: String, order: Dictionary) -> String:
 	if why != "":
 		return why

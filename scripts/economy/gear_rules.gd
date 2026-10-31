@@ -5,8 +5,11 @@ extends RefCounted
 ## are in data/gear.json; server/rules/gear.ts is the same rules for the
 ## online game.
 ##
+## Commanders also learn skills as they level up: one skill point for each
+## level past the first, spent in three branches (see `skills`).
+##
 ## Everything lives in the castle's `armoury`: {"commanders": [{id, name,
-## level, xp, gear: {slot: item}, away_until}], "castellan": {slot: item},
+## level, xp, gear: {slot: item}, skills: {skill: rank}, away_until}], "castellan": {slot: item},
 ## "bag": [item], "next_item"}. An item is {id, slot, side ("attack" or
 ## "defence"), rarity, name, stats: {stat: percent}}.
 
@@ -30,6 +33,10 @@ var xp_player_win := 0
 var xp_loss := 0
 var commander_names: Array = []
 var names := {}
+var branches: Array = []       ## [{id, name, text}]
+var skills: Array = []         ## [{id, name, branch, needs, after, max, per_rank: {stat: percent}, text}]
+var retrain_gold := 0          ## per commander level
+var skill_stats := {}          ## names of skill-only stats (xp)
 
 
 static func load_default() -> GearRules:
@@ -61,6 +68,10 @@ func load_from(data: Dictionary) -> void:
 	xp_loss = int(data.get("xp_loss", 0))
 	commander_names = data.get("commander_names", [])
 	names = data.get("names", {})
+	branches = data.get("branches", [])
+	skills = data.get("skills", [])
+	retrain_gold = int(data.get("retrain_gold", 0))
+	skill_stats = data.get("skill_stats", {})
 
 
 static func new_armoury() -> Dictionary:
@@ -102,7 +113,7 @@ func sync(castle: CastleState) -> void:
 		var i := list.size()
 		var base: String = commander_names[i % commander_names.size()] if not commander_names.is_empty() else "Commander"
 		list.append({"id": i + 1, "name": base if i < commander_names.size() else base + " the Younger", "level": 1, "xp": 0,
-				"gear": {}, "away_until": 0.0})
+				"gear": {}, "skills": {}, "away_until": 0.0})
 
 
 func effects(gear: Dictionary, level := 1) -> Dictionary:
@@ -132,7 +143,13 @@ func castellan_effects(castle: CastleState) -> Dictionary:
 
 
 func commander_effects(commander: Dictionary) -> Dictionary:
-	return effects(commander.gear, int(commander.level))
+	## Gear and level, plus skills on top (past the gear caps).
+	var fx := effects(commander.gear, int(commander.level))
+	var bonus := skill_bonus(commander)
+	for stat: String in bonus:
+		if stats.has(stat):
+			fx[stat] = float(fx.get(stat, 0.0)) + float(bonus[stat]) / 100.0
+	return fx
 
 
 static func with_research(fx: Dictionary, research: Dictionary) -> Dictionary:
@@ -173,9 +190,104 @@ func add_xp(castle: CastleState, id: int, xp: int) -> Dictionary:
 	if c.is_empty():
 		return {}
 	var before := int(c.level)
+	xp = roundi(xp * (1.0 + float(skill_bonus(c).get("xp", 0.0)) / 100.0))
 	c.xp = int(c.xp) + xp
 	c.level = level_for(int(c.xp))
 	return {"id": int(c.id), "name": String(c.name), "xp": xp, "level": int(c.level), "leveled": int(c.level) > before}
+
+
+# --- Skills ---------------------------------------------------------------------
+
+func skill(id: Variant) -> Dictionary:
+	for k: Dictionary in skills:
+		if k.id == id:
+			return k
+	return {}
+
+
+static func skill_rank(commander: Dictionary, id: String) -> int:
+	return int(commander.get("skills", {}).get(id, 0))
+
+
+static func skill_points(commander: Dictionary) -> int:
+	## Points not yet spent: one for each level past the first.
+	var spent := 0
+	for id: String in commander.get("skills", {}):
+		spent += int(commander.skills[id])
+	return int(commander.level) - 1 - spent
+
+
+func skill_bonus(commander: Dictionary) -> Dictionary:
+	## What the commander's skills add: stat -> percent (fight stats and xp).
+	var out := {}
+	for id: String in commander.get("skills", {}):
+		var k := skill(id)
+		if k.is_empty():
+			continue
+		for stat: String in k.per_rank:
+			out[stat] = float(out.get(stat, 0.0)) + float(k.per_rank[stat]) * int(commander.skills[id])
+	return out
+
+
+func check_learn(castle: CastleState, id: Variant, skill_id: Variant) -> String:
+	## Why this commander can't learn a rank of this skill now ("" if they can).
+	var c := commander(castle, id)
+	if c.is_empty():
+		return "No such commander."
+	var k := skill(skill_id)
+	if k.is_empty():
+		return "There's no such skill."
+	if skill_rank(c, k.id) >= int(k.max):
+		return "%s has mastered %s." % [c.name, k.name]
+	if int(c.level) < int(k.needs):
+		return "%s needs level %d." % [k.name, int(k.needs)]
+	if String(k.after) != "" and skill_rank(c, k.after) <= 0:
+		return "Learn %s first." % skill(k.after).get("name", k.after)
+	if skill_points(c) <= 0:
+		return "%s has no skill points left. They earn one each level." % c.name
+	return ""
+
+
+func learn(castle: CastleState, id: Variant, skill_id: Variant) -> String:
+	var why := check_learn(castle, id, skill_id)
+	if why == "":
+		var c := commander(castle, id)
+		c.skills[String(skill_id)] = skill_rank(c, String(skill_id)) + 1
+	return why
+
+
+func retrain_cost(commander: Dictionary) -> Dictionary:
+	return {"gold": retrain_gold * int(commander.level)}
+
+
+func check_retrain(castle: CastleState, id: Variant) -> String:
+	var c := commander(castle, id)
+	if c.is_empty():
+		return "No such commander."
+	if c.get("skills", {}).is_empty():
+		return "%s hasn't learned any skills yet." % c.name
+	if not castle.can_afford(retrain_cost(c)):
+		return "Not enough gold."
+	return ""
+
+
+func retrain(castle: CastleState, id: Variant) -> String:
+	## Forgets every skill, handing the points back, for gold.
+	var why := check_retrain(castle, id)
+	if why == "":
+		var c := commander(castle, id)
+		castle.pay(retrain_cost(c))
+		c.skills = {}
+	return why
+
+
+func skill_text(k: Dictionary, ranks := 1) -> String:
+	## What `ranks` of a skill do, e.g. "+8% attack at the walls".
+	var parts: PackedStringArray = []
+	for stat: String in k.per_rank:
+		var stat_name := String(stats[stat].name) if stats.has(stat) else String(skill_stats.get(stat, stat))
+		parts.append("+%d%% %s" % [int(k.per_rank[stat]) * ranks, stat_name])
+	return String(k.text) % ", ".join(parts)
 
 
 func drop_chance(level: int) -> float:
@@ -339,7 +451,8 @@ static func read_armoury(data: Variant) -> Dictionary:
 	for c in data.get("commanders", []):
 		if c is Dictionary:
 			a.commanders.append({"id": int(c.get("id", 0)), "name": String(c.get("name", "")), "level": int(c.get("level", 1)),
-					"xp": int(c.get("xp", 0)), "gear": _read_gear(c.get("gear", {})), "away_until": float(c.get("away_until", 0.0))})
+					"xp": int(c.get("xp", 0)), "gear": _read_gear(c.get("gear", {})), "skills": _read_skills(c.get("skills", {})),
+					"away_until": float(c.get("away_until", 0.0))})
 	a.castellan = _read_gear(data.get("castellan", {}))
 	for x in data.get("bag", []):
 		var item := _read_item(x)
@@ -356,6 +469,15 @@ static func _read_gear(g: Variant) -> Dictionary:
 			var item := _read_item(g[slot])
 			if not item.is_empty():
 				out[slot] = item
+	return out
+
+
+static func _read_skills(x: Variant) -> Dictionary:
+	var out := {}
+	if x is Dictionary:
+		for id in x:
+			if (x[id] is int or x[id] is float) and int(x[id]) > 0:
+				out[String(id)] = int(x[id])
 	return out
 
 

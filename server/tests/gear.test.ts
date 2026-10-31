@@ -154,3 +154,42 @@ test("commanders against players: the castellan defends, xp waits until the army
     { homecomings: [{ back: raid.back, survivors: fought.survivors, loot: fought.loot, lead: fought.lead }] });
   assert.equal(home.state.castle.armoury.commanders[0].xp, xp);
 });
+
+test("commanders learn skills with the points their levels earn", () => {
+  let p = newPlayer(rules, world, "Lord", T0);
+  p = act(rules, p, { action: "state" }, T0).state;
+  const learn = (s: PlayerState, skill: unknown) => act(rules, s, { action: "learn_skill", commander: 1, skill }, T0);
+  assert.equal(learn(p, "sapper").error, "Sapper needs level 2.");
+  p.castle.armoury.commanders[0].xp = 30;
+  p.castle.armoury.commanders[0].level = g.levelFor(30);
+  assert.equal(learn(p, "wallbreaker").error, "Learn Sapper first.");
+  assert.equal(learn(p, "breach_master").error, "Master of the Breach needs level 7.");
+  assert.equal(learn(p, "toString").error, "There's no such skill.");
+  assert.equal(act(rules, p, { action: "learn_skill", commander: 9, skill: "sapper" }, T0).error, "No such commander.");
+  for (const skill of ["sapper", "sapper", "wallbreaker"]) {
+    const out = learn(p, skill);
+    assert.equal(out.error, "", skill);
+    p = out.state;
+  }
+  const c = p.castle.armoury.commanders[0];
+  assert.deepEqual(c.skills, { sapper: 2, wallbreaker: 1 });
+  const fx = g.commanderEffects(c);
+  assert.ok(Math.abs(fx.wall_attack - 0.1) < 1e-9 && Math.abs(fx.wall_cut - 0.1) < 1e-9, JSON.stringify(fx));
+  p.castle.resources.gold = 100;
+  assert.equal(act(rules, p, { action: "retrain_commander", commander: 1 }, T0).error, "Not enough gold.");
+  p.castle.resources.gold = 1000;
+  const out = act(rules, p, { action: "retrain_commander", commander: 1 }, T0);
+  assert.equal(out.error, "");
+  assert.deepEqual(out.state.castle.armoury.commanders[0].skills, {});
+  assert.equal(out.state.castle.resources.gold, 400);
+});
+
+test("Drillmaster earns more xp", () => {
+  const p = newPlayer(rules, world, "Lord", T0);
+  const s = act(rules, p, { action: "state" }, T0).state;
+  const c = s.castle.armoury.commanders[0];
+  c.level = 10;
+  c.skills = { brawler: 3, drillmaster: 1 };
+  const castle = { armoury: s.castle.armoury } as never;
+  assert.equal(g.addXp(castle, 1, 10)?.xp, 12);
+});

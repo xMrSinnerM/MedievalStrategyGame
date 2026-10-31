@@ -570,6 +570,12 @@ export function act(rules: Rules, given: PlayerState, req: Request, now: number,
     case "unequip":
       error = rules.gear.unequip(castle, req.who, req.slot, now);
       break;
+    case "learn_skill":
+      error = rules.gear.learn(castle, req.commander, req.skill);
+      break;
+    case "retrain_commander":
+      error = rules.gear.retrain(castle, req.commander);
+      break;
     case "sell_gear":
       error = rules.gear.sell(castle, req.item);
       break;
