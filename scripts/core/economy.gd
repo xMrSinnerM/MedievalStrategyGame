@@ -57,6 +57,12 @@ signal villages_changed
 signal achievement_news(text: String)
 ## Online: the server sent the market (see `market`); error is "" unless an order was refused.
 signal market_changed(error: String)
+## Online: a page of mail arrived (see `mail`), or how many letters and reports are unread changed.
+signal mail_changed(error: String)
+## Online: the server answered a letter you sent; error is "" when it went.
+signal letter_sent(error: String)
+## A report from the reports inbox to show again, in the battle report window's shape.
+signal report_shown(report: Dictionary)
 
 ## Games are kept in SLOTS save slots under save_dir (slot_1.json ...).
 const SLOTS := 3
@@ -189,6 +195,13 @@ const CHAT_POLL_OPEN := 4.0
 const CHAT_POLL_CLOSED := 15.0
 ## Messages kept for the chat box.
 const CHAT_KEPT := 150
+## Online: the page of mail last sent by the server: {"folder" ("inbox", "sent" or "reports"), "before",
+## "items", "more", "unread"}. Letters are {"id", "folder", "from_name", "to_name", "subject", "text", "at",
+## "read"}; reports {"id", "at", "report", "read"}.
+var mail := {}
+## Online: letters in your inbox and reports you haven't read.
+var mail_unread := {"inbox": 0, "reports": 0}
+var _letter_pending := false
 ## Online: carts and defenders you sent to allies ("mine") and theirs coming to
 ## or standing in your castle, as the server lists them: {"id", "kind"
 ## ("resources" or "troops"), "sender_name", "receiver_name", "resources",
@@ -991,6 +1004,9 @@ func begin_online(answer: Dictionary) -> void:
 	chat_in_alliance = false
 	chat_loaded = false
 	_chat_timer = 0.0
+	mail = {}
+	mail_unread = {"inbox": 0, "reports": 0}
+	_letter_pending = false
 	aid = []
 	events = {}
 	event_key = 0.0
@@ -1077,6 +1093,8 @@ func apply_server(answer: Dictionary) -> void:
 	if answer.has("raids"):
 		raids = answer.raids
 		raids_changed.emit()
+	if answer.get("mail_unread") is Dictionary:
+		_take_unread(answer.mail_unread)
 	if answer.has("aid"):
 		aid = answer.aid
 		aid_changed.emit()
@@ -1103,6 +1121,10 @@ func apply_server(answer: Dictionary) -> void:
 		elif report.get("kind", "") == "sabotage":
 			if report.get("role", "") == "target":
 				aid_news.emit(sabotage_text(report))
+		elif report.get("kind", "") == "spy":
+			# Your own spy's report comes with the answer to "spy"; theirs is news.
+			if report.get("role", "") == "target":
+				aid_news.emit(spy_text(report))
 		else:
 			attack_resolved.emit(_server_report(report))
 	if camps_moved:
@@ -2733,6 +2755,172 @@ func market_text(r: Dictionary) -> String:
 
 static func _rate_text(x: float) -> String:
 	return str(snappedf(x, 0.01))
+
+
+# --- Online: mail and the reports inbox -------------------------------------------------
+
+func ask_mail(folder: String, before := 0) -> void:
+	## Asks for a page of "inbox", "sent" or "reports" (older than id `before`); it arrives with mail_changed.
+	get_node("/root/Online").order({"action": "mail", "folder": folder, "before": before})
+
+
+func send_letter(to: String, subject: String, text: String, to_alliance := false) -> String:
+	## Sends a letter to a player by name (or to your alliance); "" if it went to the
+	## server, else why not. The server's answer arrives with letter_sent.
+	var clean := text.strip_edges()
+	if clean == "":
+		return "Write something first."
+	if clean.length() > 1000:
+		return "Letters are at most 1000 characters long."
+	if not to_alliance and to.strip_edges() == "":
+		return "Who is it for?"
+	var body := {"action": "mail_send", "subject": subject.strip_edges(), "text": clean, "folder": "sent"}
+	if to_alliance:
+		body["alliance"] = true
+	else:
+		body["to"] = to.strip_edges()
+	_letter_pending = true
+	get_node("/root/Online").order(body)
+	return ""
+
+
+func mark_mail_read(folder: String, ids: Array) -> void:
+	## Marks letters or reports read: straight away here, and on the server.
+	var unread := 0
+	for item: Dictionary in mail.get("items", []):
+		if mail.get("folder", "") == folder and ids.has(int(item.id)) and not item.get("read", false):
+			item["read"] = true
+			unread += 1
+	if unread > 0:
+		var key := "reports" if folder == "reports" else "inbox"
+		if folder != "sent":
+			mail_unread[key] = maxi(0, int(mail_unread.get(key, 0)) - unread)
+		mail_changed.emit("")
+	get_node("/root/Online").order({"action": "mail_read", "folder": folder, "ids": ids, "before": int(mail.get("before", 0))})
+
+
+func mark_all_mail_read(folder: String) -> void:
+	get_node("/root/Online").order({"action": "mail_read_all", "folder": folder})
+
+
+func delete_mail(folder: String, ids: Array) -> void:
+	## Deletes letters or reports from your own mailbox; the page comes back with mail_changed.
+	get_node("/root/Online").order({"action": "mail_delete", "folder": folder, "ids": ids, "before": int(mail.get("before", 0))})
+
+
+func set_mail(view: Dictionary, error: String) -> void:
+	## The server's answer to a mail order: the page asked for.
+	mail = view
+	if view.get("unread") is Dictionary:
+		mail_unread = view.unread
+	if _letter_pending:
+		_letter_pending = false
+		letter_sent.emit(error)
+	mail_changed.emit(error)
+
+
+func _take_unread(counts: Dictionary) -> void:
+	if int(counts.get("inbox", 0)) != int(mail_unread.get("inbox", 0)) \
+			or int(counts.get("reports", 0)) != int(mail_unread.get("reports", 0)):
+		mail_unread = counts
+		mail_changed.emit("")
+
+
+func show_report(r: Dictionary) -> void:
+	## Shows a report from the inbox again, in the battle report window.
+	report_shown.emit(_server_report(r))
+
+
+func is_battle_report(r: Dictionary) -> bool:
+	## Whether a report is a battle the battle report window shows (rather than one sentence).
+	var kind := String(r.get("kind", ""))
+	if kind == "village":
+		return r.get("result", "") == "fought"
+	return kind == "raid" or kind == ""
+
+
+func report_title(r: Dictionary) -> String:
+	## A report's heading in the inbox.
+	var name := String(r.get("name", ""))
+	match String(r.get("kind", "")):
+		"raid":
+			var won: bool = String(r.get("winner", "b")) == ("a" if r.get("role", "") == "attacker" else "b")
+			if r.get("role", "") == "attacker":
+				return "Attack on %s: %s" % [name, "victory" if won else "defeat"]
+			return "%s attacked your castle: %s" % [name, "held" if won else "fell"]
+		"village":
+			return "Battle at %s" % name if r.get("result", "") == "fought" else name
+		"spy":
+			return "Spy report: %s" % name if r.get("role", "") == "spy" else "Spies at your castle"
+		"sabotage":
+			return "Your agents in %s" % name if r.get("role", "") == "sender" else "Agents in your castle"
+		"aid":
+			return "Help between allies"
+		"market":
+			return "Market"
+		"gift":
+			return "A gift"
+	if r.get("empty", false):
+		return "%s was empty" % name
+	var won_camp: bool = String(r.get("winner", "b")) == "a"
+	return "Battle at %s: %s" % [name, "victory" if won_camp else "defeat"]
+
+
+func report_text(r: Dictionary) -> String:
+	## What a report says, in sentences (battles have their own window as well).
+	match String(r.get("kind", "")):
+		"aid":
+			return aid_text(r)
+		"village":
+			return village_text(r)
+		"gift":
+			return gift_text(r)
+		"market":
+			return market_text(r)
+		"spy":
+			return spy_text(r)
+		"sabotage":
+			if r.get("role", "") == "target":
+				return sabotage_text(r)
+			return _agents_text(r)
+	var spoils := _amounts(r.get("spoils", {}))
+	if r.get("empty", false):
+		return "%s was still in ashes when your army arrived." % String(r.get("name", ""))
+	return ("Spoils: %s." % spoils) if spoils != "" else "Open the report to see how the battle went."
+
+
+func spy_text(r: Dictionary) -> String:
+	## A spy report as sentences: what your spy saw, or who spied on you.
+	if r.get("role", "") == "target":
+		return "Spies sent by %s scouted your castle." % String(r.get("name", ""))
+	var lines: PackedStringArray = []
+	var troops: Dictionary = r.get("troops", {})
+	if troops.is_empty():
+		lines.append("No soldiers at home.")
+	else:
+		lines.append("Soldiers at home: %s." % _amounts(troops, true))
+	lines.append("Keep level %d. Walls: defenders +%d%% defence." % [int(r.get("level", 1)),
+			roundi((float(r.get("wall", 1.0)) - 1.0) * 100.0)])
+	var layout: Variant = r.get("layout")
+	if layout is Dictionary and Battle.check_layout(layout) == "":
+		lines.append("Posts: left %d%%, front %d%%, right %d%%, courtyard %d%%." % [int(layout.left), int(layout.front),
+				int(layout.right), int(layout.courtyard)])
+	if r.get("protected", false):
+		lines.append("Under beginner protection.")
+	return "\n".join(lines)
+
+
+func _agents_text(r: Dictionary) -> String:
+	## A report for the agents you sent, as one sentence.
+	var who := String(r.get("name", ""))
+	if not bool(r.get("success", false)):
+		return "Your agents were caught in %s's castle." % who
+	match String(r.get("mission", "")):
+		"steal":
+			return "Your agents stole %s from %s." % [reward_text({"resources": r.get("stolen", {})}), who]
+		"burn_stores":
+			return "Your agents burned %s in %s's stores." % [reward_text({"resources": r.get("burned", {})}), who]
+	return "Your agents fired %s's gate: their walls are weaker for a while." % who
 
 
 # --- Online: chat ---------------------------------------------------------------------

@@ -175,6 +175,10 @@ func _run_queue() -> void:
 			Economy.set_admin(answer.result.admin, String(answer.get("error", "")))
 		elif String(body.get("action", "")).begins_with("admin"):
 			Economy.admin_changed.emit(String(answer.get("error", "")))
+		if answer.get("result") is Dictionary and answer.result.get("mail") is Dictionary:
+			Economy.set_mail(answer.result.mail, String(answer.get("error", "")))
+		elif body.get("action", "") == "mail_send" and refused:
+			Economy.set_mail(Economy.mail, String(answer.get("error", "Couldn't send it.")))
 		if answer.get("result") is Dictionary and answer.result.get("chat") is Dictionary:
 			Economy.set_chat(answer.result.chat, String(answer.get("error", "")))
 		if not refused:

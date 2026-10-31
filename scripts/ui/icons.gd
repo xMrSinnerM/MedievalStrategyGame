@@ -217,6 +217,13 @@ const SVG := {
 		<path d="M54 4 C46 12 41 22 38 34 L41 35 C45 24 50 15 58 8 Z" fill="#b5281e" stroke="%s" stroke-width="2.5" stroke-linejoin="round"/>
 		<path d="M38 34 L36 41" stroke="#2a1a0c" stroke-width="2.5" stroke-linecap="round"/>""",
 	# A gift box tied with a crimson ribbon and a wax seal, for the Royal Gift.
+	# A folded letter with a red wax seal.
+	"mail": """
+		<rect x="6" y="14" width="52" height="36" rx="3" fill="#ead9b0" stroke="%s" stroke-width="3" stroke-linejoin="round"/>
+		<path d="M6 16 L32 36 L58 16" fill="none" stroke="%s" stroke-width="3" stroke-linejoin="round"/>
+		<path d="M8 48 L26 32 M56 48 L38 32" stroke="#b89e6c" stroke-width="2.5"/>
+		<circle cx="32" cy="36" r="7" fill="#b3261e" stroke="%s" stroke-width="2.5"/>
+		<circle cx="32" cy="36" r="3" fill="#e0574a"/>""",
 	"gift": """
 		<rect x="8" y="26" width="48" height="30" rx="3" fill="#2f4f8a" stroke="%s" stroke-width="3"/>
 		<rect x="5" y="18" width="54" height="11" rx="2" fill="#3c62a8" stroke="%s" stroke-width="3"/>

@@ -70,6 +70,10 @@
 // POST { "action": "alliance_settings", "open": true, "description": "..." }
 // POST { "action": "chat", "after": id }         world and alliance messages newer than `after`
 // POST { "action": "chat_send", "channel": "world" | "alliance", "text": "...", "after": id }
+// POST { "action": "mail", "folder": "inbox" | "sent" | "reports", "before": id }   a page of your letters or reports
+//   (mail.ts), newest first, and how many are unread; every answer with your castle also carries `mail_unread`
+// POST { "action": "mail_send", "to": "name" | "alliance": true, "subject": "...", "text": "...", "folder" }
+// POST { "action": "mail_read" | "mail_delete", "folder", "ids": [id, ...] }   (mail_read_all: the whole folder)
 // POST { "action": "send_resources", "target": "name", "resources": { wood: n } }   to an ally (data/aid.json)
 // POST { "action": "send_defenders", "target": "name", "army": { unit: count } }
 // POST { "action": "recall_defenders", "id" }
@@ -154,6 +158,8 @@ import { allianceView, checkFound, found, handle, type AllianceRules } from "./a
 import { DatabaseAllianceStore } from "./alliance_store.ts";
 import { chatView, send, type Speaker } from "./chat.ts";
 import { DatabaseChatStore } from "./chat_store.ts";
+import { type Directory, MAIL_ORDERS, mailOrder, mailView, sendLetter } from "./mail.ts";
+import { DatabaseMailStore } from "./mail_store.ts";
 import { deliver, recall, type Aid, type AidRules } from "./aid.ts";
 import { goingRates, type MarketReport, type MarketRules, type Offer } from "./market.ts";
 import { invade } from "./invasion.ts";
@@ -208,6 +214,14 @@ const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE
 });
 const store = new DatabaseAllianceStore(admin);
 const chat = new DatabaseChatStore(admin);
+const mail = new DatabaseMailStore(admin);
+const directory: Directory = {
+  byName: async (name) => {
+    const p = await store.playerByName(name);
+    return p === null ? null : { user: p.user, name: p.name };
+  },
+  members: async (id) => (await store.members(id)).map((m) => ({ user: m.user, name: m.name })),
+};
 const ALLIANCE_ORDERS = new Set([
   "alliance", "join_alliance", "accept_invite", "decline_invite", "cancel_request", "leave_alliance", "disband_alliance",
   "invite", "cancel_invite", "kick", "answer_request", "set_role", "alliance_settings",
@@ -283,9 +297,10 @@ async function activeAid(userId: string) {
 }
 
 async function view(userId: string, state: PlayerState, extra: Record<string, unknown> = {}) {
-  const [reports, raids, aid, villages] = await Promise.all([recentReports(userId), activeRaids(userId), activeAid(userId),
-    villagesView(userId)]);
-  return { ok: true, now: now(), ...extra, player: state, raids, aid, reports, villages, events: eventsView(calendar, now()) };
+  const [reports, raids, aid, villages, mail_unread] = await Promise.all([recentReports(userId), activeRaids(userId),
+    activeAid(userId), villagesView(userId), mail.unread(userId)]);
+  return { ok: true, now: now(), ...extra, player: state, raids, aid, reports, villages, mail_unread,
+    events: eventsView(calendar, now()) };
 }
 
 // --- Resource villages (villages.ts) ------------------------------------------
@@ -1277,6 +1292,20 @@ Deno.serve(async (req: Request) => {
     return reply({ ok: true, now: now(), error, result: await chatView(chat, who, body.after) });
   }
 
+  if (typeof body.action === "string" && MAIL_ORDERS.has(body.action)) {
+    const me = await store.player(userId);
+    if (me === null) return reply({ ok: false, error: "No castle yet.", needs_join: true });
+    let error = "";
+    if (body.action === "mail_send") {
+      const a = me.alliance_id === null ? null : await store.alliance(me.alliance_id);
+      error = await sendLetter(mail, directory, { user: userId, name: me.name, alliance_id: a === null ? null : me.alliance_id,
+        tag: a?.tag ?? "", role: me.role }, body, now());
+    } else if (body.action !== "mail") {
+      error = await mailOrder(mail, userId, body);
+    }
+    return reply({ ok: true, now: now(), error, result: await mailView(mail, userId, body) });
+  }
+
   if (typeof body.action === "string" && ALLIANCE_ORDERS.has(body.action)) {
     const error = await handle(store, allianceRules, userId, body, now());
     return reply({ ok: true, now: now(), error, result: await allianceView(store, allianceRules, userId) });
@@ -1481,6 +1510,9 @@ Deno.serve(async (req: Request) => {
     if (body.action === "spy" && outcome.error === "" && target) {
       const helpers = await helpersAt(target.row.user_id, t);
       result = spyReport(rules, pvp, target.row as PlayerState, t, helpers.map((h) => h.army));
+      // Both sides keep a report: the spy's of what they saw, the castle's of who came looking.
+      await saveReports(userId, [{ ...result, kind: "spy", role: "spy" }]);
+      await saveReports(target.row.user_id, [{ kind: "spy", role: "target", name: stored.name, at: t }]);
     }
     if (founded !== null) {
       if (outcome.error !== "") await store.remove(founded);

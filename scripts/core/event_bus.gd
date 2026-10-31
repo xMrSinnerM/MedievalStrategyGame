@@ -53,3 +53,5 @@ signal encounter_selected(encounter_id: String)
 signal map_focus_requested(map_pos: Vector2)
 ## Opens the town buildings window of a capital (its village id).
 signal town_buildings_requested(village_id: String)
+## Online: open the mail window to write a letter to this player.
+signal letter_requested(player_name: String)
