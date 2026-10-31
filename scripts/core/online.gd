@@ -73,6 +73,31 @@ func sign_in(p_email: String, password: String) -> String:
 	return _auth_error(res)
 
 
+func send_reset_code(p_email: String) -> String:
+	## Emails a password reset code. Returns "" when sent, or why not. The
+	## server answers the same for unknown emails, so nobody can probe them.
+	var res := await _post("/auth/v1/recover", {"email": p_email.strip_edges()}, false)
+	if res.status == 200:
+		return ""
+	return _auth_error(res)
+
+
+func reset_password(p_email: String, code: String, password: String) -> String:
+	## Checks the emailed code, which signs in, then sets the new password.
+	## Returns "" when done (and signed in), or why not.
+	var res := await _post("/auth/v1/verify",
+			{"type": "recovery", "email": p_email.strip_edges(), "token": code.strip_edges()}, false)
+	if not res.data.has("access_token"):
+		return _auth_error(res)
+	_take_session(res.data, p_email)
+	res = await _post("/auth/v1/user", {"password": password}, true, HTTPClient.METHOD_PUT)
+	if res.status == 200:
+		return ""
+	var why := _auth_error(res)
+	sign_out()
+	return why
+
+
 func resume() -> bool:
 	## Signs in again with the remembered session, if there is one.
 	if _refresh == "":
@@ -187,14 +212,19 @@ func _auth_error(res: Dictionary) -> String:
 			return "Choose a longer password (at least 6 characters)."
 		"email_not_confirmed":
 			return "Confirm your email first: click the link we sent you."
+		"otp_expired":
+			return "That code is wrong or has expired. Ask for a new one."
+		"same_password":
+			return "Choose a password you haven't used for this account."
 		"over_email_send_rate_limit", "over_request_rate_limit":
 			return "Too many tries. Wait a minute and try again."
 	var msg := String(res.data.get("msg", res.data.get("error_description", "")))
 	return msg if msg != "" else "The server answered with an error (%d)." % res.status
 
 
-func _post(path: String, body: Dictionary, signed: bool) -> Dictionary:
-	## POSTs JSON and returns {"status": HTTP code (0 if unreachable), "data": Dictionary}.
+func _post(path: String, body: Dictionary, signed: bool,
+		method := HTTPClient.METHOD_POST) -> Dictionary:
+	## POSTs (or PUTs) JSON and returns {"status": HTTP code (0 if unreachable), "data": Dictionary}.
 	if url == "":
 		return {"status": 0, "data": {}}
 	var http := HTTPRequest.new()
@@ -205,7 +235,7 @@ func _post(path: String, body: Dictionary, signed: bool) -> Dictionary:
 	var headers := PackedStringArray(["Content-Type: application/json", "apikey: " + key])
 	if signed:
 		headers.append("Authorization: Bearer " + _access)
-	if http.request(url + path, headers, HTTPClient.METHOD_POST, JSON.stringify(body)) != OK:
+	if http.request(url + path, headers, method, JSON.stringify(body)) != OK:
 		http.queue_free()
 		return {"status": 0, "data": {}}
 	var res: Array = await http.request_completed
