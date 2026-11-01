@@ -162,7 +162,16 @@ func refresh() -> void:
 	_load.visible = Economy.has_save()
 	_buttons.visible = true
 	_loading.visible = false
+	_loading.text = "Loading the realm..."
 	_show(null)
+
+
+func show_signing_out() -> void:
+	## While leaving an online game and signing out.
+	_show(null)
+	_buttons.visible = false
+	_loading.text = "Signing out..."
+	_loading.visible = true
 
 
 func _show(sub_panel: Control) -> void:
@@ -237,6 +246,7 @@ func _start(slot: int, new_game: bool) -> void:
 func _start_online(answer: Dictionary) -> void:
 	_show(null)
 	_buttons.visible = false
+	_loading.text = "Loading the realm..."
 	_loading.visible = true
 	await get_tree().process_frame
 	await get_tree().process_frame

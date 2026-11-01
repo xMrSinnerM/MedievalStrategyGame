@@ -1,6 +1,7 @@
 extends PanelContainer
 ## The title screen's "Play online" panel: sign in or create an account
-## (email and password), reset a forgotten password with an emailed code,
+## (email and password), carry on as the account this device remembers or
+## log out of it, reset a forgotten password with an emailed code,
 ## then name your castle the first time. Fires
 ## `started` with the server's answer once there is a castle to play.
 
@@ -9,6 +10,8 @@ signal closed
 
 var _title: Label
 var _form: VBoxContainer
+var _known: VBoxContainer
+var _known_text: Label
 var _email: LineEdit
 var _password: LineEdit
 var _reset: VBoxContainer
@@ -30,6 +33,22 @@ func _ready() -> void:
 	add_child(box)
 	_title = MenuStyle.title("Play online", 28)
 	box.add_child(_title)
+
+	_known = VBoxContainer.new()
+	_known.add_theme_constant_override("separation", 12)
+	_known.visible = false
+	box.add_child(_known)
+	_known_text = MenuStyle.label("", 18)
+	_known_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_known_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_known.add_child(_known_text)
+	var known_row := HBoxContainer.new()
+	known_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	known_row.add_theme_constant_override("separation", 12)
+	var play := _button("Play", _resume, 200.0)
+	known_row.add_child(play)
+	known_row.add_child(_button("Log out", _log_out, 200.0))
+	_known.add_child(known_row)
 
 	_form = VBoxContainer.new()
 	_form.add_theme_constant_override("separation", 10)
@@ -109,20 +128,39 @@ func _ready() -> void:
 
 
 func open() -> void:
-	## Shows the panel; with a remembered session it signs straight back in.
+	## Shows the panel; with a remembered session it offers to carry on as
+	## that account or to log out of it.
 	_show_form()
 	_email.text = Online.email
 	_password.text = ""
 	_say("")
 	if Online.has_saved_session():
-		_say("Signing in as %s..." % Online.email)
-		_lock(true)
-		var ok: bool = await Online.resume()
-		_lock(false)
-		if ok:
-			await _enter()
-		else:
-			_say("Please sign in again.")
+		_form.visible = false
+		_known.visible = true
+		_known_text.text = "Signed in as %s" % Online.email
+
+
+func _resume() -> void:
+	_say("Signing in as %s..." % Online.email)
+	_lock(true)
+	var ok: bool = await Online.resume()
+	_lock(false)
+	if ok:
+		await _enter()
+	else:
+		_show_form()
+		_say("Please sign in again.")
+
+
+func _log_out() -> void:
+	_say("Signing out...")
+	_lock(true)
+	await Online.log_out()
+	_lock(false)
+	_show_form()
+	_email.text = Online.email
+	_say("Signed out. Sign in with any account.")
+	_password.grab_focus()
 
 
 func _sign_in() -> void:
@@ -208,6 +246,7 @@ func _back() -> void:
 
 func _show_form() -> void:
 	_form.visible = true
+	_known.visible = false
 	_reset.visible = false
 	_naming.visible = false
 	_title.text = "Play online"
@@ -222,6 +261,7 @@ func _enter() -> void:
 	_lock(false)
 	if answer.get("needs_join", false):
 		_form.visible = false
+		_known.visible = false
 		_naming.visible = true
 		_title.text = "Your castle"
 		_say("")

@@ -5,10 +5,12 @@ extends CanvasLayer
 
 signal main_menu_requested
 signal tutorial_requested
+signal log_out_requested
 
 var _panel: MenuBanner
 var _settings: PanelContainer
 var _note: Label
+var _log_out: Button
 
 
 func _ready() -> void:
@@ -42,6 +44,11 @@ func _ready() -> void:
 	box.add_child(MenuStyle.menu_button("Main menu", func() -> void:
 		close()
 		main_menu_requested.emit(), 280.0))
+	# Online only: leaves the game and signs out, so another account can sign in.
+	_log_out = MenuStyle.menu_button("Log out", func() -> void:
+		close()
+		log_out_requested.emit(), 280.0)
+	box.add_child(_log_out)
 	# A browser tab can't quit itself; players just close the tab.
 	if not OS.has_feature("web"):
 		box.add_child(MenuStyle.menu_button("Quit to desktop", func() -> void:
@@ -63,7 +70,11 @@ func open() -> void:
 	visible = true
 	_panel.visible = true
 	_settings.visible = false
-	_note.text = "Playing slot %d. Esc to resume." % Economy.slot
+	_log_out.visible = Economy.online
+	if Economy.online:
+		_note.text = "Signed in as %s. Esc to resume." % Online.email
+	else:
+		_note.text = "Playing slot %d. Esc to resume." % Economy.slot
 	get_tree().paused = true
 
 
@@ -85,4 +96,7 @@ func toggle() -> void:
 
 func _save() -> void:
 	Economy.save_game()
+	if Economy.online:
+		_note.text = "Online games are saved on the server as you play."
+		return
 	_note.text = "Saved to slot %d at %s" % [Economy.slot, Time.get_time_string_from_system().substr(0, 5)]
