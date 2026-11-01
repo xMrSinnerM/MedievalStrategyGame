@@ -105,7 +105,6 @@ var season_rules: SeasonRules
 var chest_rules: ChestRules
 ## Bandit camps, merchant caravans and treasure sites along the roads (data/encounters.json).
 var encounter_rules: EncounterRules
-var weather_rules: WeatherRules
 var sabotage_rules: SabotageRules
 ## The achievement tiers already announced (null: take the next ones silently).
 var _known_tiers: Variant = null
@@ -289,7 +288,6 @@ func ensure_loaded() -> void:
 	season_rules = SeasonRules.load_default()
 	chest_rules = ChestRules.load_default()
 	encounter_rules = EncounterRules.load_default()
-	weather_rules = WeatherRules.load_default()
 	sabotage_rules = SabotageRules.load_default()
 	achievements = Achievements.load_default()
 	gear_rules = GearRules.load_default()
@@ -365,7 +363,6 @@ func begin_new(n := 1) -> void:
 	season_rules = SeasonRules.load_default()
 	chest_rules = ChestRules.load_default()
 	encounter_rules = EncounterRules.load_default()
-	weather_rules = WeatherRules.load_default()
 	sabotage_rules = SabotageRules.load_default()
 	achievements = Achievements.load_default()
 	gear_rules = GearRules.load_default()
@@ -387,7 +384,6 @@ func begin_load(n := 1) -> void:
 	season_rules = SeasonRules.load_default()
 	chest_rules = ChestRules.load_default()
 	encounter_rules = EncounterRules.load_default()
-	weather_rules = WeatherRules.load_default()
 	sabotage_rules = SabotageRules.load_default()
 	achievements = Achievements.load_default()
 	gear_rules = GearRules.load_default()
@@ -570,17 +566,7 @@ func home_position() -> Vector2:
 
 
 func march_time_to(camp: BaronCamp) -> float:
-	return baron_rules.march_time(home_position().distance_to(camp.position)) * player_castle.march_factor() * weather_slow(camp.position)
-
-
-func weather_slow(to: Vector2) -> float:
-	## How much the weather slows a march from home to `to` setting off now (1 = not at all).
-	return weather_rules.march_slow(home_position(), to, now()) if weather_rules != null else 1.0
-
-
-func weather_on_march(to: Vector2) -> Dictionary:
-	## The rain or storm a march from home to `to` would set off through now ({} for none).
-	return weather_rules.march_cell(home_position(), to, now()) if weather_rules != null else {}
+	return baron_rules.march_time(home_position().distance_to(camp.position)) * player_castle.march_factor()
 
 
 func check_attack(camp_id: String, army: Dictionary, waves: Array = [], tools := {}, commander := 0) -> String:
@@ -971,7 +957,6 @@ func begin_online(answer: Dictionary) -> void:
 	season_rules = SeasonRules.load_default()
 	chest_rules = ChestRules.load_default()
 	encounter_rules = EncounterRules.load_default()
-	weather_rules = WeatherRules.load_default()
 	sabotage_rules = SabotageRules.load_default()
 	achievements = Achievements.load_default()
 	_known_tiers = null
@@ -1301,8 +1286,7 @@ func other_position(player_name: String) -> Vector2:
 
 
 func march_time_to_player(player_name: String) -> float:
-	return baron_rules.march_time(home_position().distance_to(other_position(player_name))) * player_castle.march_factor() \
-			* weather_slow(other_position(player_name))
+	return baron_rules.march_time(home_position().distance_to(other_position(player_name))) * player_castle.march_factor()
 
 
 func is_protected() -> bool:
@@ -2062,8 +2046,7 @@ func village_peace_until(id: String) -> float:
 
 
 func village_march_time(id: String) -> float:
-	return baron_rules.march_time(home_position().distance_to(village_position(id))) * player_castle.march_factor() \
-			* weather_slow(village_position(id))
+	return baron_rules.march_time(home_position().distance_to(village_position(id))) * player_castle.march_factor()
 
 
 func check_village_attack(id: String, army: Dictionary, waves: Array = [], tools := {}, commander := 0) -> String:

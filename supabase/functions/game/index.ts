@@ -137,7 +137,6 @@ import loginData from "../../../data/login.json" with { type: "json" };
 import seasonsData from "../../../data/seasons.json" with { type: "json" };
 import chestsData from "../../../data/chests.json" with { type: "json" };
 import encountersData from "../../../data/encounters.json" with { type: "json" };
-import weatherData from "../../../data/weather.json" with { type: "json" };
 import sabotageData from "../../../data/sabotage.json" with { type: "json" };
 import roadsData from "../../../data/roads.json" with { type: "json" };
 import gearData from "../../../data/gear.json" with { type: "json" };
@@ -183,7 +182,6 @@ import type { AchievementRules } from "../../../server/rules/achievements.ts";
 import type { LoginRules } from "../../../server/rules/login.ts";
 import type { ChestRules } from "../../../server/rules/chests.ts";
 import { encounterRules } from "../../../server/rules/encounters.ts";
-import type { WeatherRules } from "../../../server/rules/weather.ts";
 import type { SabotageRules } from "../../../server/rules/sabotage.ts";
 import { allianceStandings, placeIn, renown, seasonColumns, seasonEnd, seasonKey, type SeasonRules } from "../../../server/rules/seasons.ts";
 import {
@@ -210,7 +208,6 @@ const loginRules = loginData as unknown as LoginRules;
 const seasonRules = seasonsData as unknown as SeasonRules;
 const chestRules = chestsData as unknown as ChestRules;
 const encounters = encounterRules(encountersData, roadsData);
-const weather = weatherData as unknown as WeatherRules;
 const sabotageRules = sabotageData as unknown as SabotageRules;
 // The calendar with the game owner's changes (admin.ts), loaded with every request.
 let calendar: EventRules = eventRules;
@@ -1466,7 +1463,7 @@ Deno.serve(async (req: Request) => {
       outpostSpot = nearestSpot((world as World).spots, [stored.home_x, stored.home_y], taken);
     }
     const outcome = act(rules, stored, body, t, { pvp, outpostSpot, target: target?.target, homecomings, alliances: allianceRules, aid: aidRules,
-      events: { rules: calendar, world: world as World }, quests: questRules, achievements: achievementRules, login: loginRules, seasons: seasonRules, tourney: tourneyRules, seasonPlace, chests: chestRules, encounters, weather,
+      events: { rules: calendar, world: world as World }, quests: questRules, achievements: achievementRules, login: loginRules, seasons: seasonRules, tourney: tourneyRules, seasonPlace, chests: chestRules, encounters,
       sabotage: sabotageRules, targetCastle: target ? (target.row as PlayerState).castle : undefined, village: village?.target, villageIncome,
       capitalBoost: boost, fortresses: (world as World).fortresses, hordeRank: hordePlace,
       market: { rules: marketRules, open: openOffers, offer: bought?.offer }, marketIncome: market.income, marketItems: market.items });
