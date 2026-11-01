@@ -98,6 +98,7 @@ func _add_camp(camp: BaronCamp) -> void:
 	banner.position = Vector3(-1.5, 0, -0.5)
 	root.add_child(banner)
 	var label := Label3D.new()
+	label.set_meta("plate", "camp")
 	label.font_size = 32
 	label.outline_size = 10
 	label.modulate = Color(1.0, 0.62, 0.5)
@@ -181,6 +182,7 @@ func _make_army() -> Dictionary:
 	model.mesh = frames[0]
 	root.add_child(model)
 	var label := Label3D.new()
+	label.set_meta("plate", "army")
 	label.font_size = 26
 	label.outline_size = 8
 	label.modulate = Color(1.0, 0.86, 0.5)

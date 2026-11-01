@@ -61,6 +61,7 @@ func setup(data: Dictionary) -> void:
 
 	_label = Label3D.new()
 	_label.name = "Label"
+	_label.set_meta("plate", "party")
 	_label.text = "%s (%d)" % [party_name, troops]
 	_label.font_size = 30
 	_label.outline_size = 9

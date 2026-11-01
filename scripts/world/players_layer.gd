@@ -99,6 +99,7 @@ func _make_army(color: Color) -> Dictionary:
 	model.mesh = frames[0]
 	root.add_child(model)
 	var label := Label3D.new()
+	label.set_meta("plate", "army")
 	label.font_size = 26
 	label.outline_size = 8
 	label.modulate = Color(1.0, 0.86, 0.5) if color == MINE else Color(0.9, 0.9, 0.92)

@@ -64,6 +64,7 @@ func _make(e: Dictionary) -> Dictionary:
 		banner.position = Vector3(-2.0, 0, -1.0)
 		model.add_child(banner)
 	var label := Label3D.new()
+	label.set_meta("plate", "tag")
 	label.font_size = 28
 	label.outline_size = 9
 	label.modulate = LABEL_COLORS.get(String(e.kind), Color.WHITE)

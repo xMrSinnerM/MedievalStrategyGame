@@ -25,6 +25,9 @@ func _ready() -> void:
 	Economy.sync_castles(GameData.settlements, GameData.parties)
 	var started := Time.get_ticks_msec()
 	_build_environment()
+	var plates := Nameplates.new()
+	plates.name = "Nameplates"
+	add_child(plates)
 	terrain.build()
 	water.build()
 	rivers.build()

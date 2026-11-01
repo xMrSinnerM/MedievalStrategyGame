@@ -317,6 +317,7 @@ func _siege_reach(settlement: Dictionary) -> float:
 
 func _make_siege_label() -> Label3D:
 	var label := Label3D.new()
+	label.set_meta("plate", "siege")
 	label.name = "SiegeLabel"
 	label.font_size = 34
 	label.outline_size = 10

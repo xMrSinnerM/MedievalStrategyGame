@@ -86,6 +86,7 @@ func _make_cart() -> Dictionary:
 	model.mesh = kit.commit()
 	root.add_child(model)
 	var label := Label3D.new()
+	label.set_meta("plate", "army")
 	label.font_size = 26
 	label.outline_size = 8
 	label.modulate = Color(1.0, 0.9, 0.6)

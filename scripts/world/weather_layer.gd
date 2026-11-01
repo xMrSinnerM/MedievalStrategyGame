@@ -126,6 +126,7 @@ func _make(cell: Dictionary) -> Dictionary:
 		flash.position = Vector3(0, -40.0, 0)
 		root.add_child(flash)
 	var label := Label3D.new()
+	label.set_meta("plate", "tag")
 	label.font_size = 30
 	label.outline_size = 9
 	label.modulate = LABEL[String(cell.kind)]
