@@ -51,7 +51,6 @@ import type { AchievementRules } from "../rules/achievements.ts";
 import type { LoginRules } from "../rules/login.ts";
 import type { ChestRules } from "../rules/chests.ts";
 import { encounterRules } from "../rules/encounters.ts";
-import type { WeatherRules } from "../rules/weather.ts";
 import type { SabotageRules } from "../rules/sabotage.ts";
 import { allianceStandings, placeIn, renown, seasonColumns, seasonEnd, seasonKey, type SeasonRules } from "../rules/seasons.ts";
 import {
@@ -87,7 +86,6 @@ const loginRules: LoginRules = json("data/login.json");
 const seasonRules: SeasonRules = json("data/seasons.json");
 const chestRules: ChestRules = json("data/chests.json");
 const encounters = encounterRules(json("data/encounters.json"), json("data/roads.json"));
-const weather: WeatherRules = json("data/weather.json");
 const sabotageRules: SabotageRules = json("data/sabotage.json");
 // The calendar with the owner's changes (kept on the shifted clock below).
 let eventRules: EventRules = eventRules0;
@@ -866,7 +864,7 @@ createServer(async (req, res) => {
     }
     const outcome = act(rules, me, body, t,
       { pvp, outpostSpot, target: target?.target, homecomings, alliances: allianceRules, aid: aidRules,
-        events: { rules: eventRules, world, offset: EVENTS_OFFSET }, quests: questRules, achievements: achievementRules, login: loginRules, seasons: seasonRules, tourney: tourneyRules, seasonPlace, chests: chestRules, encounters, weather,
+        events: { rules: eventRules, world, offset: EVENTS_OFFSET }, quests: questRules, achievements: achievementRules, login: loginRules, seasons: seasonRules, tourney: tourneyRules, seasonPlace, chests: chestRules, encounters,
         sabotage: sabotageRules, targetCastle: target ? players.get(target.user)?.castle : undefined, village: village?.target, villageIncome,
         capitalBoost: capitalBoost(rules, allianceCapitals(user).levels, allianceCapitals(user).guilds), fortresses: world.fortresses, hordeRank: hordePlace,
         market: { rules: marketRules, open: offers.filter((o) => o.seller === user && o.state === "open" && o.expires > t &&

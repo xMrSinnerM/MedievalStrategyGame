@@ -849,14 +849,14 @@ func _update() -> void:
 			var carry := br.carry(army) * (1.0 + float(fx.get("loot", 0.0)))
 			lines.append("They can carry %d of the %d %s it holds" % [mini(int(carry), stock), stock, info.resource])
 		var march := Economy.village_march_time(_village)
-		lines.append("March: %s there, %s back" % [_clock(march), _clock(march)] + _weather_note(Economy.village_position(_village)))
+		lines.append("March: %s there, %s back" % [_clock(march), _clock(march)])
 		why = Economy.check_village_attack(_village, army, waves, plan_tools(), commander_id())
 	elif _player != "":
 		if total > 0:
 			lines.append("A win carries off up to %d%% of each resource, as much as they can carry (%d)"
 					% [roundi(float(Economy.pvp.get("loot_share", 0.25)) * 100.0), int(br.carry(army) * (1.0 + float(fx.get("loot", 0.0))))])
 		var march := Economy.march_time_to_player(_player)
-		lines.append("March: %s there, %s back" % [_clock(march), _clock(march)] + _weather_note(Economy.other_position(_player)))
+		lines.append("March: %s there, %s back" % [_clock(march), _clock(march)])
 		why = Economy.check_raid(_player, army, waves, plan_tools(), commander_id())
 	else:
 		var camp := Economy.get_baron(camp_id)
@@ -871,7 +871,7 @@ func _update() -> void:
 			lines.append("They can carry %d of the camp's %d loot" % [mini(int(carry), loot_total), loot_total]
 					+ ("" if carry >= loot_total else " (send more to carry it all)"))
 		var march := Economy.march_time_to(camp)
-		lines.append("March: %s there, %s back" % [_clock(march), _clock(march)] + _weather_note(camp.position))
+		lines.append("March: %s there, %s back" % [_clock(march), _clock(march)])
 		if not camp.is_ready(Economy.now()):
 			lines.append("The camp is rebuilding for %s." % _clock(camp.rebuilt_at - Economy.now()))
 		why = Economy.check_attack(camp_id, army, waves, plan_tools(), commander_id())
@@ -879,15 +879,6 @@ func _update() -> void:
 		lines.append(why)
 	_summary.text = "\n".join(lines)
 	_send.disabled = why != ""
-
-
-static func _weather_note(to: Vector2) -> String:
-	## " (a storm on the way: 30% slower)" when the weather slows this march.
-	var cell := Economy.weather_on_march(to)
-	if cell.is_empty():
-		return ""
-	return " (%s on the way: %d%% slower)" % [Economy.weather_rules.kind_name(String(cell.kind)).to_lower(),
-		roundi(float(Economy.weather_rules.kinds[String(cell.kind)].slow) * 100.0)]
 
 
 func _set_losses(label: Label, n: int, of: int) -> void:
