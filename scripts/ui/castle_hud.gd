@@ -21,6 +21,7 @@ var _research: PanelContainer
 var _research_button: Button
 var _research_bar: ProgressBar
 var _build_menu: PanelContainer
+var _build_toggle: Button      ## opens and closes the build menu
 var _build_buttons := {}       ## type -> Button
 var _build_tab := "buildings"  ## "buildings" or "decorations": which the build menu shows
 var _tab_buttons := {}         ## tab -> Button
@@ -50,6 +51,9 @@ func _ready() -> void:
 	Online.order_failed.connect(_on_order_failed)
 	_build_top_bar()
 	_build_build_menu()
+	_build_build_toggle()
+	get_viewport().size_changed.connect(_fit_top_bar)
+	get_viewport().size_changed.connect(_place_build_toggle)
 	_build_side_panel()
 	_build_queue_panel()
 	_hint = _label("", 15, TEXT)
@@ -85,7 +89,7 @@ func _ready() -> void:
 	_toast.add_theme_constant_override("outline_size", 7)
 	_toast.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.85))
 	add_child(_toast)
-	var controls := _label("WASD / drag: pan    Q E / right-drag: rotate    wheel: zoom (touch: pinch, twist)    Esc: deselect    C: world map    J: quests    Y: achievements", 13, MUTED)
+	var controls := _label("WASD / drag: pan    Q E / right-drag: rotate    wheel: zoom (touch: pinch, twist)    B: build    Esc: deselect    C: world map    J: quests    Y: achievements", 13, MUTED)
 	controls.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
 	controls.offset_left = 12
 	controls.offset_top = -26
@@ -134,7 +138,10 @@ func show_castle() -> void:
 	view.selection_changed.connect(_on_selection_changed, CONNECT_REFERENCE_COUNTED)
 	view.mode_changed.connect(_on_mode_changed, CONNECT_REFERENCE_COUNTED)
 	view.message.connect(_show_toast, CONNECT_REFERENCE_COUNTED)
-	_build_menu.visible = view.editable
+	# The build menu waits behind the Build button until it is wanted.
+	_build_menu.visible = false
+	_build_toggle.visible = view.editable
+	_build_toggle.button_pressed = false
 	# Only your main castle has a warband; castles you capture just hold a garrison.
 	_warband_button.visible = view.editable and view.castle == Economy.player_castle and not Economy.online
 	_warband.visible = false
@@ -147,6 +154,7 @@ func show_castle() -> void:
 	_show_build_tab(_build_tab)
 	_queue_signature = "?"
 	_on_mode_changed(view.mode)
+	_fit_top_bar()
 	_refresh()
 
 
@@ -232,10 +240,88 @@ func _build_build_menu() -> void:
 		if Economy.rules.is_perimeter(type) or type == "keep":
 			continue
 		var b := _build_button(type)
-		b.pressed.connect(func() -> void: view.start_placing(type))
+		b.pressed.connect(func() -> void:
+			view.start_placing(type)
+			_set_build_menu(false))
 		b.add_to_group("tutorial_build_" + type)
 		row.add_child(b)
 		_build_buttons[type] = b
+
+
+func _build_build_toggle() -> void:
+	## The Build button bottom left: a gold medallion with a hammer. It opens
+	## the build menu; picking a building to place closes it again.
+	var b := Button.new()
+	_build_toggle = b
+	b.toggle_mode = true
+	b.focus_mode = Control.FOCUS_NONE
+	b.tooltip_text = "Build (B): buildings and decorations"
+	b.custom_minimum_size = Vector2(92, 84)
+	b.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
+	b.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	b.offset_left = 16
+	b.offset_right = 108
+	b.offset_bottom = -34
+	b.offset_top = -118
+	for state: Array in [["normal", Color(0.1, 0.075, 0.055, 0.96), GameTheme.RIM], ["hover", Color(0.2, 0.08, 0.05, 0.96), GameTheme.RIM_BRIGHT],
+			["pressed", Color(0.36, 0.08, 0.05, 0.96), GameTheme.RIM_BRIGHT], ["hover_pressed", Color(0.4, 0.09, 0.06, 0.96), GameTheme.RIM_BRIGHT]]:
+		var plate := CardBox.new()
+		plate.bg_color = state[1]
+		plate.border_color = state[2]
+		b.add_theme_stylebox_override(state[0], plate)
+	var box := VBoxContainer.new()
+	box.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	box.alignment = BoxContainer.ALIGNMENT_CENTER
+	box.add_theme_constant_override("separation", 2)
+	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	b.add_child(box)
+	var picture := Medallion.make("builders", 50)
+	picture.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	box.add_child(picture)
+	var caption := _label("Build", 16, GameTheme.GOLD)
+	caption.add_theme_font_override("font", GameTheme.TITLE_FONT)
+	caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	caption.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	box.add_child(caption)
+	b.toggled.connect(_set_build_menu)
+	b.add_to_group("tutorial_build_menu")
+	add_child(b)
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo and event.physical_keycode == KEY_B \
+			and not get_tree().paused and _build_toggle.visible:
+		_set_build_menu(not _build_menu.visible)
+		get_viewport().set_input_as_handled()
+
+
+func _set_build_menu(open: bool) -> void:
+	if view != null and not view.editable:
+		open = false
+	_build_menu.visible = open
+	_build_toggle.set_pressed_no_signal(open)
+	_place_build_toggle.call_deferred()
+
+
+func _fit_top_bar() -> void:
+	## Under 1500 wide the castle's name gives its room to the counters and
+	## the Warband, Defence and Map buttons (the crest stays).
+	if is_inside_tree():
+		_title.visible = get_viewport().get_visible_rect().size.x >= 1500.0
+
+
+func _place_build_toggle() -> void:
+	## On narrow screens the open menu reaches the corner: the button then
+	## sits just above it.
+	if not is_inside_tree():
+		return
+	var low := -34.0
+	if _build_menu.visible:
+		var menu := _build_menu.get_global_rect()
+		if menu.position.x < _build_toggle.offset_right + 4.0:
+			low = -(get_viewport().get_visible_rect().size.y - menu.position.y) - 8.0
+	_build_toggle.offset_bottom = low
+	_build_toggle.offset_top = low - 84.0
 
 
 func _show_build_tab(tab: String) -> void:

@@ -22,7 +22,7 @@
 		{
 			"id": "build_barracks",
 			"title": "Raise a barracks",
-			"text": "Soldiers keep us safe and bring home loot. Pick Barracks in the build bar at the bottom, then click a free spot inside the walls."
+			"text": "Soldiers keep us safe and bring home loot. Press Build at the bottom left, pick Barracks, then click a free spot inside the walls."
 		},
 		{
 			"id": "wait_barracks",
