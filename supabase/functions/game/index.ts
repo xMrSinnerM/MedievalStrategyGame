@@ -46,6 +46,11 @@
 // POST { "action": "equip", "who": commander id | "castellan", "item": id }   gear from your bag
 // POST { "action": "unequip", "who": commander id | "castellan", "slot": "helmet" | "armour" | "weapon" | "banner" }
 // POST { "action": "sell_gear", "item": id }     sells gear from your bag for gold
+// POST { "action": "melt_gear", "item": id }     melts gear from your bag down for Marks
+// POST { "action": "socket_gem", "item": id, "gem": "ruby:2" }   sets a gem from your pouch into gear in your bag
+// POST { "action": "unsocket_gem", "item": id, "index": n }      prises a gem back out, for Marks
+// POST { "action": "fuse_gems", "gem": "ruby:2" } fuses three of a gem into one of the next tier
+// POST { "action": "forge_gear", "items": [id, id, id] }        three pieces of one rarity into one of the next (data/gear.json)
 // POST { "action": "set_layout", "layout": { "left", "front", "right", "courtyard" } }   percent of the garrison at each post
 // POST { "action": "spy", "target": "name" }
 // POST { "action": "sabotage_player", "target": "name", "mission": "steal" | "burn_stores" | "burn_walls", "resource": "wood", "agents": n }
@@ -147,6 +152,7 @@ import world from "../../../server/world/world.json" with { type: "json" };
 import { makeRules } from "../../../server/rules/load.ts";
 import { effectAt, eventsView, lastHorde, lastInvasion, withOverrides, type EventOverride, type EventRules } from "../../../server/rules/events.ts";
 import { CastleState } from "../../../server/rules/castle_state.ts";
+import type { Item } from "../../../server/rules/gear.ts";
 import { nearestSpot } from "../../../server/rules/outposts.ts";
 import { CapitalRules, rulesFor, settled, type VillageInfo, type VillageState } from "../../../server/rules/villages.ts";
 import { capitalBoost, resolveVillageRaid, type VillageTarget } from "./villages.ts";
@@ -161,7 +167,7 @@ import { DatabaseChatStore } from "./chat_store.ts";
 import { type Directory, MAIL_ORDERS, mailOrder, mailView, sendLetter } from "./mail.ts";
 import { DatabaseMailStore } from "./mail_store.ts";
 import { deliver, recall, type Aid, type AidRules } from "./aid.ts";
-import { goingRates, type MarketReport, type MarketRules, type Offer } from "./market.ts";
+import { goingRates, isItemGood, MARKS, receiveItem, type MarketReport, type MarketRules, type Offer } from "./market.ts";
 import { invade } from "./invasion.ts";
 import { hordeArrives, prizeFor } from "./horde.ts";
 import {
@@ -534,6 +540,23 @@ async function refund(userId: string, cost: Record<string, number>): Promise<Pla
   return null;
 }
 
+/** Gives back the gear or gems of a market offer that couldn't be stored; the new state, or null. */
+async function refundItem(userId: string, offer: Pick<Offer, "give" | "give_amount" | "item">): Promise<PlayerState | null> {
+  for (let attempt = 0; attempt < RETRIES; attempt++) {
+    const { data: row } = await admin.from("players").select(COLUMNS).eq("user_id", userId).maybeSingle();
+    if (!row) return null;
+    const { version, ...stored } = row as PlayerState & { version: number };
+    const castle = structuredClone(stored.castle);
+    const state = CastleState.fromDict(rules.buildings, castle);
+    receiveItem(state, offer);
+    const saved = { ...castle, armoury: state.armoury };
+    const { data: done } = await admin.from("players").update({ castle: saved, version: version + 1 })
+      .eq("user_id", userId).eq("version", version).select("version");
+    if (done && done.length > 0) return { ...stored, castle: saved };
+  }
+  return null;
+}
+
 /** The columns other players can see, worked out from a player's state. */
 function publicColumns(state: PlayerState) {
   return { level: castleLevel(state.castle), might: might(state.castle, pvp), ...seasonColumns(state.castle, seasonRules),
@@ -654,7 +677,7 @@ async function resolveRaids(userId: string) {
 
 function offerFromRow(r: Row): Offer {
   return { id: Number(r.id), seller_name: r.seller_name, give: r.give, give_amount: r.give_amount, want: r.want,
-    want_amount: r.want_amount, proceeds: r.proceeds, posted: r.posted, expires: r.expires };
+    want_amount: r.want_amount, proceeds: r.proceeds, posted: r.posted, expires: r.expires, ...(r.item ? { item: r.item } : {}) };
 }
 
 /** The market as the market screen shows it: everyone else's open offers, yours, your recent sales and the going rates. */
@@ -677,10 +700,11 @@ async function marketView(userId: string) {
 }
 
 /** Takes the proceeds of your sales and the goods of your cancelled and expired offers; your castle gets them with this request. */
-async function collectMarket(userId: string): Promise<{ income: Record<string, number>; reports: MarketReport[] }> {
+async function collectMarket(userId: string): Promise<{ income: Record<string, number>; items: Item[]; reports: MarketReport[] }> {
   const t = now();
   const { data } = await admin.from("market_offers").select("*").eq("seller", userId).in("state", ["open", "buying", "sold", "cancelled"]);
   const income: Record<string, number> = {};
+  const items: Item[] = [];
   const reports: MarketReport[] = [];
   for (const r of (data ?? []) as Row[]) {
     // A sale whose buyer never finished paying (their request failed) goes back up.
@@ -696,13 +720,15 @@ async function collectMarket(userId: string): Promise<{ income: Record<string, n
     const { data: took } = await admin.from("market_offers").update({ state: next }).eq("id", r.id).eq("state", r.state).select("id");
     if (!took || took.length === 0) continue;
     const [good, amount] = r.state === "sold" ? [r.want, r.proceeds] : [r.give, r.give_amount];
-    income[good] = (income[good] ?? 0) + Number(amount);
+    // Gear comes back as itself; everything else (resources, Marks, gems) by the amount.
+    if (r.state !== "sold" && r.item) items.push(r.item as Item);
+    else income[good] = (income[good] ?? 0) + Number(amount);
     if (r.state === "open") {
       reports.push({ kind: "market", event: "expired", at: Number(r.expires), give: r.give, give_amount: r.give_amount,
-        want: r.want, want_amount: r.want_amount });
+        want: r.want, want_amount: r.want_amount, ...(r.item ? { item_name: String(r.item.name ?? "") } : {}) });
     }
   }
-  return { income, reports };
+  return { income, items, reports };
 }
 
 /** Takes your offer down; its goods come home with this request. The error, or "". */
@@ -1387,8 +1413,11 @@ Deno.serve(async (req: Request) => {
   }
   let openOffers = 0;
   if (body.action === "post_offer") {
-    const { count } = await admin.from("market_offers").select("id", { count: "exact", head: true })
+    // Gear and gem offers (for Marks) and resource offers each have their own limit.
+    const forMarks = body.give === "gear" || body.want === MARKS || isItemGood(body.give, rules.gear);
+    const query = admin.from("market_offers").select("id", { count: "exact", head: true })
       .eq("seller", userId).eq("state", "open").gt("expires", now());
+    const { count } = await (forMarks ? query.eq("want", MARKS) : query.neq("want", MARKS));
     openOffers = count ?? 0;
   }
 
@@ -1440,7 +1469,7 @@ Deno.serve(async (req: Request) => {
       events: { rules: calendar, world: world as World }, quests: questRules, achievements: achievementRules, login: loginRules, seasons: seasonRules, tourney: tourneyRules, seasonPlace, chests: chestRules, encounters, weather,
       sabotage: sabotageRules, targetCastle: target ? (target.row as PlayerState).castle : undefined, village: village?.target, villageIncome,
       capitalBoost: boost, fortresses: (world as World).fortresses, hordeRank: hordePlace,
-      market: { rules: marketRules, open: openOffers, offer: bought?.offer }, marketIncome: market.income });
+      market: { rules: marketRules, open: openOffers, offer: bought?.offer }, marketIncome: market.income, marketItems: market.items });
     // Save only if nobody else changed the row meanwhile; otherwise start over.
     const { data: saved, error: saveError } = await admin.from("players")
       .update({ ...outcome.state, ...publicColumns(outcome.state), version: version + 1, updated_at: new Date().toISOString() })
@@ -1457,7 +1486,7 @@ Deno.serve(async (req: Request) => {
       const o = outcome.offer;
       const { error: offerError } = await admin.from("market_offers").insert({ seller: userId, ...o });
       if (offerError) {
-        const refunded = await refund(userId, { [o.give]: o.give_amount });
+        const refunded = o.want === MARKS ? await refundItem(userId, o) : await refund(userId, { [o.give]: o.give_amount });
         return reply(await view(userId, refunded ?? outcome.state, { error: "The market couldn't take your offer, try again.",
           result: await marketView(userId) }));
       }
@@ -1468,7 +1497,8 @@ Deno.serve(async (req: Request) => {
         const o = bought.offer;
         await admin.from("market_offers").update({ state: "sold", buyer_name: outcome.state.name }).eq("id", o.id).eq("state", "buying");
         await saveReports(bought.seller, [{ kind: "market", event: "sold", at: t, name: outcome.state.name, give: o.give,
-          give_amount: o.give_amount, want: o.want, want_amount: o.want_amount, proceeds: o.proceeds }]);
+          give_amount: o.give_amount, want: o.want, want_amount: o.want_amount, proceeds: o.proceeds,
+          ...(o.item ? { item_name: o.item.name } : {}) }]);
       }
     }
     if (MARKET_ORDERS.has(String(body.action)) || body.market === true) result = await marketView(userId);

@@ -262,6 +262,26 @@ test("commanders and gear", () => {
   same(levels, run.levels, "levels");
 });
 
+test("gems, Marks and the forge", () => {
+  const run = fixtures.gems;
+  const g = rules.gear;
+  const castle = CastleState.createNew(rules.buildings, "g", "Gem Castle", "player", T0);
+  run.drops.forEach((d: any, i: number) => {
+    assert.equal(g.rollGem(d.level, d.seed), d.gem, `gem ${i} (level ${d.level})`);
+    same(g.giveSpoils(castle, d.level, d.seed), d.spoils, `spoils ${i}`);
+  });
+  for (const d of run.bag) g.give(castle, structuredClone(d));
+  run.ops.forEach((op: any, i: number) => {
+    const where = `op ${i} (${op.kind})`;
+    if (op.kind === "socket") assert.equal(g.socket(castle, op.item, op.gem), op.result, where);
+    else if (op.kind === "unsocket") assert.equal(g.unsocket(castle, op.item, op.index), op.result, where);
+    else if (op.kind === "fuse") assert.equal(g.fuse(castle, op.gem), op.result, where);
+    else if (op.kind === "melt") assert.equal(op.result === "skipped" ? "skipped" : g.melt(castle, op.item), op.result, where);
+    else assert.equal(g.forge(castle, op.items), op.result, where);
+  });
+  same(castle.toDict(), run.castle, "castle");
+});
+
 test("outposts", () => {
   const run = fixtures.outpost;
   const o = rules.outposts;

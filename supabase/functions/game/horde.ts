@@ -10,7 +10,7 @@ import type { CampData } from "../../../server/rules/baron_camp.ts";
 import type { CastleState } from "../../../server/rules/castle_state.ts";
 import { activeEvents, lastHorde, type EventRules, type EventTime, type HordePrize, type HordeRules, type MarketItem }
   from "../../../server/rules/events.ts";
-import type { GearRules } from "../../../server/rules/gear.ts";
+import { addMarks, type GearRules } from "../../../server/rules/gear.ts";
 import type { Report } from "../../../server/rules/marches.ts";
 import type { Dict } from "../../../server/rules/util.ts";
 import type { PlayerState, World } from "./game.ts";
@@ -106,7 +106,8 @@ function checkRoom(castle: CastleState, resources: Dict): string {
 }
 
 /** Puts resources (up to the storage), soldiers and siege tools in the castle. */
-function give(castle: CastleState, what: { resources?: Dict; troops?: Dict; tools?: Dict }): void {
+function give(castle: CastleState, what: { resources?: Dict; troops?: Dict; tools?: Dict; marks?: number }): void {
+  if (what.marks) addMarks(castle, what.marks);
   const cap = castle.storageCapacity();
   for (const [r, n] of Object.entries(what.resources ?? {})) {
     if (!(r in castle.resources)) continue;
@@ -137,7 +138,7 @@ export function buy(castle: CastleState, gear: GearRules, horde: HordeState, run
   const room = checkRoom(castle, item.resources ?? {});
   if (room !== "") return room;
   if (item.gear) {
-    if (!gear.give(castle, { id: 0, ...structuredClone(item.gear) })) return "Your gear bag is full.";
+    if (!gear.give(castle, { id: 0, gems: [], ...structuredClone(item.gear) })) return "Your gear bag is full.";
   }
   give(castle, item);
   horde.trophies -= item.cost;

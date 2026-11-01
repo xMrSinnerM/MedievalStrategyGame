@@ -69,6 +69,8 @@ export interface HordePrize {
   resources?: Record<string, number>;
   troops?: Record<string, number>;
   trophies?: number;
+  /** Marks, the trade coin (gear.ts). */
+  marks?: number;
 }
 
 /** How the Ember Horde goes, from data/events.json (its soldiers are in data/horde.json). */

@@ -75,6 +75,8 @@ const DIPLOMACY_TICK := 30.0     ## seconds between rounds of AI diplomacy
 const MAIN_CASTLE := "player_castle"   ## id of your first castle, which can't be captured
 ## Seed offset for what a beaten camp drops (server/rules/marches.ts DROP_SEED).
 const DROP_SEED := 31337
+## Seed offset for the gem a beaten camp drops (server/rules/marches.ts GEM_SEED).
+const GEM_SEED := 27449
 ## Lords leave your main castle alone until its keep reaches this level.
 const PROTECTED_BELOW_KEEP := 2
 ## A new NPC castle starts with this many hours of building behind it (by seed).
@@ -720,8 +722,9 @@ func _fight_camp(m: Dictionary) -> void:
 		led = gear_rules.add_xp(player_castle, int(lead.id), xp)
 	var item := gear_rules.roll_drop(int(result.level), seed_value + DROP_SEED) if result.winner == "a" else {}
 	var bag_full := not item.is_empty() and not gear_rules.give(player_castle, item)
+	var spoils := gear_rules.give_spoils(player_castle, int(result.level), seed_value + GEM_SEED) if result.winner == "a" else {}
 	attack_resolved.emit({
-		"lead": led, "gear": item, "bag_full": bag_full,
+		"lead": led, "gear": item, "bag_full": bag_full, "gem": spoils.get("gem", ""), "marks": spoils.get("marks", 0),
 		"player": "a", "baron": true, "attacker": "Your army", "defender": camp.camp_name,
 		"attacker_faction": player_faction, "defender_faction": "barons", "place": camp.camp_name,
 		"winner": result.winner, "a": result.a, "b": result.b, "loot": 0, "spoils": result.loot,
@@ -1172,7 +1175,7 @@ func _server_report(r: Dictionary) -> Dictionary:
 		"invader": r.has("event"), "points": int(r.get("points", 0)),
 		"horde": r.has("horde"), "trophies": int(r.get("trophies", 0)),
 		"walls": r.get("walls", {}), "courtyard": r.get("courtyard", {}), "tools": r.get("tools", {}),
-		"lead": r.get("lead", {}), "gear": r.get("gear", {}), "bag_full": r.get("bag_full", false),
+		"lead": r.get("lead", {}), "gear": r.get("gear", {}), "bag_full": r.get("bag_full", false), "gem": r.get("gem", ""), "marks": r.get("marks", 0),
 		"fortress": r.get("fortress", false),
 	}
 
@@ -1772,6 +1775,31 @@ func unequip_gear(who: Variant, slot: String) -> String:
 func sell_gear(item_id: int) -> String:
 	## Sells gear from your bag for gold.
 	return _gear_order(gear_rules.sell(player_castle, item_id), {"action": "sell_gear", "item": item_id})
+
+
+func melt_gear(item_id: int) -> String:
+	## Melts gear from your bag down for Marks.
+	return _gear_order(gear_rules.melt(player_castle, item_id), {"action": "melt_gear", "item": item_id})
+
+
+func socket_gem(item_id: int, gem: String) -> String:
+	## Sets a gem from your pouch into gear in your bag.
+	return _gear_order(gear_rules.socket(player_castle, item_id, gem), {"action": "socket_gem", "item": item_id, "gem": gem})
+
+
+func unsocket_gem(item_id: int, index: int) -> String:
+	## Prises a gem out of gear in your bag, for Marks.
+	return _gear_order(gear_rules.unsocket(player_castle, item_id, index), {"action": "unsocket_gem", "item": item_id, "index": index})
+
+
+func fuse_gems(gem: String) -> String:
+	## Fuses three gems of one kind and tier into one of the next tier.
+	return _gear_order(gear_rules.fuse(player_castle, gem), {"action": "fuse_gems", "gem": gem})
+
+
+func forge_gear(item_ids: Array) -> String:
+	## Forges three pieces of gear of one rarity into one of the next.
+	return _gear_order(gear_rules.forge(player_castle, item_ids), {"action": "forge_gear", "items": item_ids})
 
 
 func learn_skill(commander_id: int, skill_id: String) -> String:
@@ -2467,6 +2495,8 @@ func reward_text(tier: Dictionary) -> String:
 	for kind: String in chests:
 		var chest_name := String(chest_rules.kinds[kind].name).to_lower() if chest_rules != null and chest_rules.kinds.has(kind) else kind + " chest"
 		parts.append("%d %s%s" % [int(chests[kind]), chest_name, "s" if int(chests[kind]) != 1 else ""])
+	if int(tier.get("marks", 0)) > 0:
+		parts.append("%d Marks" % int(tier.marks))
 	return ", ".join(parts)
 
 
@@ -2680,9 +2710,104 @@ func check_offer(give: String, give_amount: int, want: String, want_amount: int)
 	var rate := float(want_amount) / give_amount
 	if rate < lo - 1e-9 or rate > hi + 1e-9:
 		return "Ask between %s and %s %s for each %s." % [_rate_text(lo), _rate_text(hi), want, give]
-	if market.get("mine", []).size() >= int(market_rules.get("max_offers", 5)):
+	var mine: Array = market.get("mine", []).filter(func(o: Dictionary) -> bool: return String(o.want) != "marks")
+	if mine.size() >= int(market_rules.get("max_offers", 5)):
 		return "You can have at most %d offers up at once." % int(market_rules.get("max_offers", 5))
 	return ""
+
+
+func market_item_rules() -> Dictionary:
+	## Gear and gems at the market (data/market.json `items`).
+	return market_rules.get("items", {})
+
+
+func item_price_range(good: String, amount: int) -> Array:
+	## [lowest, highest] Marks an offer giving this gear ("gear:rare") or `amount` gems may ask, or [].
+	var r := market_item_rules()
+	if good.begins_with("gear:"):
+		return r.get("gear_price", {}).get(good.substr(5), [])
+	var p := gear_rules.gem_parts(good)
+	var prices: Array = r.get("gem_price", [])
+	if p.is_empty() or int(p.tier) > prices.size():
+		return []
+	var per: Array = prices[int(p.tier) - 1]
+	return [int(per[0]) * amount, int(per[1]) * amount]
+
+
+func check_item_offer(item_id: int, gem: String, amount: int, price: int) -> String:
+	## Why this gear (item_id > 0) or these gems can't go up at the market for
+	## `price` Marks ("" if they can). The server checks again.
+	var unlock := int(market_rules.get("unlock_keep", 1))
+	if player_castle.keep_level() < unlock:
+		return "The market opens at keep level %d." % unlock
+	var good := gem
+	if item_id > 0:
+		var item := {}
+		for x: Dictionary in player_castle.armoury.bag:
+			if int(x.id) == item_id:
+				item = x
+		if item.is_empty():
+			return "There's no such item in your bag."
+		good = "gear:" + String(item.rarity)
+		amount = 1
+	else:
+		if gear_rules.gem_parts(gem).is_empty():
+			return "Choose what to sell."
+		if amount <= 0:
+			return "Choose how many."
+		if amount > int(market_item_rules().get("gem_lot", 10)):
+			return "One offer sells at most %d gems." % int(market_item_rules().get("gem_lot", 10))
+		if amount > GearRules.gem_count(player_castle, gem):
+			return "You have only %d of those gems." % GearRules.gem_count(player_castle, gem)
+	if price <= 0:
+		return "Choose a price."
+	var range_ := item_price_range(good, amount)
+	if range_.is_empty():
+		return "That can't be sold here."
+	if price < int(range_[0]) or price > int(range_[1]):
+		return "Ask between %d and %d Marks for it." % [int(range_[0]), int(range_[1])]
+	var most := int(market_item_rules().get("max_offers", 5))
+	if market.get("mine", []).filter(func(o: Dictionary) -> bool: return String(o.want) == "marks").size() >= most:
+		return "You can have at most %d gear and gem offers up at once." % most
+	return ""
+
+
+func post_item_offer(item_id: int, gem: String, amount: int, price: int) -> String:
+	## Puts gear from your bag (item_id > 0) or gems from your pouch up at the
+	## market for Marks; they leave your armoury here straight away.
+	var why := check_item_offer(item_id, gem, amount, price)
+	if why != "":
+		return why
+	var order := {"action": "post_offer", "want": "marks", "want_amount": price}
+	if item_id > 0:
+		order["give"] = "gear"
+		order["item"] = item_id
+		var bag: Array = player_castle.armoury.bag
+		for i in bag.size():
+			if int(bag[i].id) == item_id:
+				bag.remove_at(i)
+				break
+	else:
+		order["give"] = gem
+		order["give_amount"] = amount
+		GearRules.add_gems(player_castle, gem, -amount)
+	get_node("/root/Online").order(order)
+	changed.emit()
+	return ""
+
+
+func market_good_name(good: String, amount: int, item: Variant = null) -> String:
+	## "1200 wood", "40 Marks", "3 Flawed Rubies" or the gear's name.
+	if item is Dictionary and not item.is_empty():
+		return String(item.get("name", "gear"))
+	if good == "marks":
+		return "%d Mark%s" % [amount, "" if amount == 1 else "s"]
+	if gear_rules != null and not gear_rules.gem_parts(good).is_empty():
+		var gem_name := gear_rules.gem_name(good)
+		return "%d %s" % [amount, gem_name if amount == 1 else (gem_name + "s").replace("ys", "ies")]
+	if good.begins_with("gear:"):
+		return "%s gear" % good.substr(5)
+	return "%d %s" % [amount, good]
 
 
 func post_offer(give: String, give_amount: int, want: String, want_amount: int) -> String:
@@ -2702,6 +2827,12 @@ func check_buy(offer: Dictionary) -> String:
 	var unlock := int(market_rules.get("unlock_keep", 1))
 	if player_castle.keep_level() < unlock:
 		return "The market opens at keep level %d." % unlock
+	if String(offer.want) == "marks":
+		if int(player_castle.armoury.get("marks", 0)) < int(offer.want_amount):
+			return "You don't have enough Marks."
+		if String(offer.give).begins_with("gear:") and player_castle.armoury.bag.size() >= gear_rules.bag_size:
+			return "Your gear bag is full."
+		return ""
 	if floori(float(player_castle.resources.get(offer.want, 0.0))) < int(offer.want_amount):
 		return "You don't have enough %s." % offer.want
 	if float(player_castle.resources.get(offer.give, 0.0)) + int(offer.give_amount) > player_castle.storage_capacity():
@@ -2738,16 +2869,17 @@ func sabotage_text(r: Dictionary) -> String:
 
 func market_text(r: Dictionary) -> String:
 	## A server report about the market as one sentence.
-	var give := "%d %s" % [int(r.get("give_amount", 0)), String(r.get("give", ""))]
-	var want := "%d %s" % [int(r.get("want_amount", 0)), String(r.get("want", ""))]
+	var named: Variant = {"name": r.item_name} if r.has("item_name") else null
+	var give := market_good_name(String(r.get("give", "")), int(r.get("give_amount", 0)), named)
+	var want := market_good_name(String(r.get("want", "")), int(r.get("want_amount", 0)))
 	match String(r.get("event", "")):
 		"sold":
-			return "%s bought your %s at the market. You get %d %s after the market's cut." % [String(r.get("name", "")),
-					give, int(r.get("proceeds", 0)), String(r.get("want", ""))]
+			return "%s bought your %s at the market. You get %s after the market's cut." % [String(r.get("name", "")),
+					give, market_good_name(String(r.get("want", "")), int(r.get("proceeds", 0)))]
 		"bought":
 			return "You bought %s from %s for %s." % [give, String(r.get("name", "")), want]
 		"expired":
-			return "Nobody bought your %s for %s; it is back in your storage." % [give, want]
+			return "Nobody bought your %s for %s; it is back in your %s." % [give, want, "armoury" if r.get("want") == "marks" else "storage"]
 		"spilled":
 			return "Your storage was full, so %s from the market was lost." % _amounts(r.get("lost", {}))
 	return ""

@@ -13,6 +13,8 @@ import { marchSlow, type WeatherRules } from "./weather.ts";
 
 /** Seed offset for what a beaten camp drops. */
 export const DROP_SEED = 31337;
+/** Seed offset for the gem a beaten camp drops (economy.gd GEM_SEED). */
+export const GEM_SEED = 27449;
 
 export interface March {
   id: number;
@@ -51,6 +53,9 @@ export interface Report {
   /** Gear the camp dropped; `bag_full` when there was no room for it. */
   gear?: Item;
   bag_full?: boolean;
+  /** The gem the camp dropped ("ruby:2"), and the Marks the win gave. */
+  gem?: string;
+  marks?: number;
   spoils: Dict;
   level: number;
   leveled: boolean;
@@ -191,10 +196,16 @@ function fightCamp(world: Army, rules: BaronRules, m: March): Report {
       const lead = gear.addXp(world.castle, m.lead.id, xp);
       if (lead) out.lead = lead;
     }
-    const item = result.winner === "a" ? gear.rollDrop(result.level + rules.forCamp(camp).dropLevelBonus, seed + DROP_SEED) : null;
+    const dropLevel = result.level + rules.forCamp(camp).dropLevelBonus;
+    const item = result.winner === "a" ? gear.rollDrop(dropLevel, seed + DROP_SEED) : null;
     if (item) {
       out.gear = item;
       if (!gear.give(world.castle, item)) out.bag_full = true;
+    }
+    if (result.winner === "a") {
+      const spoils = gear.giveSpoils(world.castle, dropLevel, seed + GEM_SEED);
+      if (spoils.gem !== "") out.gem = spoils.gem;
+      if (spoils.marks > 0) out.marks = spoils.marks;
     }
   }
   if (camp.fortress) out.fortress = true;

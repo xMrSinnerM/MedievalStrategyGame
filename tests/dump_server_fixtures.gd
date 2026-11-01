@@ -80,6 +80,7 @@ func _initialize() -> void:
 	# Last, so the random numbers above stay as they were before the academy.
 	for run in 3:
 		data.castles.append(research_run(run))
+	data.gems = gems_run()
 	var file := FileAccess.open(OUT, FileAccess.WRITE)
 	file.store_string(JSON.stringify(data, "", false, true))
 	file.close()
@@ -438,6 +439,55 @@ func armoury_run() -> Dictionary:
 		leads.append(lead if lead != null else "none")
 	return {"drops": drops, "ops": ops, "castle": castle.to_dict(), "fx": fx, "castellan": gear.castellan_effects(castle),
 			"leads": leads, "levels": range(0, 320, 7).map(func(x: int) -> int: return gear.level_for(x))}
+
+
+func gems_run() -> Dictionary:
+	## Gem drops and spoils, then random sockets, fusing, melting and forging.
+	var castle := CastleState.create_new(rules, "g", "Gem Castle", "player", T0)
+	var drops: Array = []
+	for k in 200:
+		var level := rng.randi_range(1, 80)
+		var seed_value := rng.randi_range(0, 2_000_000_000)
+		drops.append({"level": level, "seed": seed_value, "gem": gear.roll_gem(level, seed_value),
+				"spoils": gear.give_spoils(castle, level, seed_value)})
+	var given: Array = []
+	for k in 40:
+		var item := gear.roll_drop(rng.randi_range(20, 80), rng.randi_range(0, 2_000_000_000))
+		if not item.is_empty():
+			given.append(item.duplicate(true))
+			gear.give(castle, item)
+	var keys: Array = castle.armoury.gems.keys()
+	keys.append_array(["ruby:9", "glass:1", 4])
+	var ops: Array = []
+	for k in 300:
+		var op := {}
+		var id: Variant = rng.randi_range(0, int(castle.armoury.next_item))
+		match rng.randi() % 6:
+			0, 1:
+				op = {"kind": "socket", "item": id, "gem": keys[rng.randi() % keys.size()]}
+				op["result"] = gear.socket(castle, id, op.gem)
+			2:
+				op = {"kind": "unsocket", "item": id, "index": rng.randi_range(-1, 3)}
+				op["result"] = gear.unsocket(castle, id, op.index)
+			3:
+				op = {"kind": "fuse", "gem": keys[rng.randi() % keys.size()]}
+				op["result"] = gear.fuse(castle, op.gem)
+			4:
+				op = {"kind": "melt", "item": id}
+				op["result"] = gear.melt(castle, id) if rng.randi() % 4 == 0 else "skipped"
+			5:
+				var ids: Array = []
+				var bag: Array = castle.armoury.bag
+				var first: Dictionary = bag[rng.randi() % bag.size()] if not bag.is_empty() else {"id": 0, "rarity": "", "side": ""}
+				var like: Array = bag.filter(func(x: Dictionary) -> bool: return x.rarity == first.rarity and x.side == first.side)
+				ids.append(int(first.id))
+				for n in rng.randi_range(1, 2) if rng.randi() % 5 == 0 else 2:
+					var pool: Array = like if rng.randi() % 4 != 0 and not like.is_empty() else bag
+					ids.append(int(pool[rng.randi() % pool.size()].id) if not pool.is_empty() else 0)
+				op = {"kind": "forge", "items": ids}
+				op["result"] = gear.forge(castle, ids)
+		ops.append(op)
+	return {"drops": drops, "bag": given, "ops": ops, "castle": castle.to_dict()}
 
 
 func outpost_run() -> Dictionary:

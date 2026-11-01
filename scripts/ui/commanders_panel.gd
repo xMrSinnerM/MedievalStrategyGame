@@ -38,7 +38,8 @@ func _ready() -> void:
 	head.add_child(close)
 	var about := MenuStyle.label("Commanders lead your attacks and wear attack gear; the castellan leads your castle's defence "
 			+ "and wears defence gear. Robber barons drop gear when beaten, better from stronger camps. More commanders join "
-			+ "at keep levels 3 and 5, and they rise in level by fighting, earning a skill point each level.", 14, MenuStyle.MUTED)
+			+ "at keep levels 3 and 5, and they rise in level by fighting, earning a skill point each level. Gear has sockets for gems; "
+			+ "melt gear you don't need for Marks, the trade coin (Forge tab).", 14, MenuStyle.MUTED)
 	about.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	about.custom_minimum_size = Vector2(1000, 0)
 	box.add_child(about)
@@ -191,7 +192,7 @@ func _build_bag(castle: CastleState, g: GearRules) -> void:
 		_bag.remove_child(child)
 		child.queue_free()
 	var bag: Array = castle.armoury.bag
-	_bag_title.text = "Your bag (%d / %d)" % [bag.size(), g.bag_size]
+	_bag_title.text = "Your bag (%d / %d)   %d Marks" % [bag.size(), g.bag_size, int(castle.armoury.get("marks", 0))]
 	if bag.is_empty():
 		_bag.columns = 1
 		var none := MenuStyle.label("Empty. Beat robber barons to find gear.", 14, MenuStyle.MUTED)
@@ -209,6 +210,8 @@ func _build_bag(castle: CastleState, g: GearRules) -> void:
 		b.text = "%s\n%s %s" % [item.name, "Attack" if item.side == "attack" else "Defence", String(g.slot_names.get(item.slot, item.slot)).to_lower()]
 		_color(b, g.rarity_color(item.rarity))
 		b.tooltip_text = g.item_text(item)
+		if not item.get("gems", []).is_empty():
+			b.text += ", %d gem%s" % [item.gems.size(), "" if item.gems.size() == 1 else "s"]
 		var id := int(item.id)
 		b.pressed.connect(func() -> void:
 			_selected = id
@@ -232,6 +235,7 @@ func _build_detail(castle: CastleState, g: GearRules) -> void:
 	_detail.add_child(MenuStyle.label("%s %s %s" % [g.rarities[item.rarity].name, "attack" if item.side == "attack" else "defence",
 			String(g.slot_names.get(item.slot, item.slot)).to_lower()], 14, MenuStyle.MUTED))
 	_detail.add_child(MenuStyle.label(g.item_text(item), 15, MenuStyle.TEXT))
+	_add_sockets(castle, g, item)
 	var buttons := HFlowContainer.new()
 	buttons.add_theme_constant_override("h_separation", 6)
 	buttons.add_theme_constant_override("v_separation", 6)
@@ -259,6 +263,52 @@ func _build_detail(castle: CastleState, g: GearRules) -> void:
 	buttons.add_child(_small("Sell for %d gold" % g.sell_price(item), func() -> void:
 		_selected = -1
 		_tell(Economy.sell_gear(id), "Sold the %s for %d gold." % [item.name, g.sell_price(item)])))
+	var melt := _small("Melt for %d Marks" % g.melt_marks(item), func() -> void:
+		_selected = -1
+		_tell(Economy.melt_gear(id), "Melted the %s down for %d Marks." % [item.name, g.melt_marks(item)]))
+	melt.tooltip_text = "Marks are the trade coin. Gems in it go back to your pouch."
+	buttons.add_child(melt)
+
+
+func _add_sockets(castle: CastleState, g: GearRules, item: Dictionary) -> void:
+	## The item's sockets: the gems in them (click to prise one out, for
+	## Marks) and, while one is free, the gems from your pouch that fit.
+	var held: Array = item.get("gems", [])
+	var free := g.sockets(item) - held.size()
+	var row := HFlowContainer.new()
+	row.add_theme_constant_override("h_separation", 6)
+	row.add_theme_constant_override("v_separation", 6)
+	_detail.add_child(row)
+	row.add_child(MenuStyle.label("Sockets:", 14, MenuStyle.MUTED))
+	var id := int(item.id)
+	for i in held.size():
+		var key := String(held[i])
+		var cost := g.unsocket_cost(key)
+		var index := i
+		var b := _small("%s ×" % g.gem_name(key), func() -> void:
+			_tell(Economy.unsocket_gem(id, index), "The %s is back in your pouch." % g.gem_name(key)))
+		_color(b, g.gem_color(key))
+		b.tooltip_text = "%s. Prise it out for %d Marks; it goes back in your pouch." % [g.gem_text(key), cost]
+		row.add_child(b)
+	for i in free:
+		row.add_child(MenuStyle.label("[ empty ]", 14, MenuStyle.MUTED))
+	if free <= 0:
+		return
+	var fits: Array = []
+	for key: String in castle.armoury.gems:
+		if g.gem_side(key) == item.side and not g.gem_parts(key).is_empty():
+			fits.append(key)
+	fits.sort_custom(func(a: String, b: String) -> bool: return g.gem_value(a) > g.gem_value(b))
+	if fits.is_empty():
+		row.add_child(MenuStyle.label("No %s gems in your pouch. Barons drop them." % item.side, 13, MenuStyle.MUTED))
+		return
+	for key: String in fits.slice(0, 6):
+		var k := key
+		var b := _small("Set %s (%d)" % [g.gem_name(k), GearRules.gem_count(castle, k)], func() -> void:
+			_tell(Economy.socket_gem(id, k), "The %s now holds a %s." % [item.name, g.gem_name(k)]))
+		_color(b, g.gem_color(k))
+		b.tooltip_text = g.gem_text(k)
+		row.add_child(b)
 
 
 func _tell(why: String, done: String) -> void:

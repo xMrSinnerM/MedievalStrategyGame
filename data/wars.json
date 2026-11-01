@@ -1,5 +1,5 @@
 {
-	"_comment": "Alliance wars online: alliances fight over the capitals (data/capitals.json) in weekly seasons. A season starts on `day` (1 = Monday ... 7 = Sunday) at `hour` UTC and lasts `days` days; the next starts as it ends. An alliance earns war points while one of its members holds a capital: `hold_per_hour` per hour for each level of the capital (counted every hour). Taking a capital gives `capture` points per level of the capital, but only the first time the alliance takes that capital in a season (so giving one up and taking it back again earns nothing). Holding a capital against another player's attack gives `defence_per_soldier` points for each attacker who fell, at most `defence_max` per level of the capital for one battle. Players outside an alliance earn nothing. Once a season is over, every member of an alliance with points claims one prize, by their alliance's place: the first of `prizes` whose `up_to` the place reaches (0: any place), until the next season ends. Only players who were already in the alliance before the season ended can claim it. Resources fill your storage (what doesn't fit is lost) and soldiers join your garrison. `shown` alliances are listed.",
+	"_comment": "Alliance wars online: alliances fight over the capitals (data/capitals.json) in weekly seasons. A season starts on `day` (1 = Monday ... 7 = Sunday) at `hour` UTC and lasts `days` days; the next starts as it ends. An alliance earns war points while one of its members holds a capital: `hold_per_hour` per hour for each level of the capital (counted every hour). Taking a capital gives `capture` points per level of the capital, but only the first time the alliance takes that capital in a season (so giving one up and taking it back again earns nothing). Holding a capital against another player's attack gives `defence_per_soldier` points for each attacker who fell, at most `defence_max` per level of the capital for one battle. Players outside an alliance earn nothing. Once a season is over, every member of an alliance with points claims one prize, by their alliance's place: the first of `prizes` whose `up_to` the place reaches (0: any place), until the next season ends. Only players who were already in the alliance before the season ended can claim it. Resources fill your storage (what doesn't fit is lost), soldiers join your garrison and Marks (data/gear.json) your armoury. `shown` alliances are listed.",
 	"day": 1,
 	"hour": 0,
 	"days": 7,
@@ -9,9 +9,9 @@
 	"defence_max": 100,
 	"shown": 20,
 	"prizes": [
-		{ "up_to": 1, "resources": { "wood": 3000, "stone": 3000, "gold": 3000 }, "troops": { "horseman": 60 } },
-		{ "up_to": 3, "resources": { "wood": 2000, "stone": 2000, "gold": 2000 }, "troops": { "horseman": 40 } },
-		{ "up_to": 10, "resources": { "wood": 1200, "stone": 1200, "gold": 1200 }, "troops": { "swordsman": 40 } },
-		{ "up_to": 0, "resources": { "wood": 800, "stone": 800, "gold": 400 } }
+		{ "up_to": 1, "marks": 150, "resources": { "wood": 3000, "stone": 3000, "gold": 3000 }, "troops": { "horseman": 60 } },
+		{ "up_to": 3, "marks": 100, "resources": { "wood": 2000, "stone": 2000, "gold": 2000 }, "troops": { "horseman": 40 } },
+		{ "up_to": 10, "marks": 60, "resources": { "wood": 1200, "stone": 1200, "gold": 1200 }, "troops": { "swordsman": 40 } },
+		{ "up_to": 0, "marks": 25, "resources": { "wood": 800, "stone": 800, "gold": 400 } }
 	]
 }

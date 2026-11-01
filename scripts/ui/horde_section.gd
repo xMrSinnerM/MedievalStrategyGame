@@ -143,6 +143,8 @@ static func item_text(item: Dictionary) -> String:
 				", ".join(stats)])
 	if int(item.get("trophies", 0)) > 0:
 		parts.append("%d war trophies" % int(item.trophies))
+	if int(item.get("marks", 0)) > 0:
+		parts.append("%d Marks" % int(item.marks))
 	return ", ".join(parts)
 
 

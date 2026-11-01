@@ -22,6 +22,8 @@ export interface Item {
   name: string;
   /** Stat -> percent. */
   stats: Dict;
+  /** Gems in its sockets ("ruby:3"). */
+  gems: string[];
 }
 
 export interface Commander {
@@ -43,6 +45,10 @@ export interface Armoury {
   castellan: Record<string, Item>;
   bag: Item[];
   next_item: number;
+  /** The trade coin, earned by playing. */
+  marks: number;
+  /** The gem pouch: "ruby:1" -> how many. */
+  gems: Dict;
 }
 
 /** A commander leading an army: what the fight needs and the report shows. */
@@ -80,8 +86,11 @@ export interface Skill {
 }
 
 export function newArmoury(): Armoury {
-  return { commanders: [], castellan: {}, bag: [], next_item: 1 };
+  return { commanders: [], castellan: {}, bag: [], next_item: 1, marks: 0, gems: {} };
 }
+
+/** A gem drop or forge seed offset (gear_rules.gd FORGE_SEED). */
+export const FORGE_SEED = 50_331_653;
 
 export class GearRules {
   slots: string[];
@@ -104,6 +113,13 @@ export class GearRules {
   names: Json;
   skills: Skill[];
   retrainGold: number;
+  gems: Record<string, { name: string; stat: string; color: string }>;
+  gemTiers: { name: string; value: number }[];
+  fuseCount: number;
+  unsocketMarks: number[];
+  gemDrop: { base?: number; per_level?: number; max?: number; tiers?: number[][] };
+  marksPerLevel: number;
+  forgeCount: number;
 
   constructor(data: Json = {}) {
     this.slots = (data.slots ?? []).map(String);
@@ -126,6 +142,13 @@ export class GearRules {
     this.names = data.names ?? {};
     this.skills = data.skills ?? [];
     this.retrainGold = Number(data.retrain_gold ?? 0);
+    this.gems = data.gems ?? {};
+    this.gemTiers = data.gem_tiers ?? [];
+    this.fuseCount = Number(data.fuse ?? 3);
+    this.unsocketMarks = (data.unsocket_marks ?? []).map(Number);
+    this.gemDrop = data.gem_drop ?? {};
+    this.marksPerLevel = Number(data.marks_per_level ?? 0);
+    this.forgeCount = Number(data.forge_count ?? 3);
   }
 
   commanderSlots(keep: number): number {
@@ -162,7 +185,7 @@ export class GearRules {
     for (const slot of this.slots) {
       const item = gear[slot];
       if (item === undefined) continue;
-      for (const [stat, n] of Object.entries(item.stats)) sum[stat] = (sum[stat] ?? 0) + n;
+      for (const [stat, n] of Object.entries(this.totalStats(item))) sum[stat] = (sum[stat] ?? 0) + n;
     }
     if (level > 1 && this.perLevel > 0) {
       for (const stat of ["wall_attack", "yard_attack"]) sum[stat] = (sum[stat] ?? 0) + this.perLevel * (level - 1);
@@ -308,6 +331,11 @@ export class GearRules {
     }
     const side: GearSide = rng.randi() % 2 === 0 ? "attack" : "defence";
     const slot = this.slots[rng.randi() % this.slots.length];
+    return this.rollItem(rng, rarity, side, slot);
+  }
+
+  /** A piece of gear of this rarity, side and slot with random stats and name. */
+  private rollItem(rng: Rng, rarity: string, side: GearSide, slot: string): Item {
     const def = this.rarities[rarity];
     const pool = [...this.slotStats[side][slot]];
     const stats: Dict = {};
@@ -326,7 +354,7 @@ export class GearRules {
       const adjective = adjectives[rng.randi() % adjectives.length];
       name = `${adjective} ${nouns[rng.randi() % nouns.length]}`;
     }
-    return { id: 0, slot, side, rarity, name, stats };
+    return { id: 0, slot, side, rarity, name, stats, gems: [] };
   }
 
   /** Puts an item in the bag with a new id; false when the bag is full. */
@@ -349,6 +377,7 @@ export class GearRules {
     const i = bag.findIndex((x) => x.id === itemId);
     if (i < 0) return "There's no such item in your bag.";
     const [item] = bag.splice(i, 1);
+    this.freeGems(castle, item);
     castle.resources.gold = (castle.resources.gold ?? 0) + this.sellPrice(item);
     return "";
   }
@@ -389,6 +418,246 @@ export class GearRules {
     castle.armoury.bag.push(item);
     return "";
   }
+
+  // --- Gems, Marks and the forge ---------------------------------------------------
+
+  /** {kind, tier} of a gem key like "ruby:3", or undefined if there's no such gem. */
+  gemParts(key: unknown): { kind: string; tier: number } | undefined {
+    if (typeof key !== "string") return undefined;
+    const bits = key.split(":");
+    if (bits.length !== 2 || !Object.hasOwn(this.gems, bits[0]) || !/^-?\d+$/.test(bits[1])) return undefined;
+    const tier = Number(bits[1]);
+    if (tier < 1 || tier > this.gemTiers.length || bits[1] !== String(tier)) return undefined;
+    return { kind: bits[0], tier };
+  }
+
+  gemValue(key: string): number {
+    const p = this.gemParts(key);
+    return p === undefined ? 0 : Number(this.gemTiers[p.tier - 1].value);
+  }
+
+  gemStat(key: string): string {
+    const p = this.gemParts(key);
+    return p === undefined ? "" : this.gems[p.kind].stat;
+  }
+
+  gemSide(key: string): string {
+    return String(this.stats[this.gemStat(key)]?.side ?? "");
+  }
+
+  gemName(key: string): string {
+    const p = this.gemParts(key);
+    return p === undefined ? key : `${this.gemTiers[p.tier - 1].name} ${this.gems[p.kind].name}`;
+  }
+
+  sockets(item: Item): number {
+    return Number(this.rarities[item.rarity]?.sockets ?? 0);
+  }
+
+  /** The item's own stats plus its gems': stat -> percent. */
+  totalStats(item: Item): Dict {
+    const out: Dict = {};
+    for (const [stat, n] of Object.entries(item.stats)) out[stat] = (out[stat] ?? 0) + n;
+    for (const key of item.gems ?? []) {
+      const stat = this.gemStat(key);
+      if (stat !== "") out[stat] = (out[stat] ?? 0) + this.gemValue(key);
+    }
+    return out;
+  }
+
+  private freeGems(castle: CastleState, item: Item): void {
+    for (const key of item.gems ?? []) if (this.gemParts(key) !== undefined) addGem(castle, key, 1);
+    item.gems = [];
+  }
+
+  private bagIndex(castle: CastleState, id: unknown): number {
+    return castle.armoury.bag.findIndex((x) => x.id === id);
+  }
+
+  checkSocket(castle: CastleState, itemId: unknown, key: unknown): string {
+    const i = this.bagIndex(castle, itemId);
+    if (i < 0) return "There's no such item in your bag.";
+    if (this.gemParts(key) === undefined) return "There's no such gem.";
+    const k = key as string;
+    if (gemCount(castle, k) <= 0) return `You have no ${this.gemName(k)}.`;
+    const item = castle.armoury.bag[i];
+    if (this.gemSide(k) !== item.side) return `A ${this.gemName(k)} fits ${this.gemSide(k)} gear.`;
+    if ((item.gems ?? []).length >= this.sockets(item)) return `Every socket of the ${item.name} is taken.`;
+    return "";
+  }
+
+  /** Sets a gem from your pouch into a free socket of gear in your bag. */
+  socket(castle: CastleState, itemId: unknown, key: unknown): string {
+    const why = this.checkSocket(castle, itemId, key);
+    if (why === "") {
+      (castle.armoury.bag[this.bagIndex(castle, itemId)].gems ??= []).push(key as string);
+      addGem(castle, key as string, -1);
+    }
+    return why;
+  }
+
+  unsocketCost(key: string): number {
+    const p = this.gemParts(key);
+    if (p === undefined || this.unsocketMarks.length === 0) return 0;
+    return this.unsocketMarks[Math.min(p.tier, this.unsocketMarks.length) - 1];
+  }
+
+  /** Prises gem `index` out of gear in your bag, for Marks; it goes back in your pouch. */
+  unsocket(castle: CastleState, itemId: unknown, index: unknown): string {
+    const i = this.bagIndex(castle, itemId);
+    if (i < 0) return "There's no such item in your bag.";
+    const held = (castle.armoury.bag[i].gems ??= []);
+    if (typeof index !== "number" || !Number.isInteger(index) || index < 0 || index >= held.length) return "There's no gem there.";
+    const key = held[index];
+    const cost = this.unsocketCost(key);
+    if (castle.armoury.marks < cost) return `Prising out the ${this.gemName(key)} costs ${cost} Marks.`;
+    addMarks(castle, -cost);
+    held.splice(index, 1);
+    if (this.gemParts(key) !== undefined) addGem(castle, key, 1);
+    return "";
+  }
+
+  checkFuse(castle: CastleState, key: unknown): string {
+    const p = this.gemParts(key);
+    if (p === undefined) return "There's no such gem.";
+    if (p.tier >= this.gemTiers.length) return `A ${this.gemName(key as string)} is as fine as gems get.`;
+    if (gemCount(castle, key as string) < this.fuseCount) return `Fusing needs ${this.fuseCount} of the same gem.`;
+    return "";
+  }
+
+  /** Fuses `fuseCount` gems of one kind and tier into one of the next tier. */
+  fuse(castle: CastleState, key: unknown): string {
+    const why = this.checkFuse(castle, key);
+    if (why === "") {
+      const p = this.gemParts(key)!;
+      addGem(castle, key as string, -this.fuseCount);
+      addGem(castle, gemKey(p.kind, p.tier + 1), 1);
+    }
+    return why;
+  }
+
+  meltMarks(item: Item): number {
+    return Number(this.rarities[item.rarity]?.melt ?? 0);
+  }
+
+  /** Melts gear from your bag down for Marks; its gems go back in your pouch. */
+  melt(castle: CastleState, itemId: unknown): string {
+    const i = this.bagIndex(castle, itemId);
+    if (i < 0) return "There's no such item in your bag.";
+    const [item] = castle.armoury.bag.splice(i, 1);
+    this.freeGems(castle, item);
+    addMarks(castle, this.meltMarks(item));
+    return "";
+  }
+
+  nextRarity(rarity: string): string {
+    const kinds = Object.keys(this.rarities);
+    const i = kinds.indexOf(rarity);
+    return i < 0 || i + 1 >= kinds.length ? "" : kinds[i + 1];
+  }
+
+  forgeCost(rarity: string): number {
+    return Number(this.rarities[rarity]?.forge ?? 0);
+  }
+
+  checkForge(castle: CastleState, ids: unknown): string {
+    if (!Array.isArray(ids) || ids.length !== this.forgeCount) return `The forge needs ${this.forgeCount} pieces of gear.`;
+    const picked: number[] = [];
+    for (const id of ids) {
+      const i = this.bagIndex(castle, id);
+      if (i < 0) return "There's no such item in your bag.";
+      if (picked.includes(i)) return `Pick ${this.forgeCount} different pieces.`;
+      picked.push(i);
+    }
+    const first = castle.armoury.bag[picked[0]];
+    for (const i of picked) {
+      const item = castle.armoury.bag[i];
+      if (item.rarity !== first.rarity) return "Forge pieces of the same rarity.";
+      if (item.side !== first.side) return "Forge attack gear with attack gear, defence with defence.";
+    }
+    if (this.nextRarity(first.rarity) === "") return "Legendary gear can't be forged any higher.";
+    const cost = this.forgeCost(first.rarity);
+    if (castle.armoury.marks < cost) return `Forging ${String(this.rarities[first.rarity].name).toLowerCase()} gear costs ${cost} Marks.`;
+    return "";
+  }
+
+  /**
+   * Forges `forgeCount` bag items of one rarity and side into one random
+   * piece of the next rarity, in the slot of the first, for Marks (decided
+   * by the first id and the next item id, as in the game).
+   */
+  forge(castle: CastleState, ids: unknown): string {
+    const why = this.checkForge(castle, ids);
+    if (why !== "") return why;
+    const list = ids as number[];
+    const first = castle.armoury.bag[this.bagIndex(castle, list[0])];
+    const rarity = this.nextRarity(first.rarity);
+    const { side, slot } = first;
+    addMarks(castle, -this.forgeCost(first.rarity));
+    for (const id of list) {
+      const [item] = castle.armoury.bag.splice(this.bagIndex(castle, id), 1);
+      this.freeGems(castle, item);
+    }
+    const rng = new Rng(list[0] * 7919 + castle.armoury.next_item * 104729 + FORGE_SEED);
+    this.give(castle, this.rollItem(rng, rarity, side, slot));
+    return "";
+  }
+
+  gemDropChance(level: number): number {
+    return Math.min(Number(this.gemDrop.base ?? 0) + Number(this.gemDrop.per_level ?? 0) * (level - 1), Number(this.gemDrop.max ?? 0));
+  }
+
+  /** The gem a beaten camp of `level` drops ("" for none). The same seed gives the same gem. */
+  rollGem(level: number, seed: number): string {
+    const tiers = this.gemDrop.tiers ?? [];
+    const kinds = Object.keys(this.gems);
+    if (kinds.length === 0 || tiers.length === 0) return "";
+    const rng = new Rng(seed);
+    if (rng.randf() >= this.gemDropChance(level)) return "";
+    const weights = tiers.map((w) => Math.max(0, Number(w[0]) + Number(w[1]) * (level - 1)));
+    const total = weights.reduce((a, b) => a + b, 0);
+    let tier = tiers.length;
+    let pick = rng.randf() * total;
+    for (let t = 0; t < weights.length; t++) {
+      if (pick < weights[t]) {
+        tier = t + 1;
+        break;
+      }
+      pick -= weights[t];
+    }
+    return gemKey(kinds[rng.randi() % kinds.length], tier);
+  }
+
+  marksForWin(level: number): number {
+    return this.marksPerLevel > 0 ? Math.max(1, Math.floor(this.marksPerLevel * level)) : 0;
+  }
+
+  /** The gem and Marks a beaten camp of `level` gives, put in the armoury. */
+  giveSpoils(castle: CastleState, level: number, seed: number): { gem: string; marks: number } {
+    const gem = this.rollGem(level, seed);
+    if (gem !== "") addGem(castle, gem, 1);
+    const marks = this.marksForWin(level);
+    addMarks(castle, marks);
+    return { gem, marks };
+  }
+}
+
+export function gemKey(kind: string, tier: number): string {
+  return `${kind}:${tier}`;
+}
+
+export function gemCount(castle: CastleState, key: string): number {
+  return Object.hasOwn(castle.armoury.gems, key) ? castle.armoury.gems[key] : 0;
+}
+
+function addGem(castle: CastleState, key: string, n: number): void {
+  const have = gemCount(castle, key) + n;
+  if (have > 0) castle.armoury.gems[key] = have;
+  else delete castle.armoury.gems[key];
+}
+
+export function addMarks(castle: CastleState, n: number): void {
+  castle.armoury.marks = Math.max(0, castle.armoury.marks + n);
 }
 
 /** A clean armoury from saved data (anything malformed is dropped). */
@@ -400,8 +669,9 @@ export function readArmoury(data: any): Armoury {
     if (x === null || typeof x !== "object") return undefined;
     const stats: Dict = {};
     for (const k of Object.keys(x.stats ?? {})) stats[k] = Math.trunc(Number(x.stats[k]));
+    const gems = Array.isArray(x.gems) ? x.gems.filter((k: unknown) => typeof k === "string") : [];
     return { id: Math.trunc(Number(x.id ?? 0)), slot: String(x.slot ?? ""), side: x.side === "defence" ? "defence" : "attack",
-      rarity: String(x.rarity ?? "common"), name: String(x.name ?? ""), stats };
+      rarity: String(x.rarity ?? "common"), name: String(x.name ?? ""), stats, gems };
   };
   const gear = (g: Json): Record<string, Item> => {
     const out: Record<string, Item> = {};
@@ -427,6 +697,10 @@ export function readArmoury(data: any): Armoury {
     if (it !== undefined) a.bag.push(it);
   }
   a.next_item = Math.trunc(Number(data.next_item ?? 1));
+  a.marks = Math.max(0, Math.trunc(Number(data.marks ?? 0)) || 0);
+  if (data.gems !== null && typeof data.gems === "object" && !Array.isArray(data.gems)) {
+    for (const [k, n] of Object.entries(data.gems)) if (typeof n === "number" && Math.trunc(n) > 0) a.gems[k] = Math.trunc(n);
+  }
   return a;
 }
 

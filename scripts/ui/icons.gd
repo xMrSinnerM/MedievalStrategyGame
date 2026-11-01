@@ -30,6 +30,18 @@ const SVG := {
 		<ellipse cx="46" cy="22" rx="5.5" ry="11" fill="#e8bd4c" stroke="%s" stroke-width="3" transform="rotate(24 46 22)"/>
 		<rect x="23" y="40" width="18" height="7" rx="2" fill="#8c3b22" stroke="%s" stroke-width="2.5"/>""",
 	# A small stack of gold coins.
+	# A silver trade mark: a coin stamped with a crown.
+	"marks": """
+		<circle cx="32" cy="34" r="22" fill="#9ea6b0" stroke="%s" stroke-width="3"/>
+		<circle cx="32" cy="34" r="16" fill="#c9d0d8" stroke="%s" stroke-width="2"/>
+		<path d="M21 40 L23 27 L28 33 L32 24 L36 33 L41 27 L43 40 Z" fill="#7d8692" stroke="%s" stroke-width="2" stroke-linejoin="round"/>
+	""",
+	# A cut gem.
+	"gem": """
+		<path d="M16 24 L24 12 L40 12 L48 24 L32 54 Z" fill="#d8434a" stroke="%s" stroke-width="3" stroke-linejoin="round"/>
+		<path d="M16 24 L48 24 M24 12 L28 24 L32 54 L36 24 L40 12" fill="none" stroke="%s" stroke-width="2" stroke-linejoin="round"/>
+		<path d="M26 16 L30 16 L28 22 Z" fill="#ffd0d0"/>
+	""",
 	"gold": """
 		<ellipse cx="26" cy="46" rx="18" ry="8" fill="#c8901c" stroke="%s" stroke-width="3"/>
 		<ellipse cx="26" cy="40" rx="18" ry="8" fill="#e8b22e" stroke="%s" stroke-width="3"/>

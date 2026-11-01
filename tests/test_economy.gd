@@ -42,6 +42,7 @@ func _initialize() -> void:
 	test_quests()
 	test_tools()
 	test_gear()
+	test_gems_and_forge()
 	test_outpost()
 	test_villages()
 	test_capitals()
@@ -983,6 +984,88 @@ func test_tools() -> void:
 	eco.free()
 
 
+func test_gems_and_forge() -> void:
+	var gear := GearRules.load_default()
+	var c := fresh()
+	var piece := func(rarity: String, side: String, slot: String, stats: Dictionary) -> Dictionary:
+		var item := {"id": 0, "slot": slot, "side": side, "rarity": rarity, "name": "Test " + slot, "stats": stats, "gems": []}
+		gear.give(c, item)
+		return item
+	var helm: Dictionary = piece.call("rare", "attack", "helmet", {"wall_attack": 6})
+	check(gear.gem_name("ruby:4") == "Flawless Ruby" and gear.gem_value("ruby:4") == 7, "gem names and values")
+	check(gear.gem_parts("ruby:6").is_empty() and gear.gem_parts("glass:1").is_empty() and gear.gem_parts("ruby:01").is_empty(), "bad gem keys")
+	check(gear.socket(c, helm.id, "ruby:2") == "You have no Flawed Ruby.", "no gem, no socket")
+	c.armoury.gems = {"ruby:2": 4, "sapphire:1": 1}
+	check(gear.socket(c, helm.id, "sapphire:1") == "A Chipped Sapphire fits defence gear.", "gems fit their side")
+	check(gear.socket(c, helm.id, "ruby:2") == "" and gear.socket(c, helm.id, "ruby:2") == "", "two sockets on rare gear")
+	check(gear.socket(c, helm.id, "ruby:2") == "Every socket of the Test helmet is taken.", "no third socket")
+	check(gear.total_stats(helm) == {"wall_attack": 10} and gear.item_text(helm) == "+10% attack at the walls", "gems add to the stats")
+	check(c.armoury.gems == {"ruby:2": 2, "sapphire:1": 1}, "taken from the pouch: %s" % [c.armoury.gems])
+	check(gear.equip(c, 1, helm.id, T0) == "No such commander.", "no commanders yet")
+	gear.sync(c)
+	check(gear.equip(c, 1, helm.id, T0) == "", "worn")
+	near(gear.commander_effects(c.armoury.commanders[0]).wall_attack, 0.10, "gems count in a fight")
+	check(gear.unequip(c, 1, "helmet", T0) == "", "back in the bag")
+	check(gear.unsocket(c, helm.id, 0) == "Prising out the Flawed Ruby costs 2 Marks.", "unsocketing costs Marks")
+	c.armoury.marks = 5
+	check(gear.unsocket(c, helm.id, 3) == "There's no gem there.", "bad socket")
+	check(gear.unsocket(c, helm.id, 0) == "" and c.armoury.marks == 3 and GearRules.gem_count(c, "ruby:2") == 3, "prised out")
+	# Fusing.
+	check(gear.fuse(c, "sapphire:1") == "Fusing needs 3 of the same gem.", "three to fuse")
+	check(gear.fuse(c, "ruby:2") == "" and c.armoury.gems == {"ruby:3": 1, "sapphire:1": 1}, "fused: %s" % [c.armoury.gems])
+	c.armoury.gems["ruby:5"] = 3
+	check(gear.fuse(c, "ruby:5") == "A Royal Ruby is as fine as gems get.", "royal is the top")
+	# Melting gives Marks and the gems back.
+	check(gear.melt(c, helm.id) == "" and c.armoury.marks == 3 + 8 and GearRules.gem_count(c, "ruby:2") == 1, "melted")
+	# The forge.
+	var a: Dictionary = piece.call("common", "attack", "weapon", {"wall_attack": 3})
+	var b: Dictionary = piece.call("common", "attack", "banner", {"loot": 2})
+	var d: Dictionary = piece.call("common", "defence", "armour", {"wall_defence": 2})
+	var e: Dictionary = piece.call("uncommon", "attack", "helmet", {"wall_cut": 5})
+	var f: Dictionary = piece.call("common", "attack", "helmet", {"wall_cut": 2})
+	check(gear.forge(c, [a.id, b.id]) == "The forge needs 3 pieces of gear.", "three pieces")
+	check(gear.forge(c, [a.id, b.id, a.id]) == "Pick 3 different pieces.", "different pieces")
+	check(gear.forge(c, [a.id, b.id, d.id]) == "Forge attack gear with attack gear, defence with defence.", "one side")
+	check(gear.forge(c, [a.id, b.id, e.id]) == "Forge pieces of the same rarity.", "one rarity")
+	c.armoury.marks = 2
+	check(gear.forge(c, [a.id, b.id, f.id]) == "Forging common gear costs 3 Marks.", "the forge costs Marks")
+	c.armoury.marks = 10
+	f.gems = ["onyx:1"]
+	var next := int(c.armoury.next_item)
+	var copy := CastleState.from_dict(rules, JSON.parse_string(JSON.stringify(c.to_dict())))
+	check(gear.forge(c, [a.id, b.id, f.id]) == "" and c.armoury.marks == 7, "forged")
+	var made: Dictionary = c.armoury.bag[c.armoury.bag.size() - 1]
+	check(int(made.id) == next and made.rarity == "uncommon" and made.slot == "weapon" and made.side == "attack", "one uncommon weapon: %s" % [made])
+	check(c.armoury.bag.size() == 3 and GearRules.gem_count(c, "onyx:1") == 1, "the three are gone, their gems kept")
+	check(gear.forge(copy, [a.id, b.id, f.id]) == "" and copy.armoury.bag.back() == made, "the same castle forges the same piece")
+	var top: Array = []
+	for k in 3:
+		top.append(int(piece.call("legendary", "attack", "weapon", {"loot": 11}).id))
+	check(gear.forge(c, top) == "Legendary gear can't be forged any higher.", "nothing above legendary")
+	# Barons drop gems and pay Marks.
+	check(gear.roll_gem(12, 99) == gear.roll_gem(12, 99), "gem drops are fixed by their seed")
+	var tiers := {1: 0, 4: 0}
+	var found := 0
+	for level in [1, 60]:
+		for k in 400:
+			var key := gear.roll_gem(level, level * 1000 + k)
+			if key != "":
+				found += 1
+				var t := int(gear.gem_parts(key).tier)
+				if tiers.has(t):
+					tiers[t] += 1
+	check(found > 150 and found < 500 and tiers[1] > 50 and tiers[4] > 0, "gems drop, finer from stronger camps: %d %s" % [found, tiers])
+	check(gear.marks_for_win(1) == 1 and gear.marks_for_win(9) == 4 and gear.marks_for_win(40) == 20, "Marks for a win")
+	var before := int(c.armoury.marks)
+	var spoils := gear.give_spoils(c, 30, 5)
+	check(c.armoury.marks == before + 15 and (spoils.gem == "" or GearRules.gem_count(c, spoils.gem) >= 1), "spoils given: %s" % [spoils])
+	QuestBook.give(c, {"marks": 25})
+	check(c.armoury.marks == before + 40, "rewards can hold Marks")
+	var saved := CastleState.from_dict(rules, JSON.parse_string(JSON.stringify(c.to_dict())))
+	check(saved.armoury == c.armoury, "Marks, gems and sockets are saved")
+	check(GearRules.read_armoury({"marks": -4, "gems": {"ruby:1": 0, "x": "a"}}).marks == 0, "bad saves are cleaned")
+
+
 func test_gear() -> void:
 	var gear := GearRules.load_default()
 	var c := fresh()
@@ -1003,8 +1086,8 @@ func test_gear() -> void:
 				best[item.rarity] += 1
 	check(best.legendary > 0 and best.common > 0, "common and legendary gear both drop: %s" % [best])
 	# Wearing gear.
-	var helm := {"id": 0, "slot": "helmet", "side": "attack", "rarity": "rare", "name": "Runed Sallet", "stats": {"wall_attack": 9}}
-	var flag := {"id": 0, "slot": "banner", "side": "defence", "rarity": "epic", "name": "Keep Banner", "stats": {"wall_bonus": 11}}
+	var helm := {"id": 0, "slot": "helmet", "side": "attack", "rarity": "rare", "name": "Runed Sallet", "stats": {"wall_attack": 9}, "gems": []}
+	var flag := {"id": 0, "slot": "banner", "side": "defence", "rarity": "epic", "name": "Keep Banner", "stats": {"wall_bonus": 11}, "gems": []}
 	check(gear.give(c, helm) and gear.give(c, flag) and helm.id == 1 and flag.id == 2, "drops get ids in the bag")
 	check(gear.equip(c, 1, 2, T0) == "Commanders wear attack gear.", "no defence gear on a commander")
 	check(gear.equip(c, 1, 1, T0) == "" and gear.equip(c, "castellan", 2, T0) == "", "worn")

@@ -10,10 +10,17 @@ extends RefCounted
 ##
 ## Everything lives in the castle's `armoury`: {"commanders": [{id, name,
 ## level, xp, gear: {slot: item}, skills: {skill: rank}, away_until}], "castellan": {slot: item},
-## "bag": [item], "next_item"}. An item is {id, slot, side ("attack" or
-## "defence"), rarity, name, stats: {stat: percent}}.
+## "bag": [item], "next_item", "marks", "gems": {"ruby:1": count}}. An item
+## is {id, slot, side ("attack" or "defence"), rarity, name, stats: {stat:
+## percent}, gems: ["ruby:3", ...]}.
+##
+## Gems sit in gear's sockets and add to its stats; three of a kind and tier
+## fuse into the next tier. Marks are the trade coin, earned by playing:
+## beating barons, melting gear, prizes. The forge turns three pieces of one
+## rarity into one of the next.
 
 const PATH := "res://data/gear.json"
+const FORGE_SEED := 50_331_653
 
 var slots: Array = []
 var slot_names := {}
@@ -37,6 +44,13 @@ var branches: Array = []       ## [{id, name, text}]
 var skills: Array = []         ## [{id, name, branch, needs, after, max, per_rank: {stat: percent}, text}]
 var retrain_gold := 0          ## per commander level
 var skill_stats := {}          ## names of skill-only stats (xp)
+var gems := {}                 ## kind -> {name, stat, color}
+var gem_tiers: Array = []      ## [{name, value}], tier 1 first
+var fuse_count := 3
+var unsocket_marks: Array = []
+var gem_drop := {}             ## {base, per_level, max, tiers: [[base, per_level]]}
+var marks_per_level := 0.0
+var forge_count := 3
 
 
 static func load_default() -> GearRules:
@@ -72,10 +86,17 @@ func load_from(data: Dictionary) -> void:
 	skills = data.get("skills", [])
 	retrain_gold = int(data.get("retrain_gold", 0))
 	skill_stats = data.get("skill_stats", {})
+	gems = data.get("gems", {})
+	gem_tiers = data.get("gem_tiers", [])
+	fuse_count = int(data.get("fuse", 3))
+	unsocket_marks = data.get("unsocket_marks", [])
+	gem_drop = data.get("gem_drop", {})
+	marks_per_level = float(data.get("marks_per_level", 0.0))
+	forge_count = int(data.get("forge_count", 3))
 
 
 static func new_armoury() -> Dictionary:
-	return {"commanders": [], "castellan": {}, "bag": [], "next_item": 1}
+	return {"commanders": [], "castellan": {}, "bag": [], "next_item": 1, "marks": 0, "gems": {}}
 
 
 func commander_slots(keep: int) -> int:
@@ -123,7 +144,7 @@ func effects(gear: Dictionary, level := 1) -> Dictionary:
 	for slot: String in slots:
 		if not gear.has(slot):
 			continue
-		var item_stats: Dictionary = gear[slot].stats
+		var item_stats := total_stats(gear[slot])
 		for stat: String in item_stats:
 			sum[stat] = float(sum.get(stat, 0.0)) + float(item_stats[stat])
 	if level > 1 and per_level > 0.0:
@@ -322,6 +343,11 @@ func roll_drop(level: int, seed_value: int) -> Dictionary:
 		pick -= w
 	var side := "attack" if rng.randi() % 2 == 0 else "defence"
 	var slot: String = slots[rng.randi() % slots.size()]
+	return _roll_item(rng, rarity, side, slot)
+
+
+func _roll_item(rng: RandomNumberGenerator, rarity: String, side: String, slot: String) -> Dictionary:
+	## A piece of gear of this rarity, side and slot with random stats and name.
 	var def: Dictionary = rarities[rarity]
 	var pool: Array = slot_stats[side][slot].duplicate()
 	var item_stats := {}
@@ -341,7 +367,7 @@ func roll_drop(level: int, seed_value: int) -> Dictionary:
 		var nouns: Array = names.nouns[side][slot]
 		var adjective: String = adjectives[rng.randi() % adjectives.size()]
 		item_name = "%s %s" % [adjective, nouns[rng.randi() % nouns.size()]]
-	return {"id": 0, "slot": slot, "side": side, "rarity": rarity, "name": item_name, "stats": item_stats}
+	return {"id": 0, "slot": slot, "side": side, "rarity": rarity, "name": item_name, "stats": item_stats, "gems": []}
 
 
 func give(castle: CastleState, item: Dictionary) -> bool:
@@ -375,6 +401,7 @@ func sell(castle: CastleState, item_id: Variant) -> String:
 	if i < 0:
 		return "There's no such item in your bag."
 	var item: Dictionary = castle.armoury.bag.pop_at(i)
+	_free_gems(castle, item)
 	castle.resources["gold"] = float(castle.resources.get("gold", 0.0)) + sell_price(item)
 	return ""
 
@@ -425,10 +452,11 @@ func unequip(castle: CastleState, who: Variant, slot: Variant, now: float) -> St
 
 
 func item_text(item: Dictionary) -> String:
-	## "+6% attack at the walls, +4% loot carried".
+	## "+6% attack at the walls, +4% loot carried" (gems included).
 	var parts: PackedStringArray = []
-	for stat: String in item.stats:
-		parts.append("+%d%% %s" % [int(item.stats[stat]), stats.get(stat, {}).get("name", stat)])
+	var all := total_stats(item)
+	for stat: String in all:
+		parts.append("+%d%% %s" % [int(all[stat]), stats.get(stat, {}).get("name", stat)])
 	return ", ".join(parts)
 
 
@@ -459,6 +487,12 @@ static func read_armoury(data: Variant) -> Dictionary:
 		if not item.is_empty():
 			a.bag.append(item)
 	a.next_item = int(data.get("next_item", 1))
+	a.marks = maxi(0, int(data.get("marks", 0)))
+	var pouch: Variant = data.get("gems", {})
+	if pouch is Dictionary:
+		for k in pouch:
+			if k is String and (pouch[k] is int or pouch[k] is float) and int(pouch[k]) > 0:
+				a.gems[k] = int(pouch[k])
 	return a
 
 
@@ -487,5 +521,298 @@ static func _read_item(x: Variant) -> Dictionary:
 	var item_stats := {}
 	for k: String in x.get("stats", {}):
 		item_stats[k] = int(x.stats[k])
+	var held: Array = []
+	for k in x.get("gems", []):
+		if k is String:
+			held.append(k)
 	return {"id": int(x.get("id", 0)), "slot": String(x.get("slot", "")), "side": "defence" if x.get("side") == "defence" else "attack",
-			"rarity": String(x.get("rarity", "common")), "name": String(x.get("name", "")), "stats": item_stats}
+			"rarity": String(x.get("rarity", "common")), "name": String(x.get("name", "")), "stats": item_stats, "gems": held}
+
+
+# --- Gems, Marks and the forge ----------------------------------------------------------
+
+static func gem_key(kind: String, tier: int) -> String:
+	return "%s:%d" % [kind, tier]
+
+
+func gem_parts(key: Variant) -> Dictionary:
+	## {kind, tier} of a gem key like "ruby:3", or {} if there's no such gem.
+	if not key is String:
+		return {}
+	var bits := String(key).split(":")
+	if bits.size() != 2 or not gems.has(bits[0]) or not bits[1].is_valid_int():
+		return {}
+	var tier := bits[1].to_int()
+	if tier < 1 or tier > gem_tiers.size() or bits[1] != str(tier):
+		return {}
+	return {"kind": bits[0], "tier": tier}
+
+
+func gem_value(key: String) -> int:
+	var p := gem_parts(key)
+	return 0 if p.is_empty() else int(gem_tiers[int(p.tier) - 1].value)
+
+
+func gem_stat(key: String) -> String:
+	var p := gem_parts(key)
+	return "" if p.is_empty() else String(gems[p.kind].stat)
+
+
+func gem_side(key: String) -> String:
+	var stat := gem_stat(key)
+	return String(stats.get(stat, {}).get("side", ""))
+
+
+func gem_name(key: String) -> String:
+	## "Flawless Ruby".
+	var p := gem_parts(key)
+	if p.is_empty():
+		return key
+	return "%s %s" % [gem_tiers[int(p.tier) - 1].name, gems[p.kind].name]
+
+
+func gem_text(key: String) -> String:
+	## "+7% attack at the walls".
+	return "+%d%% %s" % [gem_value(key), stats.get(gem_stat(key), {}).get("name", gem_stat(key))]
+
+
+func gem_color(key: String) -> Color:
+	var p := gem_parts(key)
+	return Color(String(gems[p.kind].color)) if not p.is_empty() else Color.WHITE
+
+
+func sockets(item: Dictionary) -> int:
+	return int(rarities.get(item.get("rarity", ""), {}).get("sockets", 0))
+
+
+func total_stats(item: Dictionary) -> Dictionary:
+	## The item's own stats plus its gems': stat -> percent.
+	var out: Dictionary = {}
+	for stat: String in item.get("stats", {}):
+		out[stat] = int(out.get(stat, 0)) + int(item.stats[stat])
+	for key in item.get("gems", []):
+		var stat := gem_stat(String(key))
+		if stat != "":
+			out[stat] = int(out.get(stat, 0)) + gem_value(String(key))
+	return out
+
+
+static func gem_count(castle: CastleState, key: String) -> int:
+	return int(castle.armoury.gems.get(key, 0))
+
+
+static func add_gems(castle: CastleState, key: String, n: int) -> void:
+	var have := gem_count(castle, key) + n
+	if have > 0:
+		castle.armoury.gems[key] = have
+	else:
+		castle.armoury.gems.erase(key)
+
+
+static func add_marks(castle: CastleState, n: int) -> void:
+	castle.armoury.marks = maxi(0, int(castle.armoury.get("marks", 0)) + n)
+
+
+func _free_gems(castle: CastleState, item: Dictionary) -> void:
+	## Puts an item's gems back in the pouch (before it is sold, melted or forged).
+	for key in item.get("gems", []):
+		if not gem_parts(key).is_empty():
+			add_gems(castle, String(key), 1)
+	item.gems = []
+
+
+func check_socket(castle: CastleState, item_id: Variant, key: Variant) -> String:
+	## Why this gem can't go into this bag item now ("" if it can).
+	var i := _bag_index(castle, item_id)
+	if i < 0:
+		return "There's no such item in your bag."
+	if gem_parts(key).is_empty():
+		return "There's no such gem."
+	if gem_count(castle, key) <= 0:
+		return "You have no %s." % gem_name(key)
+	var item: Dictionary = castle.armoury.bag[i]
+	if gem_side(key) != item.side:
+		return "A %s fits %s gear." % [gem_name(key), gem_side(key)]
+	if item.get("gems", []).size() >= sockets(item):
+		return "Every socket of the %s is taken." % item.name
+	return ""
+
+
+func socket(castle: CastleState, item_id: Variant, key: Variant) -> String:
+	## Sets a gem from your pouch into a free socket of gear in your bag.
+	var why := check_socket(castle, item_id, key)
+	if why == "":
+		var item: Dictionary = castle.armoury.bag[_bag_index(castle, item_id)]
+		if not item.has("gems"):
+			item.gems = []
+		item.gems.append(String(key))
+		add_gems(castle, String(key), -1)
+	return why
+
+
+func unsocket_cost(key: String) -> int:
+	var p := gem_parts(key)
+	if p.is_empty() or unsocket_marks.is_empty():
+		return 0
+	return int(unsocket_marks[mini(int(p.tier), unsocket_marks.size()) - 1])
+
+
+func unsocket(castle: CastleState, item_id: Variant, index: Variant) -> String:
+	## Prises gem `index` out of gear in your bag, for Marks; it goes back in your pouch.
+	var i := _bag_index(castle, item_id)
+	if i < 0:
+		return "There's no such item in your bag."
+	var item: Dictionary = castle.armoury.bag[i]
+	var held: Array = item.get("gems", [])
+	if not (index is int or index is float) or float(index) != float(int(index)) or int(index) < 0 or int(index) >= held.size():
+		return "There's no gem there."
+	var key := String(held[int(index)])
+	var cost := unsocket_cost(key)
+	if int(castle.armoury.marks) < cost:
+		return "Prising out the %s costs %d Marks." % [gem_name(key), cost]
+	add_marks(castle, -cost)
+	held.remove_at(int(index))
+	if not gem_parts(key).is_empty():
+		add_gems(castle, key, 1)
+	return ""
+
+
+func check_fuse(castle: CastleState, key: Variant) -> String:
+	var p := gem_parts(key)
+	if p.is_empty():
+		return "There's no such gem."
+	if int(p.tier) >= gem_tiers.size():
+		return "A %s is as fine as gems get." % gem_name(key)
+	if gem_count(castle, key) < fuse_count:
+		return "Fusing needs %d of the same gem." % fuse_count
+	return ""
+
+
+func fuse(castle: CastleState, key: Variant) -> String:
+	## Fuses `fuse_count` gems of one kind and tier into one of the next tier.
+	var why := check_fuse(castle, key)
+	if why == "":
+		var p := gem_parts(key)
+		add_gems(castle, String(key), -fuse_count)
+		add_gems(castle, gem_key(p.kind, int(p.tier) + 1), 1)
+	return why
+
+
+func melt_marks(item: Dictionary) -> int:
+	return int(rarities.get(item.rarity, {}).get("melt", 0))
+
+
+func melt(castle: CastleState, item_id: Variant) -> String:
+	## Melts gear from your bag down for Marks; its gems go back in your pouch.
+	var i := _bag_index(castle, item_id)
+	if i < 0:
+		return "There's no such item in your bag."
+	var item: Dictionary = castle.armoury.bag.pop_at(i)
+	_free_gems(castle, item)
+	add_marks(castle, melt_marks(item))
+	return ""
+
+
+func next_rarity(rarity: String) -> String:
+	var kinds: Array = rarities.keys()
+	var i := kinds.find(rarity)
+	return "" if i < 0 or i + 1 >= kinds.size() else String(kinds[i + 1])
+
+
+func forge_cost(rarity: String) -> int:
+	return int(rarities.get(rarity, {}).get("forge", 0))
+
+
+func check_forge(castle: CastleState, ids: Variant) -> String:
+	## Why these bag items can't be forged together now ("" if they can).
+	if not ids is Array or ids.size() != forge_count:
+		return "The forge needs %d pieces of gear." % forge_count
+	var picked: Array = []
+	for id in ids:
+		var i := _bag_index(castle, id)
+		if i < 0:
+			return "There's no such item in your bag."
+		if picked.has(i):
+			return "Pick %d different pieces." % forge_count
+		picked.append(i)
+	var first: Dictionary = castle.armoury.bag[picked[0]]
+	for i: int in picked:
+		var item: Dictionary = castle.armoury.bag[i]
+		if item.rarity != first.rarity:
+			return "Forge pieces of the same rarity."
+		if item.side != first.side:
+			return "Forge attack gear with attack gear, defence with defence."
+	if next_rarity(first.rarity) == "":
+		return "Legendary gear can't be forged any higher."
+	var cost := forge_cost(first.rarity)
+	if int(castle.armoury.marks) < cost:
+		return "Forging %s gear costs %d Marks." % [String(rarities[first.rarity].name).to_lower(), cost]
+	return ""
+
+
+func forge(castle: CastleState, ids: Variant) -> String:
+	## Forges `forge_count` bag items of one rarity and side into one random
+	## piece of the next rarity, in the slot of the first, for Marks. The new
+	## piece is decided by the castle (the first id and the next item id), so
+	## the game and the server agree on it.
+	var why := check_forge(castle, ids)
+	if why != "":
+		return why
+	var first: Dictionary = castle.armoury.bag[_bag_index(castle, ids[0])]
+	var rarity := next_rarity(first.rarity)
+	var side := String(first.side)
+	var slot := String(first.slot)
+	add_marks(castle, -forge_cost(first.rarity))
+	for id in ids:
+		var item: Dictionary = castle.armoury.bag.pop_at(_bag_index(castle, id))
+		_free_gems(castle, item)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = int(ids[0]) * 7919 + int(castle.armoury.next_item) * 104729 + FORGE_SEED
+	var made := _roll_item(rng, rarity, side, slot)
+	give(castle, made)
+	return ""
+
+
+func gem_drop_chance(level: int) -> float:
+	return minf(float(gem_drop.get("base", 0.0)) + float(gem_drop.get("per_level", 0.0)) * (level - 1), float(gem_drop.get("max", 0.0)))
+
+
+func roll_gem(level: int, seed_value: int) -> String:
+	## The gem a beaten camp of `level` drops ("" for none). The same seed
+	## gives the same gem (server/rules/gear.ts rollGem()).
+	var tiers: Array = gem_drop.get("tiers", [])
+	if gems.is_empty() or tiers.is_empty():
+		return ""
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_value
+	if rng.randf() >= gem_drop_chance(level):
+		return ""
+	var weights: Array = []
+	var total := 0.0
+	for w: Array in tiers:
+		var n := maxf(0.0, float(w[0]) + float(w[1]) * (level - 1))
+		weights.append(n)
+		total += n
+	var tier := tiers.size()
+	var pick := rng.randf() * total
+	for t in weights.size():
+		if pick < float(weights[t]):
+			tier = t + 1
+			break
+		pick -= float(weights[t])
+	var kinds: Array = gems.keys()
+	return gem_key(String(kinds[rng.randi() % kinds.size()]), tier)
+
+
+func marks_for_win(level: int) -> int:
+	return maxi(1, floori(marks_per_level * level)) if marks_per_level > 0.0 else 0
+
+
+func give_spoils(castle: CastleState, level: int, seed_value: int) -> Dictionary:
+	## The gem and Marks a beaten camp of `level` gives, put in the armoury: {gem, marks}.
+	var gem := roll_gem(level, seed_value)
+	if gem != "":
+		add_gems(castle, gem, 1)
+	var marks := marks_for_win(level)
+	add_marks(castle, marks)
+	return {"gem": gem, "marks": marks}

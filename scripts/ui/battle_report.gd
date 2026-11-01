@@ -454,6 +454,16 @@ static func gear_line(report: Dictionary) -> String:
 			lines.append("The baron dropped %s, but your bag was full, so it was left behind." % what)
 		else:
 			lines.append("Spoils of war: %s. Find it under Commanders." % what)
+	var gem := String(report.get("gem", ""))
+	var marks := int(report.get("marks", 0))
+	if gem != "" or marks > 0:
+		var g: GearRules = Economy.gear_rules
+		var found: PackedStringArray = []
+		if gem != "" and g != null:
+			found.append("a %s (%s)" % [g.gem_name(gem), g.gem_text(gem)])
+		if marks > 0:
+			found.append("%d Mark%s" % [marks, "" if marks == 1 else "s"])
+		lines.append("Also found: %s. See the Forge tab." % " and ".join(found))
 	return "\n".join(lines)
 
 

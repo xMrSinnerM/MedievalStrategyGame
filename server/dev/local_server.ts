@@ -33,7 +33,8 @@ import {
   type Directory, MAIL_ORDERS, mailOrder, mailView, MemoryMailStore, sendLetter,
 } from "../../supabase/functions/game/mail.ts";
 import { deliver, recall, type Aid, type AidRules } from "../../supabase/functions/game/aid.ts";
-import { goingRates, type MarketReport, type MarketRules, type Offer } from "../../supabase/functions/game/market.ts";
+import { goingRates, isItemGood, MARKS, type MarketReport, type MarketRules, type Offer } from "../../supabase/functions/game/market.ts";
+import type { Item } from "../rules/gear.ts";
 import { invade } from "../../supabase/functions/game/invasion.ts";
 import { hordeArrives, prizeFor } from "../../supabase/functions/game/horde.ts";
 import {
@@ -533,8 +534,9 @@ function marketView(user: string) {
   };
 }
 
-function collectMarket(user: string): { income: Record<string, number>; reports: MarketReport[] } {
+function collectMarket(user: string): { income: Record<string, number>; items: Item[]; reports: MarketReport[] } {
   const income: Record<string, number> = {};
+  const items: Item[] = [];
   const out: MarketReport[] = [];
   for (const o of offers.filter((x) => x.seller === user)) {
     if (o.state === "sold") {
@@ -542,12 +544,13 @@ function collectMarket(user: string): { income: Record<string, number>; reports:
       income[o.want] = (income[o.want] ?? 0) + o.proceeds;
     } else if (o.state === "cancelled" || (o.state === "open" && o.expires <= now())) {
       if (o.state === "open") out.push({ kind: "market", event: "expired", at: o.expires, give: o.give, give_amount: o.give_amount,
-        want: o.want, want_amount: o.want_amount });
+        want: o.want, want_amount: o.want_amount, ...(o.item ? { item_name: o.item.name } : {}) });
       o.state = "returned";
-      income[o.give] = (income[o.give] ?? 0) + o.give_amount;
+      if (o.item) items.push(o.item);
+      else income[o.give] = (income[o.give] ?? 0) + o.give_amount;
     }
   }
-  return { income, reports: out };
+  return { income, items, reports: out };
 }
 
 // The same as resolveAid() in index.ts, without the database.
@@ -857,15 +860,17 @@ createServer(async (req, res) => {
         events: { rules: eventRules, world, offset: EVENTS_OFFSET }, quests: questRules, achievements: achievementRules, login: loginRules, seasons: seasonRules, tourney: tourneyRules, seasonPlace, chests: chestRules, encounters, weather,
         sabotage: sabotageRules, targetCastle: target ? players.get(target.user)?.castle : undefined, village: village?.target, villageIncome,
         capitalBoost: capitalBoost(rules, allianceCapitals(user).levels, allianceCapitals(user).guilds), fortresses: world.fortresses, hordeRank: hordePlace,
-        market: { rules: marketRules, open: offers.filter((o) => o.seller === user && o.state === "open" && o.expires > t).length,
-          offer: bought ? offerOf(bought) : undefined }, marketIncome: market.income });
+        market: { rules: marketRules, open: offers.filter((o) => o.seller === user && o.state === "open" && o.expires > t &&
+          (o.want === MARKS) === (body.give === "gear" || body.want === MARKS || isItemGood(body.give, rules.gear))).length,
+          offer: bought ? offerOf(bought) : undefined }, marketIncome: market.income, marketItems: market.items });
     players.set(user, outcome.state);
     for (const r of [...outcome.reports, ...market.reports, ...(outcome.marketReports ?? [])]) report(user, r);
     if (outcome.offer) offers.push({ ...outcome.offer, id: nextOffer++, seller: user, state: "open", buyer: null, buyer_name: "", sold_at: null });
     if (bought && outcome.error === "") {
       Object.assign(bought, { state: "sold", buyer: user, buyer_name: outcome.state.name, sold_at: t });
       report(bought.seller, { kind: "market", event: "sold", at: t, name: outcome.state.name, give: bought.give,
-        give_amount: bought.give_amount, want: bought.want, want_amount: bought.want_amount, proceeds: bought.proceeds } as MarketReport);
+        give_amount: bought.give_amount, want: bought.want, want_amount: bought.want_amount, proceeds: bought.proceeds,
+        ...(bought.item ? { item_name: bought.item.name } : {}) } as MarketReport);
     }
     if (outcome.capitalBuild && village) villages.set(village.target.info.id, { ...outcome.capitalBuild.state, holder: user });
     if (outcome.raid && village) {

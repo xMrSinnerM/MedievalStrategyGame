@@ -8,6 +8,7 @@
 
 import type { Side } from "../../../server/rules/battle.ts";
 import type { CastleState } from "../../../server/rules/castle_state.ts";
+import { addMarks } from "../../../server/rules/gear.ts";
 import type { Dict } from "../../../server/rules/util.ts";
 import type { VillageInfo } from "../../../server/rules/villages.ts";
 
@@ -16,6 +17,8 @@ export interface WarPrize {
   up_to: number;
   resources?: Dict;
   troops?: Dict;
+  /** Marks, the trade coin (server/rules/gear.ts). */
+  marks?: number;
 }
 
 export interface WarRules {
@@ -203,6 +206,7 @@ export function checkClaim(rules: WarRules, me: WarMember, standing: Standing | 
 
 /** Puts a prize in the castle: resources up to the storage (what doesn't fit is lost), soldiers in the garrison. */
 export function givePrize(castle: CastleState, prize: WarPrize): void {
+  if (prize.marks) addMarks(castle, prize.marks);
   const cap = castle.storageCapacity();
   for (const [r, n] of Object.entries(prize.resources ?? {})) {
     if (!(r in castle.resources)) continue;

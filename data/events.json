@@ -225,6 +225,7 @@
 				"prizes": [
 					{
 						"up_to": 1,
+						"marks": 120,
 						"resources": {
 							"gold": 4000
 						},
@@ -235,6 +236,7 @@
 					},
 					{
 						"up_to": 3,
+						"marks": 80,
 						"resources": {
 							"gold": 2500
 						},
@@ -245,6 +247,7 @@
 					},
 					{
 						"up_to": 10,
+						"marks": 50,
 						"resources": {
 							"gold": 1500
 						},
@@ -255,6 +258,7 @@
 					},
 					{
 						"up_to": 25,
+						"marks": 30,
 						"resources": {
 							"gold": 800
 						},
@@ -265,6 +269,7 @@
 					},
 					{
 						"up_to": 0,
+						"marks": 15,
 						"resources": {
 							"wood": 500,
 							"stone": 500

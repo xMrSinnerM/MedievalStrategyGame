@@ -815,6 +815,40 @@ lead. **Retraining** hands every point back for 150 gold per commander
 level. Orders `learn_skill` and `retrain_commander`; the skills live in
 `data/gear.json` next to the gear.
 
+### Gems, Marks and the forge
+
+Every won camp fight also pays **Marks**, the trade coin (half a Mark per
+camp level, at least one), and may drop a **gem** (25% at level 1, up to
+60%). Marks are only ever earned by playing: barons, melting gear, chest
+jackpots and Ember Horde, alliance war and tournament prizes. Nothing sells
+them.
+
+| Gem | Stat | Side |
+|-----|------|------|
+| Ruby | attack at the walls | attack |
+| Garnet | attack in the courtyard | attack |
+| Onyx | off the wall's bonus | attack |
+| Topaz | loot carried | attack |
+| Sapphire | defence on the walls | defence |
+| Emerald | defence in the courtyard | defence |
+| Amethyst | wall strength | defence |
+
+Gems come in five tiers: Chipped (+1%), Flawed (+2%), Polished (+4%),
+Flawless (+7%) and Royal (+11%); finer ones drop from stronger camps.
+Three of one kind and tier **fuse** into one of the next tier. Gear has
+sockets by rarity (common and uncommon 1, rare and epic 2, legendary 3);
+pick gear in your bag (Commanders tab) to set a gem of its side, which
+counts with the gear's own stats under the same caps. Prising a gem out
+costs 1, 2, 4, 8 or 16 Marks by tier and puts it back in your pouch.
+
+Gear you don't need **melts** for Marks (1, 3, 8, 20 or 50 by rarity),
+next to selling it for gold. The **forge** (Forge tab of the Army window)
+turns three pieces of one rarity and side into one random piece of the
+next rarity, in the slot of the first one picked, for 3, 8, 20 or 50 Marks
+(common to epic). Gems in melted, sold or forged gear go back to your pouch.
+Orders `socket_gem`, `unsocket_gem`, `fuse_gems`, `melt_gear` and
+`forge_gear`; it all lives in the castle's `armoury` (`marks`, `gems`).
+
 ## Outpost: your second castle
 
 Press **P** (or the **Outpost** button on the map). Once your keep reaches
@@ -1009,6 +1043,17 @@ one you give, so the market can't be used to hand an account resources for
 nothing. Recent trades show the going rates. The numbers are in
 `data/market.json`.
 
+**Gear and gems** trade for **Marks** (see *Gems, Marks and the forge*),
+never for resources. Under **Sell**, pick *Gear and gems for Marks*: one
+piece of gear from your bag (with the gems in it) or up to 10 gems of one
+kind and tier from your pouch. Gear asks 1-30 Marks (common), 3-80
+(uncommon), 8-200 (rare), 20-500 (epic) or 50-1500 (legendary); gems 1-6,
+2-15, 5-40, 12-100 or 30-250 Marks each by tier. Up to 5 gear and gem offers
+at once, besides your resource offers; the same 5% cut and 48 hours apply.
+Bought gear goes into your bag (it needs a free place) and gems into your
+pouch; unsold gear comes back to your bag even when it's full. **Buy** can
+show only gear or only gems; hover gear to see its stats and gems.
+
 ### Timed events
 
 Online, a banner at the bottom of the map shows the event that's on and how
@@ -1157,6 +1202,7 @@ How the parts work:
 - [x] Siege workshop: attack and defence tools
 - [x] Commanders and gear
 - [x] Commander skills
+- [x] Gems, Marks and the forge
 - [x] Academy and research tree
 - [x] Decorations and public order
 

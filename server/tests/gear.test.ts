@@ -20,7 +20,7 @@ const T0 = 1_000_000;
 const g = rules.gear;
 
 function item(id: number, slot: string, side: "attack" | "defence", stats: Record<string, number>): Item {
-  return { id, slot, side, rarity: "epic", name: `Test ${slot}`, stats };
+  return { id, slot, side, rarity: "epic", name: `Test ${slot}`, stats, gems: [] };
 }
 
 function withKeep(p: PlayerState, level: number): PlayerState {
@@ -192,4 +192,49 @@ test("Drillmaster earns more xp", () => {
   c.skills = { brawler: 3, drillmaster: 1 };
   const castle = { armoury: s.castle.armoury } as never;
   assert.equal(g.addXp(castle, 1, 10)?.xp, 12);
+});
+
+test("gems are set, prised out and fused, gear is melted and forged, by order", () => {
+  let p = act(rules, newPlayer(rules, world, "Jeweller", T0), { action: "state" }, T0).state;
+  p.castle.armoury.bag = [item(1, "weapon", "attack", { wall_attack: 8 }), { ...item(2, "helmet", "attack", { loot: 3 }), rarity: "common" },
+    { ...item(3, "banner", "attack", { loot: 2 }), rarity: "common" }, { ...item(4, "armour", "attack", { loot: 4 }), rarity: "common" }];
+  p.castle.armoury.next_item = 5;
+  p.castle.armoury.gems = { "ruby:3": 4 };
+  const order = (req: Record<string, unknown>) => {
+    const out = act(rules, p, req, T0 + 5);
+    if (out.error === "") p = out.state;
+    return out.error;
+  };
+  assert.equal(order({ action: "socket_gem", item: 1, gem: "toString" }), "There's no such gem.");
+  assert.equal(order({ action: "socket_gem", item: 1, gem: "ruby:3" }), "");
+  assert.deepEqual(p.castle.armoury.bag[0].gems, ["ruby:3"]);
+  assert.deepEqual(g.effects({ weapon: p.castle.armoury.bag[0] }), { wall_attack: 0.12 }, "the gem adds 4%");
+  assert.equal(order({ action: "unsocket_gem", item: 1, index: 0 }), "Prising out the Polished Ruby costs 4 Marks.");
+  assert.equal(order({ action: "fuse_gems", gem: "ruby:3" }), "");
+  assert.deepEqual(p.castle.armoury.gems, { "ruby:4": 1 });
+  assert.equal(order({ action: "melt_gear", item: 1 }), "");
+  assert.equal(p.castle.armoury.marks, 20, "an epic melts for 20 Marks");
+  assert.deepEqual(p.castle.armoury.gems, { "ruby:4": 1, "ruby:3": 1 }, "its gem came back");
+  assert.equal(order({ action: "forge_gear", items: [2, 3] }), "The forge needs 3 pieces of gear.");
+  assert.equal(order({ action: "forge_gear", items: [4, 2, 3] }), "");
+  assert.equal(p.castle.armoury.marks, 17);
+  assert.equal(p.castle.armoury.bag.length, 1);
+  assert.deepEqual([p.castle.armoury.bag[0].id, p.castle.armoury.bag[0].rarity, p.castle.armoury.bag[0].slot], [5, "uncommon", "armour"]);
+});
+
+test("a won camp fight pays Marks and may drop a gem", () => {
+  let p = act(rules, newPlayer(rules, world, "Raider", T0), { action: "state" }, T0).state;
+  p.castle.troops = { swordsman: 300 };
+  const camp = p.camps[0];
+  const out = act(rules, p, { action: "attack", camp: camp.id, army: { swordsman: 300 } }, T0);
+  const m = out.state.marches[0];
+  const fought = act(rules, out.state, { action: "state" }, m.arrive + 1);
+  const report = fought.reports[0];
+  assert.equal(report.winner, "a");
+  const seed = m.id * 7919 + godotHash(camp.id);
+  const gem = g.rollGem(report.level, seed + 27449);
+  assert.equal(report.marks, g.marksForWin(report.level));
+  assert.equal(fought.state.castle.armoury.marks, g.marksForWin(report.level));
+  assert.equal(report.gem, gem === "" ? undefined : gem);
+  if (gem !== "") assert.deepEqual(fought.state.castle.armoury.gems, { [gem]: 1 });
 });
