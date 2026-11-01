@@ -68,6 +68,7 @@ func setup(data: Dictionary) -> void:
 
 	_label = Label3D.new()
 	_label.name = "Label"
+	_label.set_meta("plate", type)   # drawn as a name plate (Nameplates)
 	_label.text = settlement_name
 	_label.font_size = LABEL_SIZE[type]
 	_label.outline_size = 10

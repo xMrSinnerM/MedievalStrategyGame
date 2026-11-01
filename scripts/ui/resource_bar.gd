@@ -85,12 +85,11 @@ func show_castle(castle: CastleState, away := 0) -> void:
 
 func _chip(icon: String) -> PanelContainer:
 	var chip := PanelContainer.new()
-	var box := StyleBoxFlat.new()
-	box.bg_color = Color(0.03, 0.025, 0.02, 0.8)
-	box.border_color = Color(GameTheme.RIM, 0.55)
-	box.set_border_width_all(1)
-	box.set_corner_radius_all(3)
-	box.content_margin_left = 6
+	var box := CardBox.new()
+	box.bg_color = Color(0.02, 0.016, 0.012, 0.7)
+	box.border_color = Color(GameTheme.RIM, 0.5)
+	box.ticks = false
+	box.content_margin_left = 4
 	box.content_margin_right = 10
 	box.content_margin_top = 3
 	box.content_margin_bottom = 3
@@ -100,7 +99,7 @@ func _chip(icon: String) -> PanelContainer:
 	row.add_theme_constant_override("separation", 6)
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	chip.add_child(row)
-	var pic := Icons.rect(icon, 30)
+	var pic := Medallion.make(icon, 36)
 	pic.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	row.add_child(pic)
 	add_child(chip)

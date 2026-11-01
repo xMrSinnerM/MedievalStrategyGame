@@ -36,6 +36,9 @@ void fragment() {
 	if (instance_tint && col.g > col.r) {
 		col = mix(col, vec3(dot(col, vec3(0.3, 0.59, 0.11))), 0.3) * v_tint;
 	}
+	if (map_fog_on) {
+		col *= 1.0 - cloud_shadow(v_world.xz, TIME);
+	}
 	ALBEDO = col;
 	ROUGHNESS = roughness;
 	SPECULAR = 0.2;

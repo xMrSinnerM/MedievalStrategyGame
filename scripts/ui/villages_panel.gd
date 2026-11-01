@@ -108,7 +108,7 @@ func _refresh() -> void:
 			for unit: String in state.get("guard", {}):
 				guards += int(state.guard[unit])
 			grid.add_child(MenuStyle.label(String(v.name), 15, MenuStyle.TEXT))
-			grid.add_child(MenuStyle.label("%s, level %d" % [v.resource, int(v.level)], 15, MenuStyle.TEXT))
+			grid.add_child(_works(String(v.resource), int(v.level)))
 			grid.add_child(MenuStyle.label("+%d" % vr.yield_per_hour(v.resource, int(v.level)), 15, MenuStyle.TEXT))
 			grid.add_child(MenuStyle.label("%d" % Economy.village_stock(String(v.id)), 15, MenuStyle.TEXT))
 			grid.add_child(MenuStyle.label("%d" % guards if Economy.online else "-", 15, MenuStyle.TEXT))
@@ -128,7 +128,7 @@ func _refresh() -> void:
 		for unit: String in defenders:
 			n += int(defenders[unit])
 		others.add_child(MenuStyle.label(String(v.name), 15, MenuStyle.TEXT))
-		others.add_child(MenuStyle.label("%s, level %d" % [v.resource, int(v.level)], 15, MenuStyle.TEXT))
+		others.add_child(_works(String(v.resource), int(v.level)))
 		others.add_child(MenuStyle.label(("[%s] " % tag if tag != "" else "") + owner if owner != "" else "the militia", 15,
 				Color(0.55, 0.95, 0.55) if state.get("ally", false) else MenuStyle.TEXT))
 		others.add_child(MenuStyle.label("%d" % n, 15, MenuStyle.TEXT))
@@ -189,11 +189,22 @@ func _nearest() -> Array:
 
 
 func _grid() -> GridContainer:
-	var grid := GridContainer.new()
+	var grid := StripedGrid.new()
 	grid.columns = 6
+	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	grid.add_theme_constant_override("h_separation", 22)
-	grid.add_theme_constant_override("v_separation", 4)
+	grid.add_theme_constant_override("v_separation", 6)
 	return grid
+
+
+static func _works(resource: String, level: int) -> Control:
+	## The village's resource as its picture, and its level.
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+	row.add_child(Icons.rect(resource, 22))
+	row.add_child(MenuStyle.label("level %d" % level, 15, MenuStyle.TEXT))
+	row.tooltip_text = resource
+	return row
 
 
 func _show_button(id: String) -> Button:

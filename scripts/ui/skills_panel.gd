@@ -191,7 +191,7 @@ func _skill(castle: CastleState, g: GearRules, c: Dictionary, k: Dictionary) -> 
 	var why := g.check_learn(castle, int(c.id), k.id)
 	var locked := rank == 0 and (int(c.level) < int(k.needs) or (String(k.after) != "" and GearRules.skill_rank(c, k.after) == 0))
 	var card := PanelContainer.new()
-	var style: StyleBoxFlat = MenuStyle.panel(0.35, 8)
+	var style: CardBox = MenuStyle.panel(0.35, 8)
 	if rank > 0:
 		style.border_color = LEARNED.darkened(0.2)
 	elif why == "":

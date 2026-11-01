@@ -232,11 +232,10 @@ static func panel_box(alpha := 0.92, margin := 24, radius := 8) -> StyleBox:
 	## (OrnateBox). Faint boards (alpha under 0.6) are cards inside a window,
 	## with a plain thin rim.
 	if alpha < 0.6:
-		var card := StyleBoxFlat.new()
+		var card := CardBox.new()
 		card.bg_color = Color(0.11, 0.09, 0.07, 0.35 + alpha * 0.5)
 		card.border_color = Color(RIM, 0.45)
-		card.set_border_width_all(1)
-		card.set_corner_radius_all(mini(radius, 3))
+		card.ticks = radius > 3
 		card.set_content_margin_all(margin)
 		return card
 	var s := OrnateBox.new()
@@ -247,17 +246,12 @@ static func panel_box(alpha := 0.92, margin := 24, radius := 8) -> StyleBox:
 	return s
 
 
-static func bar_box(alpha := 0.88) -> StyleBoxFlat:
-	## A board along the top of the screen with a bronze edge under it.
-	var s := StyleBoxFlat.new()
-	s.bg_color = Color(0.045, 0.038, 0.03, alpha + 0.06)
-	s.border_color = RIM
-	s.border_width_bottom = 1
+static func bar_box(alpha := 0.88) -> StyleBox:
+	## The board along the top of the screen (TopBarBox).
+	var s := TopBarBox.new()
+	s.bg.a = minf(alpha + 0.08, 1.0)
 	s.content_margin_left = 14
 	s.content_margin_right = 12
 	s.content_margin_top = 6
-	s.content_margin_bottom = 6
-	s.shadow_color = Color(0, 0, 0, 0.3)
-	s.shadow_size = 6
-	s.shadow_offset = Vector2(0, 2)
+	s.content_margin_bottom = 10
 	return s

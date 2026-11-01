@@ -413,10 +413,15 @@ func _dock_button(text: String, icon: String, tip: String, action: Callable) -> 
 	## A square dock button: a big icon with its name under it, and a red
 	## badge in the corner when something waits there.
 	var b := Button.new()
-	b.custom_minimum_size = Vector2(78, 70)
+	b.custom_minimum_size = Vector2(80, 76)
 	b.tooltip_text = tip
 	b.focus_mode = Control.FOCUS_NONE
-	b.add_theme_stylebox_override("normal", GameTheme.button_box(Color(0.075, 0.063, 0.05, 0.95), GameTheme.RIM_DIM))
+	for state: Array in [["normal", Color(0.1, 0.075, 0.055, 0.96), GameTheme.RIM_DIM], ["hover", Color(0.2, 0.08, 0.05, 0.96), GameTheme.RIM_BRIGHT],
+			["pressed", Color(0.3, 0.08, 0.05, 0.96), GameTheme.RIM_BRIGHT], ["hover_pressed", Color(0.3, 0.08, 0.05, 0.96), GameTheme.RIM_BRIGHT]]:
+		var plate := CardBox.new()
+		plate.bg_color = state[1]
+		plate.border_color = state[2]
+		b.add_theme_stylebox_override(state[0], plate)
 	b.pressed.connect(action)
 	var box := VBoxContainer.new()
 	box.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -424,7 +429,7 @@ func _dock_button(text: String, icon: String, tip: String, action: Callable) -> 
 	box.add_theme_constant_override("separation", 2)
 	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	b.add_child(box)
-	var picture := Icons.rect(icon, 34)
+	var picture := Medallion.make(icon, 44)
 	picture.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	picture.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	box.add_child(picture)

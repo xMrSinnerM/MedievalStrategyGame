@@ -25,6 +25,21 @@ func _ready() -> void:
 	Economy.sync_castles(GameData.settlements, GameData.parties)
 	var started := Time.get_ticks_msec()
 	_build_environment()
+	# Darker, warmer edges draw the eye to the middle of the map, like a
+	# painted campaign map; it sits under the name plates and the HUD.
+	var frame := CanvasLayer.new()
+	frame.name = "Vignette"
+	frame.layer = -1
+	var shade := ColorRect.new()
+	shade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	shade.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	shade.material = ShaderMaterial.new()
+	shade.material.shader = preload("res://shaders/map_vignette.gdshader")
+	frame.add_child(shade)
+	add_child(frame)
+	var plates := Nameplates.new()
+	plates.name = "Nameplates"
+	add_child(plates)
 	terrain.build()
 	water.build()
 	rivers.build()
@@ -103,6 +118,13 @@ func _build_environment() -> void:
 	env.ssao_enabled = true
 	env.ssao_radius = 4.0
 	env.ssao_intensity = 1.6
+	# A soft glow on the brightest spots: sun on water, snow and banners.
+	env.glow_enabled = true
+	env.glow_intensity = 0.55
+	env.glow_strength = 0.9
+	env.glow_bloom = 0.02
+	env.glow_hdr_threshold = 0.95
+	env.glow_blend_mode = Environment.GLOW_BLEND_MODE_SOFTLIGHT
 	env.adjustment_enabled = true
 	env.adjustment_saturation = 1.08
 	env.adjustment_contrast = 1.04

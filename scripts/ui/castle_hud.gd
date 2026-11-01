@@ -415,9 +415,11 @@ func _refresh() -> void:
 	for type: String in _build_buttons:
 		var b: Button = _build_buttons[type]
 		var reason := castle.check_build(type)
-		b.text = "%s  %d/%d\n%s\n%s" % [rules.display_name(type), castle.count(type), rules.max_count(type, castle.keep_level()),
-			_cost_text(rules.cost(type, 1)), view.format_time(rules.build_time(type, 1))]
+		b.get_meta("name").text = "%s  %d/%d" % [rules.display_name(type), castle.count(type), rules.max_count(type, castle.keep_level())]
+		b.get_meta("cost").show_text(_cost_text(rules.cost(type, 1)))
+		b.get_meta("time").text = view.format_time(rules.build_time(type, 1))
 		b.disabled = reason != ""
+		b.get_meta("face").modulate.a = 0.5 if b.disabled else 1.0
 		b.tooltip_text = reason if reason != "" else rules.types[type].get("description", "")
 
 	_refresh_queue(castle)
@@ -645,11 +647,41 @@ func _build_button(type: String) -> Button:
 	## A dark card with the building's picture beside its name and cost.
 	# Narrow enough for all eight buildings at 1280 wide.
 	var b := _button("")
-	b.custom_minimum_size = Vector2(132, 74)
-	b.icon = _picture(type)
-	b.expand_icon = true
-	b.add_theme_constant_override("icon_max_width", 42)
-	b.add_theme_constant_override("h_separation", 2)
+	b.custom_minimum_size = Vector2(132, 104)
+	# The face: the building's picture on top, then its name, its cost in
+	# resource pictures and how long it takes.
+	var face := VBoxContainer.new()
+	face.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	face.offset_top = 4
+	face.offset_bottom = -4
+	face.add_theme_constant_override("separation", 0)
+	face.alignment = BoxContainer.ALIGNMENT_CENTER
+	face.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	b.add_child(face)
+	var picture := TextureRect.new()
+	picture.texture = _picture(type)
+	picture.custom_minimum_size = Vector2(0, 46)
+	picture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	picture.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	picture.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	face.add_child(picture)
+	var name_label := _label("", 13, GameTheme.GOLD)
+	name_label.add_theme_font_override("font", GameTheme.BOLD_FONT)
+	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	face.add_child(name_label)
+	var cost := IconLabel.make("", 12, GameTheme.TEXT)
+	cost.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	cost.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	face.add_child(cost)
+	var time := _label("", 11, Color(0.75, 0.7, 0.6))
+	time.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	time.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	face.add_child(time)
+	b.set_meta("face", face)
+	b.set_meta("name", name_label)
+	b.set_meta("cost", cost)
+	b.set_meta("time", time)
 	b.add_theme_font_size_override("font_size", 13)
 	b.add_theme_stylebox_override("normal", GameTheme.card_box(GameTheme.DARK, GameTheme.RIM_DIM))
 	b.add_theme_stylebox_override("hover", GameTheme.card_box(GameTheme.DARK_LIGHT, GameTheme.RIM_BRIGHT))

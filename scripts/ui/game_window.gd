@@ -162,7 +162,7 @@ func _help() -> String:
 	## The open page's explanation, as it reads now.
 	if _current == null:
 		return ""
-	var help: Label = _current.get_meta("window_help", null)
+	var help: Label = _current.get_meta("window_help") if _current.has_meta("window_help") else null
 	return help.text if is_instance_valid(help) else ""
 
 
@@ -172,13 +172,13 @@ func _take_over(page: Control) -> void:
 	page.set_meta("in_window", true)
 	# The window is the frame; the page's own board (set in its _ready) goes.
 	page.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
-	var head: Control = page.get_meta("window_head", null)
+	var head: Control = page.get_meta("window_head") if page.has_meta("window_head") else null
 	if head != null:
 		head.visible = false
-	var close_button: Control = page.get_meta("window_close", null)
+	var close_button: Control = page.get_meta("window_close") if page.has_meta("window_close") else null
 	if close_button != null:
 		close_button.visible = false
-	var help: Label = page.get_meta("window_help", null)
+	var help: Label = page.get_meta("window_help") if page.has_meta("window_help") else null
 	if is_instance_valid(help):
 		help.visible = false
 	# The page's own min width (made for a free-standing window) would push
@@ -235,19 +235,40 @@ func _fit() -> void:
 
 
 func _style_tab(b: Button, on: bool) -> void:
+	## Tabs sit on the board like bookmarks: the open one is crimson with a
+	## gold rim and a gold edge along its foot, the others dark.
+	for state in ["normal", "hover", "pressed", "hover_pressed"]:
+		b.remove_theme_stylebox_override(state)
 	if on:
-		var s := GameTheme.button_box(Color(0.2, 0.14, 0.07), GameTheme.RIM_BRIGHT)
+		var s := _tab_box(Color(0.4, 0.085, 0.06), GameTheme.RIM_BRIGHT)
 		s.border_width_bottom = 3
-		for state in ["normal", "hover", "pressed"]:
+		for state in ["normal", "hover", "pressed", "hover_pressed"]:
 			b.add_theme_stylebox_override(state, s)
 		b.add_theme_color_override("font_color", GameTheme.GOLD)
 		b.add_theme_color_override("font_hover_color", GameTheme.GOLD)
 	else:
-		for state in ["normal", "hover", "pressed"]:
-			b.remove_theme_stylebox_override(state)
-		b.add_theme_stylebox_override("normal", GameTheme.button_box(Color(0.06, 0.05, 0.04, 0.9), Color(GameTheme.RIM_DIM, 0.6)))
+		b.add_theme_stylebox_override("normal", _tab_box(Color(0.075, 0.06, 0.047, 0.95), Color(GameTheme.RIM_DIM, 0.7)))
+		b.add_theme_stylebox_override("hover", _tab_box(Color(0.2, 0.06, 0.045, 0.95), GameTheme.RIM))
+		b.add_theme_stylebox_override("pressed", _tab_box(Color(0.3, 0.07, 0.05), GameTheme.RIM_BRIGHT))
 		b.add_theme_color_override("font_color", MenuStyle.MUTED)
 		b.remove_theme_color_override("font_hover_color")
+
+
+static func _tab_box(bg: Color, rim: Color) -> StyleBoxFlat:
+	var s := StyleBoxFlat.new()
+	s.bg_color = bg
+	s.border_color = rim
+	s.set_border_width_all(1)
+	s.corner_radius_top_left = 6
+	s.corner_radius_top_right = 6
+	s.content_margin_left = 16
+	s.content_margin_right = 16
+	s.content_margin_top = 6
+	s.content_margin_bottom = 6
+	s.shadow_color = Color(0, 0, 0, 0.35)
+	s.shadow_size = 3
+	s.shadow_offset = Vector2(0, 1)
+	return s
 
 
 func _square(text: String, action: Callable) -> Button:

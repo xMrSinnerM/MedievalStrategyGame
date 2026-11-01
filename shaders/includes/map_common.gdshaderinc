@@ -28,3 +28,25 @@ vec4 map_fog(vec3 world_pos, vec3 camera_pos) {
 	float haze = smoothstep(fog_haze_start, fog_haze_end, distance(world_pos, camera_pos)) * fog_haze_max;
 	return vec4(fog_color, max(map_edge_fog(world_pos.xz), haze));
 }
+
+// Soft shadows of clouds drifting slowly across the map: 0 in sun, up to
+// cloud_strength under a cloud.
+uniform float cloud_strength = 0.2;
+
+float cloud_hash(vec2 p) {
+	return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+}
+
+float cloud_noise(vec2 p) {
+	vec2 i = floor(p);
+	vec2 f = fract(p);
+	vec2 u = f * f * (3.0 - 2.0 * f);
+	return mix(mix(cloud_hash(i), cloud_hash(i + vec2(1.0, 0.0)), u.x),
+			mix(cloud_hash(i + vec2(0.0, 1.0)), cloud_hash(i + vec2(1.0, 1.0)), u.x), u.y);
+}
+
+float cloud_shadow(vec2 xz, float time) {
+	vec2 p = xz / 420.0 + vec2(time * 0.006, time * 0.0025);
+	float n = cloud_noise(p) * 0.65 + cloud_noise(p * 2.3 + 7.1) * 0.35;
+	return smoothstep(0.52, 0.72, n) * cloud_strength;
+}

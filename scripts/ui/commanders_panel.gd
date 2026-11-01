@@ -165,14 +165,20 @@ func _card(title: String, line: String, fx: String, gear: Dictionary, who: Varia
 	for slot: String in g.slots:
 		var b := Button.new()
 		b.focus_mode = Control.FOCUS_NONE
-		b.custom_minimum_size = Vector2(SLOT_WIDTH, 44)
+		b.custom_minimum_size = Vector2(SLOT_WIDTH, 52)
 		b.add_theme_font_size_override("font_size", 12)
 		b.clip_text = true
+		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		b.icon = Icons.get_icon(slot, 30)
+		b.add_theme_constant_override("icon_max_width", 30)
+		b.add_theme_constant_override("h_separation", 8)
 		var slot_name := String(g.slot_names.get(slot, slot))
 		if gear.has(slot):
 			var item: Dictionary = gear[slot]
 			b.text = "%s\n%s" % [slot_name, item.name]
 			_color(b, g.rarity_color(item.rarity))
+			# The slot glows in the gear's rarity colour.
+			b.add_theme_stylebox_override("normal", GameTheme.button_box(Color(0.1, 0.08, 0.06), g.rarity_color(item.rarity)))
 			b.tooltip_text = "%s (%s)\n%s\nClick to take it off." % [item.name, g.rarities[item.rarity].name, g.item_text(item)]
 			b.disabled = away
 			var s := slot
@@ -181,6 +187,8 @@ func _card(title: String, line: String, fx: String, gear: Dictionary, who: Varia
 			b.text = "%s\nempty" % slot_name
 			_color(b, MenuStyle.MUTED)
 			b.disabled = true
+			# An empty slot shows a faint outline of what goes in it.
+			b.add_theme_color_override("icon_disabled_color", Color(0.6, 0.5, 0.35, 0.35))
 		slots.add_child(b)
 	return card
 
