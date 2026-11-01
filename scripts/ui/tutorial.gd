@@ -321,6 +321,8 @@ func _point_at(id: String) -> void:
 		"build_barracks":
 			if view != null and view.mode == 0:   # Mode.SELECT
 				rect = _target("build_barracks")
+				if rect.size == Vector2.ZERO:
+					rect = _target("build_menu")   # the menu is shut: open it first
 			elif view == null:
 				rect = _target("castle_button")
 		"recruit":
