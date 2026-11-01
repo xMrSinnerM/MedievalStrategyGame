@@ -594,6 +594,21 @@ export function act(rules: Rules, given: PlayerState, req: Request, now: number,
     case "sell_gear":
       error = rules.gear.sell(castle, req.item);
       break;
+    case "melt_gear":
+      error = rules.gear.melt(castle, req.item);
+      break;
+    case "socket_gem":
+      error = rules.gear.socket(castle, req.item, req.gem);
+      break;
+    case "unsocket_gem":
+      error = rules.gear.unsocket(castle, req.item, req.index);
+      break;
+    case "fuse_gems":
+      error = rules.gear.fuse(castle, req.gem);
+      break;
+    case "forge_gear":
+      error = rules.gear.forge(castle, req.items);
+      break;
     case "set_layout": {
       error = checkLayout(req.layout);
       if (error === "") castle.layout = { ...(req.layout as Layout) };

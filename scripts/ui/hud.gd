@@ -131,6 +131,7 @@ func _ready() -> void:
 	# share a window as tabs.
 	var commanders := preload("res://scripts/ui/commanders_panel.gd").new()
 	var skills := preload("res://scripts/ui/skills_panel.gd").new()
+	var forge := preload("res://scripts/ui/forge_panel.gd").new()
 	var villages := preload("res://scripts/ui/villages_panel.gd").new()
 	var outpost := preload("res://scripts/ui/outpost_panel.gd").new()
 	var diplomacy := preload("res://scripts/ui/diplomacy_panel.gd").new()
@@ -141,7 +142,7 @@ func _ready() -> void:
 	var events := preload("res://scripts/ui/event_panel.gd").new()
 	var market := preload("res://scripts/ui/market_panel.gd").new()
 	var quest_window := _window("Quests", "quests", [quests, "Quests", _gift, "Royal Gift", season, "Season", treasure, "Treasure", achievements, "Achievements"])
-	var army_window := _window("Commanders", "commanders", [commanders, "Commanders", skills, "Skills"])
+	var army_window := _window("Commanders", "commanders", [commanders, "Commanders", skills, "Skills", forge, "Forge"])
 	var lands_window := _window("Your lands", "villages", [villages, "Villages", outpost, "Outpost"])
 	var alliance_window := _window("Alliance", "alliance", [alliance, "Alliance", war, "War", tournament, "Tournament", leaderboard, "Leaderboard"])
 	var diplomacy_window := _window("Diplomacy", "diplomacy", [diplomacy, ""])
@@ -185,7 +186,7 @@ func _ready() -> void:
 	dock.add_child(row)
 	_quests_button = _dock_button("Quests", "quests", "Quests, the Royal Gift, the season, treasure chests and achievements (J, Y)", quest_window.toggle)
 	row.add_child(_quests_button)
-	row.add_child(_dock_button("Army", "commanders", "Commanders, their gear and skills (H)", army_window.toggle))
+	row.add_child(_dock_button("Army", "commanders", "Commanders, their gear and skills, gems and the forge (H)", army_window.toggle))
 	row.add_child(_dock_button("Lands", "villages", "Your villages, capitals and outpost (B, P)", lands_window.toggle))
 	if Economy.online:
 		_alliance_button = _dock_button("Alliance", "alliance", "Alliance, alliance war, tournament and leaderboard (G, K, L)", alliance_window.toggle)

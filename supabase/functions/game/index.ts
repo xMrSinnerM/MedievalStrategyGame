@@ -46,6 +46,11 @@
 // POST { "action": "equip", "who": commander id | "castellan", "item": id }   gear from your bag
 // POST { "action": "unequip", "who": commander id | "castellan", "slot": "helmet" | "armour" | "weapon" | "banner" }
 // POST { "action": "sell_gear", "item": id }     sells gear from your bag for gold
+// POST { "action": "melt_gear", "item": id }     melts gear from your bag down for Marks
+// POST { "action": "socket_gem", "item": id, "gem": "ruby:2" }   sets a gem from your pouch into gear in your bag
+// POST { "action": "unsocket_gem", "item": id, "index": n }      prises a gem back out, for Marks
+// POST { "action": "fuse_gems", "gem": "ruby:2" } fuses three of a gem into one of the next tier
+// POST { "action": "forge_gear", "items": [id, id, id] }        three pieces of one rarity into one of the next (data/gear.json)
 // POST { "action": "set_layout", "layout": { "left", "front", "right", "courtyard" } }   percent of the garrison at each post
 // POST { "action": "spy", "target": "name" }
 // POST { "action": "sabotage_player", "target": "name", "mission": "steal" | "burn_stores" | "burn_walls", "resource": "wood", "agents": n }

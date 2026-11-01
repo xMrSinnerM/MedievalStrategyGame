@@ -219,6 +219,8 @@ static func give(castle: CastleState, reward: Dictionary) -> void:
 	var chests: Dictionary = reward.get("chests", {})
 	for kind: String in chests:
 		castle.chests.have[kind] = int(castle.chests.have.get(kind, 0)) + int(chests[kind])
+	if reward.has("marks"):
+		GearRules.add_marks(castle, int(reward.marks))
 
 
 func claim(castle: CastleState, kind: String, index: int, now: float) -> String:

@@ -7,6 +7,7 @@
 // from the stats as they were when the day began (castle.quests.base).
 
 import type { CastleState } from "./castle_state.ts";
+import { addMarks } from "./gear.ts";
 import { Rng } from "./rng.ts";
 import { godotHash, round, type Dict } from "./util.ts";
 
@@ -18,6 +19,8 @@ export interface Reward {
   /** Siege tools, and treasure chests by kind (chests.ts). */
   tools?: Dict;
   chests?: Dict;
+  /** Marks, the trade coin (gear.ts). */
+  marks?: number;
 }
 
 export interface Goal {
@@ -220,6 +223,7 @@ export function give(castle: CastleState, reward: Reward): void {
     if (castle.rules.hasTool(tool)) castle.tools[tool] = (castle.tools[tool] ?? 0) + n;
   }
   for (const [kind, n] of Object.entries(reward.chests ?? {})) castle.chests.have[kind] = (castle.chests.have[kind] ?? 0) + n;
+  if (reward.marks) addMarks(castle, reward.marks);
 }
 
 /** Claims the story quest, daily task `index` or the coffer ("story", "daily", "chest"). Returns "" or why not. */

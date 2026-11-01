@@ -75,6 +75,8 @@ const DIPLOMACY_TICK := 30.0     ## seconds between rounds of AI diplomacy
 const MAIN_CASTLE := "player_castle"   ## id of your first castle, which can't be captured
 ## Seed offset for what a beaten camp drops (server/rules/marches.ts DROP_SEED).
 const DROP_SEED := 31337
+## Seed offset for the gem a beaten camp drops (server/rules/marches.ts GEM_SEED).
+const GEM_SEED := 27449
 ## Lords leave your main castle alone until its keep reaches this level.
 const PROTECTED_BELOW_KEEP := 2
 ## A new NPC castle starts with this many hours of building behind it (by seed).
@@ -720,8 +722,9 @@ func _fight_camp(m: Dictionary) -> void:
 		led = gear_rules.add_xp(player_castle, int(lead.id), xp)
 	var item := gear_rules.roll_drop(int(result.level), seed_value + DROP_SEED) if result.winner == "a" else {}
 	var bag_full := not item.is_empty() and not gear_rules.give(player_castle, item)
+	var spoils := gear_rules.give_spoils(player_castle, int(result.level), seed_value + GEM_SEED) if result.winner == "a" else {}
 	attack_resolved.emit({
-		"lead": led, "gear": item, "bag_full": bag_full,
+		"lead": led, "gear": item, "bag_full": bag_full, "gem": spoils.get("gem", ""), "marks": spoils.get("marks", 0),
 		"player": "a", "baron": true, "attacker": "Your army", "defender": camp.camp_name,
 		"attacker_faction": player_faction, "defender_faction": "barons", "place": camp.camp_name,
 		"winner": result.winner, "a": result.a, "b": result.b, "loot": 0, "spoils": result.loot,
@@ -1172,7 +1175,7 @@ func _server_report(r: Dictionary) -> Dictionary:
 		"invader": r.has("event"), "points": int(r.get("points", 0)),
 		"horde": r.has("horde"), "trophies": int(r.get("trophies", 0)),
 		"walls": r.get("walls", {}), "courtyard": r.get("courtyard", {}), "tools": r.get("tools", {}),
-		"lead": r.get("lead", {}), "gear": r.get("gear", {}), "bag_full": r.get("bag_full", false),
+		"lead": r.get("lead", {}), "gear": r.get("gear", {}), "bag_full": r.get("bag_full", false), "gem": r.get("gem", ""), "marks": r.get("marks", 0),
 		"fortress": r.get("fortress", false),
 	}
 
@@ -1772,6 +1775,31 @@ func unequip_gear(who: Variant, slot: String) -> String:
 func sell_gear(item_id: int) -> String:
 	## Sells gear from your bag for gold.
 	return _gear_order(gear_rules.sell(player_castle, item_id), {"action": "sell_gear", "item": item_id})
+
+
+func melt_gear(item_id: int) -> String:
+	## Melts gear from your bag down for Marks.
+	return _gear_order(gear_rules.melt(player_castle, item_id), {"action": "melt_gear", "item": item_id})
+
+
+func socket_gem(item_id: int, gem: String) -> String:
+	## Sets a gem from your pouch into gear in your bag.
+	return _gear_order(gear_rules.socket(player_castle, item_id, gem), {"action": "socket_gem", "item": item_id, "gem": gem})
+
+
+func unsocket_gem(item_id: int, index: int) -> String:
+	## Prises a gem out of gear in your bag, for Marks.
+	return _gear_order(gear_rules.unsocket(player_castle, item_id, index), {"action": "unsocket_gem", "item": item_id, "index": index})
+
+
+func fuse_gems(gem: String) -> String:
+	## Fuses three gems of one kind and tier into one of the next tier.
+	return _gear_order(gear_rules.fuse(player_castle, gem), {"action": "fuse_gems", "gem": gem})
+
+
+func forge_gear(item_ids: Array) -> String:
+	## Forges three pieces of gear of one rarity into one of the next.
+	return _gear_order(gear_rules.forge(player_castle, item_ids), {"action": "forge_gear", "items": item_ids})
 
 
 func learn_skill(commander_id: int, skill_id: String) -> String:
@@ -2467,6 +2495,8 @@ func reward_text(tier: Dictionary) -> String:
 	for kind: String in chests:
 		var chest_name := String(chest_rules.kinds[kind].name).to_lower() if chest_rules != null and chest_rules.kinds.has(kind) else kind + " chest"
 		parts.append("%d %s%s" % [int(chests[kind]), chest_name, "s" if int(chests[kind]) != 1 else ""])
+	if int(tier.get("marks", 0)) > 0:
+		parts.append("%d Marks" % int(tier.marks))
 	return ", ".join(parts)
 
 

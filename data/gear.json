@@ -27,16 +27,38 @@
 	},
 	"caps": { "wall_attack": 60, "yard_attack": 60, "wall_cut": 50, "loot": 100, "wall_defence": 60, "yard_defence": 60, "wall_bonus": 50 },
 	"rarities": {
-		"common": { "name": "Common", "color": "#c9c3b5", "stats": 1, "range": [2, 4], "sell": 40, "weight": [100, -4] },
-		"uncommon": { "name": "Uncommon", "color": "#7fd36a", "stats": 1, "range": [4, 7], "sell": 100, "weight": [30, 2] },
-		"rare": { "name": "Rare", "color": "#6aa9ff", "stats": 2, "range": [5, 9], "sell": 250, "weight": [5, 2] },
-		"epic": { "name": "Epic", "color": "#c27bff", "stats": 2, "range": [8, 12], "sell": 600, "weight": [-10, 1.5] },
-		"legendary": { "name": "Legendary", "color": "#ffb340", "stats": 3, "range": [11, 15], "sell": 1500, "weight": [-15, 0.8] }
+		"common": { "name": "Common", "color": "#c9c3b5", "stats": 1, "range": [2, 4], "sell": 40, "sockets": 1, "melt": 1, "forge": 3, "weight": [100, -4] },
+		"uncommon": { "name": "Uncommon", "color": "#7fd36a", "stats": 1, "range": [4, 7], "sell": 100, "sockets": 1, "melt": 3, "forge": 8, "weight": [30, 2] },
+		"rare": { "name": "Rare", "color": "#6aa9ff", "stats": 2, "range": [5, 9], "sell": 250, "sockets": 2, "melt": 8, "forge": 20, "weight": [5, 2] },
+		"epic": { "name": "Epic", "color": "#c27bff", "stats": 2, "range": [8, 12], "sell": 600, "sockets": 2, "melt": 20, "forge": 50, "weight": [-10, 1.5] },
+		"legendary": { "name": "Legendary", "color": "#ffb340", "stats": 3, "range": [11, 15], "sell": 1500, "sockets": 3, "melt": 50, "forge": 0, "weight": [-15, 0.8] }
 	},
 	"drop_base": 0.3,
 	"drop_per_level": 0.02,
 	"drop_max": 0.9,
 	"bag_size": 30,
+	"_gems_comment": "Gems, Marks and the forge. Every piece of gear has `sockets` (by rarity) for gems; a gem adds its tier's `value` percent to its stat, counted with the gear's own stats (and under the same caps). A gem fits gear of its stat's side. Prising a gem out again costs `unsocket_marks` for its tier; it goes back in your pouch. `fuse` gems of one kind and tier make one of the next tier. A beaten camp of level L also drops a gem with chance gem_drop.base + gem_drop.per_level * (L - 1) (at most gem_drop.max), its tier picked with the weights in gem_drop.tiers (base + per_level * (L - 1), never below 0), its kind at random; and it gives max(1, floor(marks_per_level * L)) Marks. Marks are the trade coin: earned only by playing (beating barons, melting gear for `melt` Marks by rarity, chest jackpots, Ember Horde and tournament prizes), never bought. The forge turns `forge_count` pieces of one rarity and side into one random piece of the next rarity, in the slot of the first, for `forge` Marks by rarity (gems in them go back to your pouch).",
+	"gems": {
+		"ruby": { "name": "Ruby", "stat": "wall_attack", "color": "#e5484d" },
+		"garnet": { "name": "Garnet", "stat": "yard_attack", "color": "#c2562f" },
+		"onyx": { "name": "Onyx", "stat": "wall_cut", "color": "#9aa0ad" },
+		"topaz": { "name": "Topaz", "stat": "loot", "color": "#f0c04a" },
+		"sapphire": { "name": "Sapphire", "stat": "wall_defence", "color": "#4d7fe6" },
+		"emerald": { "name": "Emerald", "stat": "yard_defence", "color": "#3fc06b" },
+		"amethyst": { "name": "Amethyst", "stat": "wall_bonus", "color": "#a96be6" }
+	},
+	"gem_tiers": [
+		{ "name": "Chipped", "value": 1 },
+		{ "name": "Flawed", "value": 2 },
+		{ "name": "Polished", "value": 4 },
+		{ "name": "Flawless", "value": 7 },
+		{ "name": "Royal", "value": 11 }
+	],
+	"fuse": 3,
+	"unsocket_marks": [1, 2, 4, 8, 16],
+	"gem_drop": { "base": 0.25, "per_level": 0.01, "max": 0.6, "tiers": [[100, -3], [12, 1.5], [0, 0.8], [-12, 0.45], [-28, 0.3]] },
+	"marks_per_level": 0.5,
+	"forge_count": 3,
 	"commander_slots": [1, 1, 2, 2, 3],
 	"per_level": 2,
 	"_skills_comment": "Commander skills: a commander earns one skill point for each level past the first and spends it on a skill. A skill needs the commander's level (`needs`) and a rank of the skill before it in its branch (`after`); each rank adds `per_rank` (percent: the fight stats as for gear, on top of gear and past its caps, and xp, more xp from every fight). Retraining hands every point back for retrain_gold gold per commander level.",

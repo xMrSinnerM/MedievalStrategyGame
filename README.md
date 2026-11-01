@@ -815,6 +815,40 @@ lead. **Retraining** hands every point back for 150 gold per commander
 level. Orders `learn_skill` and `retrain_commander`; the skills live in
 `data/gear.json` next to the gear.
 
+### Gems, Marks and the forge
+
+Every won camp fight also pays **Marks**, the trade coin (half a Mark per
+camp level, at least one), and may drop a **gem** (25% at level 1, up to
+60%). Marks are only ever earned by playing: barons, melting gear, chest
+jackpots and Ember Horde, alliance war and tournament prizes. Nothing sells
+them.
+
+| Gem | Stat | Side |
+|-----|------|------|
+| Ruby | attack at the walls | attack |
+| Garnet | attack in the courtyard | attack |
+| Onyx | off the wall's bonus | attack |
+| Topaz | loot carried | attack |
+| Sapphire | defence on the walls | defence |
+| Emerald | defence in the courtyard | defence |
+| Amethyst | wall strength | defence |
+
+Gems come in five tiers: Chipped (+1%), Flawed (+2%), Polished (+4%),
+Flawless (+7%) and Royal (+11%); finer ones drop from stronger camps.
+Three of one kind and tier **fuse** into one of the next tier. Gear has
+sockets by rarity (common and uncommon 1, rare and epic 2, legendary 3);
+pick gear in your bag (Commanders tab) to set a gem of its side, which
+counts with the gear's own stats under the same caps. Prising a gem out
+costs 1, 2, 4, 8 or 16 Marks by tier and puts it back in your pouch.
+
+Gear you don't need **melts** for Marks (1, 3, 8, 20 or 50 by rarity),
+next to selling it for gold. The **forge** (Forge tab of the Army window)
+turns three pieces of one rarity and side into one random piece of the
+next rarity, in the slot of the first one picked, for 3, 8, 20 or 50 Marks
+(common to epic). Gems in melted, sold or forged gear go back to your pouch.
+Orders `socket_gem`, `unsocket_gem`, `fuse_gems`, `melt_gear` and
+`forge_gear`; it all lives in the castle's `armoury` (`marks`, `gems`).
+
 ## Outpost: your second castle
 
 Press **P** (or the **Outpost** button on the map). Once your keep reaches
@@ -1157,6 +1191,7 @@ How the parts work:
 - [x] Siege workshop: attack and defence tools
 - [x] Commanders and gear
 - [x] Commander skills
+- [x] Gems, Marks and the forge
 - [x] Academy and research tree
 - [x] Decorations and public order
 
