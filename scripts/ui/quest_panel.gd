@@ -13,11 +13,11 @@ var _quest_title: Label
 var _quest_text: Label
 var _quest_bar: ProgressBar
 var _quest_progress: Label
-var _quest_reward: Label
+var _quest_reward: IconLabel
 var _quest_claim: Button
 var _new_tasks: Label
 var _tasks: GridContainer
-var _coffer: Label
+var _coffer: IconLabel
 var _coffer_claim: Button
 var _status: Label
 var _signature := ""
@@ -83,7 +83,7 @@ func _ready() -> void:
 	_quest_claim = _claim_button("Claim", func() -> void: _claim("story", 0))
 	_quest_claim.add_to_group("tutorial_quest_claim")
 	row.add_child(_quest_claim)
-	_quest_reward = _wrapped("", 15, MenuStyle.GOLD)
+	_quest_reward = IconLabel.make("", 15, MenuStyle.GOLD)
 	qbox.add_child(_quest_reward)
 
 	box.add_child(HSeparator.new())
@@ -102,7 +102,8 @@ func _ready() -> void:
 	var coffer_row := HBoxContainer.new()
 	coffer_row.add_theme_constant_override("separation", 12)
 	box.add_child(coffer_row)
-	_coffer = _wrapped("", 15, MenuStyle.TEXT)
+	_coffer = IconLabel.make("", 15, MenuStyle.TEXT)
+	_coffer.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_coffer.custom_minimum_size = Vector2(560, 0)
 	_coffer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	coffer_row.add_child(_coffer)
@@ -206,7 +207,7 @@ func _fill_story() -> void:
 		_quest_text.text = "Daily tasks and the coffer still come every day."
 		_quest_bar.visible = false
 		_quest_progress.text = ""
-		_quest_reward.text = ""
+		_quest_reward.show_text("")
 		_quest_claim.visible = false
 		return
 	var chapter: Dictionary = book.chapters[int(quest.chapter)]
@@ -219,7 +220,7 @@ func _fill_story() -> void:
 	_quest_bar.max_value = maxf(1.0, float(p[1]))
 	_quest_bar.value = minf(float(p[0]), float(p[1]))
 	_quest_progress.text = "%s: %d / %d" % [goal_text(quest.goal), mini(p[0], p[1]), p[1]]
-	_quest_reward.text = "Reward: %s" % Economy.reward_text(quest.reward)
+	_quest_reward.show_text("Reward:  %s" % Economy.reward_text(quest.reward))
 	_quest_claim.visible = true
 	_quest_claim.disabled = p[0] < p[1]
 	_quest_progress.add_theme_color_override("font_color", READY if p[0] >= p[1] else MenuStyle.MUTED)
@@ -241,7 +242,7 @@ func _fill_tasks() -> void:
 		what.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		_tasks.add_child(what)
 		_tasks.add_child(MenuStyle.label("%d / %d" % [mini(p[0], p[1]), p[1]], 15, color))
-		_tasks.add_child(MenuStyle.label(Economy.reward_text(book.daily_reward(kind, int(q.keep))), 15, MenuStyle.GOLD))
+		_tasks.add_child(IconLabel.make(Economy.reward_text(book.daily_reward(kind, int(q.keep))), 15, MenuStyle.GOLD))
 		if claimed:
 			_tasks.add_child(MenuStyle.label("Claimed", 15, DONE))
 		else:
@@ -253,14 +254,14 @@ func _fill_tasks() -> void:
 	var streak := book.coffer_streak(castle)
 	var best := int(book.daily.coffer.max_streak)
 	if q.chest:
-		_coffer.text = "%s opened. Days in a row: %d. Come back tomorrow to keep the streak." % [coffer_name, QuestBook.current_streak(castle)]
+		_coffer.show_text("%s opened. Days in a row: %d. Come back tomorrow to keep the streak." % [coffer_name, QuestBook.current_streak(castle)])
 		_coffer_claim.visible = false
 		return
 	var reward := book.coffer_reward(int(q.keep), streak)
 	var line := "%s: finish all %d tasks to open it. Day %d in a row" % [coffer_name, q.picks.size(), streak]
 	if streak < best:
 		line += " (at %d days in a row it also gives soldiers)" % best
-	_coffer.text = line + ".\nInside: %s" % Economy.reward_text(reward)
+	_coffer.show_text(line + ".\nInside:  %s" % Economy.reward_text(reward))
 	_coffer_claim.visible = true
 	_coffer_claim.disabled = book.check_claim(castle, "chest") != ""
 

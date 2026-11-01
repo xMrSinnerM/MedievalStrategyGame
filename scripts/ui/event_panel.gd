@@ -197,7 +197,7 @@ func _fill_rewards() -> void:
 		var need := int(tier.points)
 		var color := DONE if i < claimed else (MenuStyle.TEXT if points >= need else MenuStyle.MUTED)
 		_rewards.add_child(MenuStyle.label("%d points" % need, 16, color))
-		var what := MenuStyle.label(Economy.reward_text(tier), 16, color)
+		var what := IconLabel.make(Economy.reward_text(tier), 16, color)
 		what.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		_rewards.add_child(what)
 		if i < claimed:

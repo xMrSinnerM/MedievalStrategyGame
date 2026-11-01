@@ -92,6 +92,24 @@ const SVG := {
 		<rect x="20" y="30" width="24" height="5" rx="2" fill="#2b2b30"/>
 		<path d="M32 36 V50" stroke="#2b2b30" stroke-width="3"/>
 		<path d="M32 14 C36 4 48 4 54 10 C46 10 40 14 36 18 Z" fill="#c0392b" stroke="%s" stroke-width="2.5" stroke-linejoin="round"/>""",
+	# A knight's helm, for the helmet slot.
+	"helmet": """
+		<path d="M16 28 C16 12 48 12 48 28 L48 52 L16 52 Z" fill="#b8bcc4" stroke="%s" stroke-width="3" stroke-linejoin="round"/>
+		<rect x="20" y="31" width="24" height="5" rx="2" fill="#2b2b30"/>
+		<path d="M32 37 V50" stroke="#2b2b30" stroke-width="3"/>
+		<path d="M32 13 V6" stroke="#e0b048" stroke-width="4" stroke-linecap="round"/>""",
+	# A breastplate, for the armour slot.
+	"armour": """
+		<path d="M12 14 L24 8 C28 14 36 14 40 8 L52 14 L48 30 L46 54 L18 54 L16 30 Z" fill="#c2c6ce" stroke="%s" stroke-width="3" stroke-linejoin="round"/>
+		<path d="M32 16 V52" stroke="#8a8f99" stroke-width="2.5"/>
+		<path d="M20 30 C26 34 38 34 44 30" stroke="#8a8f99" stroke-width="2.5" fill="none"/>
+		<path d="M18 52 H46" stroke="#e0b048" stroke-width="4"/>""",
+	# A sword, for the weapon slot.
+	"weapon": """
+		<path d="M48 6 L56 8 L58 16 L26 46 L18 38 Z" fill="#d8dce2" stroke="%s" stroke-width="3" stroke-linejoin="round"/>
+		<path d="M12 34 L30 52" stroke="#e0b048" stroke-width="6" stroke-linecap="round"/>
+		<path d="M18 46 L8 56" stroke="#7a4a24" stroke-width="6" stroke-linecap="round"/>
+		<circle cx="7" cy="57" r="4" fill="#e0b048" stroke="%s" stroke-width="2"/>""",
 	# A wooden watchtower with a pennant, for the outpost.
 	"outpost": """
 		<path d="M18 58 L24 22 L40 22 L46 58" fill="none" stroke="#8a5a2e" stroke-width="5" stroke-linejoin="round"/>
