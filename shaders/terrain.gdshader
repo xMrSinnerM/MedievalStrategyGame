@@ -88,6 +88,7 @@ void fragment() {
 
 	col = mix(col, seabed, smoothstep(0.0, 10.0, sea_level - h));
 	col *= 0.9 + 0.2 * n3;
+	col *= 1.0 - cloud_shadow(v_world.xz, TIME);
 
 	ALBEDO = col;
 	ROUGHNESS = 0.95;

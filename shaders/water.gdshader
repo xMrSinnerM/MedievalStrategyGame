@@ -40,6 +40,7 @@ void fragment() {
 	float foam_pulse = 0.65 + 0.35 * sin(TIME * 0.9 - depth * 2.2 + w * 6.0);
 	col = mix(col, foam_color, clamp(foam_band * foam_pulse, 0.0, 1.0) * 0.85);
 
+	col *= 1.0 - cloud_shadow(xz, TIME);
 	ALBEDO = col;
 	ROUGHNESS = 0.22;
 	SPECULAR = 0.45;
