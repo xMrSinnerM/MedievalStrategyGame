@@ -27,6 +27,7 @@ func _ready() -> void:
 	add_child(main_menu)
 	pause_menu = preload("res://scripts/ui/pause_menu.gd").new()
 	pause_menu.main_menu_requested.connect(show_main_menu)
+	pause_menu.log_out_requested.connect(log_out)
 	add_child(pause_menu)
 	tutorial = preload("res://scripts/ui/tutorial.gd").new()
 	tutorial.main = self
@@ -80,6 +81,14 @@ func show_main_menu() -> void:
 	main_menu.refresh()
 	main_menu.visible = true
 	Audio.set_mood("menu")
+
+
+func log_out() -> void:
+	## Leaves the online game for the title screen and signs out.
+	show_main_menu()
+	main_menu.show_signing_out()
+	await Online.log_out()
+	main_menu.refresh()
 
 
 func show_castle(castle_id: String) -> void:

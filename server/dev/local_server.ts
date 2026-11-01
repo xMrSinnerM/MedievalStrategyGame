@@ -659,6 +659,15 @@ createServer(async (req, res) => {
     resetCodes.delete(email);
     return send(res, 200, session(email));
   }
+  if (url.pathname === "/auth/v1/logout") {
+    // Like Supabase with scope=local: ends this session only.
+    const token = (req.headers.authorization ?? "").replace(/^Bearer\s+/i, "");
+    const auth = tokens.get(token);
+    if (auth === undefined) return send(res, 401, { code: 401, message: "Invalid JWT" });
+    tokens.delete(token);
+    res.writeHead(204);
+    return res.end();
+  }
   if (setPassword) {
     const auth = tokens.get((req.headers.authorization ?? "").replace(/^Bearer\s+/i, ""));
     if (auth === undefined || auth.expires < now()) return send(res, 401, { code: 401, message: "Invalid JWT" });

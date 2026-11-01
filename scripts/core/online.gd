@@ -110,6 +110,24 @@ func resume() -> bool:
 	return false
 
 
+func log_out() -> void:
+	## Signs out for good: waits for orders still on their way, tells the
+	## server to end the session, then forgets it on this device (the email
+	## stays filled in for next time).
+	var waited := 0.0
+	while busy() and waited < TIMEOUT:
+		await get_tree().create_timer(0.25).timeout
+		waited += 0.25
+	if _access != "":
+		# "local" ends only this device's session; other devices stay signed in.
+		await _post("/auth/v1/logout?scope=local", {}, true)
+	sign_out()
+	var cfg := ConfigFile.new()
+	cfg.set_value("session", "url", url)
+	cfg.set_value("session", "email", email)
+	cfg.save(SESSION_PATH)
+
+
 func sign_out() -> void:
 	_access = ""
 	_refresh = ""
@@ -246,5 +264,7 @@ func _post(path: String, body: Dictionary, signed: bool,
 	http.queue_free()
 	if int(res[0]) != HTTPRequest.RESULT_SUCCESS:
 		return {"status": 0, "data": {}}
-	var data = JSON.parse_string((res[3] as PackedByteArray).get_string_from_utf8())
+	var text := (res[3] as PackedByteArray).get_string_from_utf8()
+	# Some answers (signing out) have no body at all.
+	var data = JSON.parse_string(text) if text.strip_edges() != "" else {}
 	return {"status": int(res[1]), "data": data if data is Dictionary else {}}
