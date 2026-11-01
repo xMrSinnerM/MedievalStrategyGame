@@ -11,7 +11,8 @@ import { advanceMarches, sendAttack, type Army, type March, type Report } from "
 import { godotHash, type Dict } from "../../../server/rules/util.ts";
 import type { AllianceRules } from "./alliances.ts";
 import { checkShipment, type Aid, type AidRules } from "./aid.ts";
-import { checkBuy, checkOffer, proceedsFor, receive, type MarketReport, type MarketRules, type Offer } from "./market.ts";
+import { checkBuy, checkItemBuy, checkItemOffer, checkOffer, isItemGood, MARKS, proceedsFor, receive, receiveArmoury, receiveItem, takeItemOffer,
+  type MarketReport, type MarketRules, type Offer } from "./market.ts";
 import { lastInvasion, type EventRules } from "../../../server/rules/events.ts";
 import { claimReward, eventPoints, invade, rewardTiers } from "./invasion.ts";
 import { buy, claimPrize, emptyHorde, hordeArrives, hordeScore, playerRun, type HordeState } from "./horde.ts";
@@ -21,7 +22,7 @@ import { claimLogin, type LoginRules } from "../../../server/rules/login.ts";
 import { openChest, type ChestRules } from "../../../server/rules/chests.ts";
 import { takeEncounter, type EncounterRules } from "../../../server/rules/encounters.ts";
 import { claimPrize as claimSeasonPrize, claimTrack, rollSeason, type SeasonRules } from "../../../server/rules/seasons.ts";
-import type { GearRules, Lead } from "../../../server/rules/gear.ts";
+import type { GearRules, Item, Lead } from "../../../server/rules/gear.ts";
 import { deliverCarts, OUTPOST_ID, unload, type Cart, type OutpostData } from "../../../server/rules/outposts.ts";
 import { rulesFor, type VillageInfo, type VillageState } from "../../../server/rules/villages.ts";
 import { checkVillageAttack, type VillageTarget } from "./villages.ts";
@@ -195,6 +196,8 @@ export interface Context {
   market?: { rules: MarketRules; open?: number; offer?: Offer };
   /** Proceeds of your sales and goods back from your offers since the last request (market.ts). */
   marketIncome?: Dict;
+  /** Gear back from your cancelled and expired gear offers (market.ts). */
+  marketItems?: Item[];
 }
 
 export interface World {
@@ -378,6 +381,7 @@ export function act(rules: Rules, given: PlayerState, req: Request, now: number,
   castle.advanceTo(now);
   if (ctx.villageIncome) unload(castle, ctx.villageIncome);
   const marketReports: MarketReport[] = [];
+  if (ctx.marketIncome || ctx.marketItems) receiveArmoury(castle, rules.gear, ctx.marketIncome ?? {}, ctx.marketItems ?? []);
   if (ctx.marketIncome) {
     const lost = receive(castle, ctx.marketIncome);
     if (Object.keys(lost).length > 0) marketReports.push({ kind: "market", event: "spilled", at: now, lost });
@@ -683,6 +687,15 @@ export function act(rules: Rules, given: PlayerState, req: Request, now: number,
     case "post_offer": {
       // The goods leave your castle for the market; index.ts puts the offer up.
       const m = ctx.market;
+      if (m && (req.give === "gear" || req.want === MARKS || isItemGood(req.give, rules.gear))) {
+        // Gear and gems, for Marks: index.ts counts the open ones in `open` for these.
+        error = checkItemOffer(castle, m.rules, rules.gear, req, m.open ?? 0);
+        if (error !== "") break;
+        const took = takeItemOffer(castle, req);
+        offer = { seller_name: stored.name, ...took, want: MARKS, want_amount: req.want_amount,
+          proceeds: proceedsFor(m.rules, req.want_amount), posted: now, expires: now + m.rules.offer_hours * 3600 };
+        break;
+      }
       error = m ? checkOffer(castle, m.rules, req, m.open ?? 0) : "Unknown order.";
       if (error !== "" || m === undefined) break;
       castle.resources[req.give] -= req.give_amount;
@@ -694,6 +707,16 @@ export function act(rules: Rules, given: PlayerState, req: Request, now: number,
     case "buy_offer": {
       // index.ts has already taken the offer for you; pay for it and unload the goods.
       const m = ctx.market;
+      if (m?.offer?.want === MARKS) {
+        error = checkItemBuy(castle, m.rules, rules.gear, m.offer, stored.name, now);
+        if (error !== "") break;
+        const o = m.offer;
+        castle.armoury.marks -= o.want_amount;
+        receiveItem(castle, o);
+        marketReports.push({ kind: "market", event: "bought", at: now, name: o.seller_name, give: o.give, give_amount: o.give_amount,
+          want: o.want, want_amount: o.want_amount, ...(o.item ? { item_name: o.item.name } : {}) });
+        break;
+      }
       error = m ? checkBuy(castle, m.rules, m.offer, stored.name, now) : "Unknown order.";
       if (error !== "" || m?.offer === undefined) break;
       const o = m.offer;

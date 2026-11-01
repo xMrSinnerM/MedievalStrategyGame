@@ -7,5 +7,12 @@
 	"min_rate": 0.5,
 	"max_rate": 2.0,
 	"fee": 0.05,
-	"offer_hours": 48
+	"offer_hours": 48,
+	"_items_comment": "Gear and gems trade for Marks (data/gear.json), never for resources: an offer sells one piece of gear (with the gems in it) or up to gem_lot gems of one kind and tier. Gear asks between the two numbers of gear_price for its rarity; gems between the two numbers of gem_price for their tier (Chipped first), times how many. A player has at most max_offers gear and gem offers up, besides their resource offers. The same fee, offer_hours and unlock_keep apply; a buyer needs room in their gear bag for gear.",
+	"items": {
+		"max_offers": 5,
+		"gem_lot": 10,
+		"gear_price": { "common": [1, 30], "uncommon": [3, 80], "rare": [8, 200], "epic": [20, 500], "legendary": [50, 1500] },
+		"gem_price": [[1, 6], [2, 15], [5, 40], [12, 100], [30, 250]]
+	}
 }

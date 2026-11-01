@@ -601,7 +601,7 @@ static func gem_count(castle: CastleState, key: String) -> int:
 	return int(castle.armoury.gems.get(key, 0))
 
 
-static func _add_gem(castle: CastleState, key: String, n: int) -> void:
+static func add_gems(castle: CastleState, key: String, n: int) -> void:
 	var have := gem_count(castle, key) + n
 	if have > 0:
 		castle.armoury.gems[key] = have
@@ -617,7 +617,7 @@ func _free_gems(castle: CastleState, item: Dictionary) -> void:
 	## Puts an item's gems back in the pouch (before it is sold, melted or forged).
 	for key in item.get("gems", []):
 		if not gem_parts(key).is_empty():
-			_add_gem(castle, String(key), 1)
+			add_gems(castle, String(key), 1)
 	item.gems = []
 
 
@@ -646,7 +646,7 @@ func socket(castle: CastleState, item_id: Variant, key: Variant) -> String:
 		if not item.has("gems"):
 			item.gems = []
 		item.gems.append(String(key))
-		_add_gem(castle, String(key), -1)
+		add_gems(castle, String(key), -1)
 	return why
 
 
@@ -673,7 +673,7 @@ func unsocket(castle: CastleState, item_id: Variant, index: Variant) -> String:
 	add_marks(castle, -cost)
 	held.remove_at(int(index))
 	if not gem_parts(key).is_empty():
-		_add_gem(castle, key, 1)
+		add_gems(castle, key, 1)
 	return ""
 
 
@@ -693,8 +693,8 @@ func fuse(castle: CastleState, key: Variant) -> String:
 	var why := check_fuse(castle, key)
 	if why == "":
 		var p := gem_parts(key)
-		_add_gem(castle, String(key), -fuse_count)
-		_add_gem(castle, gem_key(p.kind, int(p.tier) + 1), 1)
+		add_gems(castle, String(key), -fuse_count)
+		add_gems(castle, gem_key(p.kind, int(p.tier) + 1), 1)
 	return why
 
 
@@ -812,7 +812,7 @@ func give_spoils(castle: CastleState, level: int, seed_value: int) -> Dictionary
 	## The gem and Marks a beaten camp of `level` gives, put in the armoury: {gem, marks}.
 	var gem := roll_gem(level, seed_value)
 	if gem != "":
-		_add_gem(castle, gem, 1)
+		add_gems(castle, gem, 1)
 	var marks := marks_for_win(level)
 	add_marks(castle, marks)
 	return {"gem": gem, "marks": marks}

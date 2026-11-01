@@ -1043,6 +1043,17 @@ one you give, so the market can't be used to hand an account resources for
 nothing. Recent trades show the going rates. The numbers are in
 `data/market.json`.
 
+**Gear and gems** trade for **Marks** (see *Gems, Marks and the forge*),
+never for resources. Under **Sell**, pick *Gear and gems for Marks*: one
+piece of gear from your bag (with the gems in it) or up to 10 gems of one
+kind and tier from your pouch. Gear asks 1-30 Marks (common), 3-80
+(uncommon), 8-200 (rare), 20-500 (epic) or 50-1500 (legendary); gems 1-6,
+2-15, 5-40, 12-100 or 30-250 Marks each by tier. Up to 5 gear and gem offers
+at once, besides your resource offers; the same 5% cut and 48 hours apply.
+Bought gear goes into your bag (it needs a free place) and gems into your
+pouch; unsold gear comes back to your bag even when it's full. **Buy** can
+show only gear or only gems; hover gear to see its stats and gems.
+
 ### Timed events
 
 Online, a banner at the bottom of the map shows the event that's on and how
