@@ -10,6 +10,7 @@ import { autoWaves, checkTools, fight, odds, siege, siegeOdds, split } from "../
 import { CastleState } from "../rules/castle_state.ts";
 import { makeRules } from "../rules/load.ts";
 import { deliverCarts, nearestSpot, type Cart } from "../rules/outposts.ts";
+import { deliverShips, type Ship } from "../rules/kingdoms.ts";
 import { godotHash } from "../rules/util.ts";
 import { capture } from "../rules/villages.ts";
 import { claimQuest, cofferReward, cofferStreak, currentStory, dailyProgress, pickDailies, progress, type QuestRules } from "../rules/quests.ts";
@@ -17,7 +18,8 @@ import { claimQuest, cofferReward, cofferStreak, currentStory, dailyProgress, pi
 const root = new URL("../../", import.meta.url);
 const json = (path: string) => JSON.parse(readFileSync(new URL(path, root), "utf8"));
 const rules = makeRules(json("data/buildings.json"), json("data/units.json"), json("data/barons.json"), json("data/gear.json"),
-  json("data/outposts.json"), json("data/villages.json"), json("data/capitals.json"), json("data/fortresses.json"));
+  json("data/outposts.json"), json("data/villages.json"), json("data/capitals.json"), json("data/fortresses.json"), {},
+  json("data/kingdoms.json"));
 const fixtures = json("server/tests/fixtures.json");
 const T0 = 1_000_000;
 const quests: QuestRules = json("data/quests.json");
@@ -280,6 +282,68 @@ test("gems, Marks and the forge", () => {
     else assert.equal(g.forge(castle, op.items), op.result, where);
   });
   same(castle.toDict(), run.castle, "castle");
+});
+
+test("the other kingdoms", () => {
+  const run = fixtures.kingdom;
+  const k = rules.kingdoms;
+  const id: string = run.kingdom;
+  const main = CastleState.createNew(rules.buildings, "c", "Main Castle", "player", run.t0);
+  const checks: Record<string, string> = { none: k.checkFound(main, {}, "atlantis"), too_low: k.checkFound(main, {}, id) };
+  for (const b of main.buildings) if (b.type === "keep") b.level = Number(k.kingdoms[id].keep_needed);
+  checks.poor = k.checkFound(main, {}, id);
+  for (const r of Object.keys(main.resources)) main.resources[r] = 90000;
+  checks.has = k.checkFound(main, { [id]: {} }, id);
+  checks.ok = k.checkFound(main, {}, id);
+  const castle = k.found(main, id, run.t0);
+  let ships: Ship[] = [];
+  let nextShip = 1;
+  checks.empty = k.checkShip(castle, id);
+  checks.barracks = castle.checkBuild("barracks");
+  same(checks, run.checks, "checks");
+  const keep = castle.buildings.find((b) => b.type === "keep")!.id;
+  run.steps.forEach((step: any, i: number) => {
+    const where = `kingdom step ${i}`;
+    castle.advanceTo(step.t);
+    main.advanceTo(step.t);
+    const before = ships.length;
+    ships = deliverShips(main, ships, step.t);
+    assert.equal(before - ships.length, step.landed, `${where} landed`);
+    assert.equal(k.waiting(castle, id), step.waiting, `${where} waiting`);
+    if ("upgrade" in step) {
+      for (const r of Object.keys(castle.resources)) castle.resources[r] = 60000;
+      assert.equal(castle.upgrade(keep, step.t), step.upgrade, `${where} upgrade`);
+    }
+    if ("ship_check" in step) {
+      assert.equal(k.checkShip(castle, id), step.ship_check, `${where} ship check`);
+      if (step.ship_check === "") same(k.ship(castle, ships, nextShip++, id, step.t), step.boat, `${where} boat`);
+    }
+    same(castle.toDict(), step.castle, `${where} castle`);
+    same(main.goods, step.goods, `${where} goods at home`);
+  });
+  same({ ships, next_ship: nextShip }, run.state, "ships");
+  main.goods.iron = 100;
+  const spend: Record<string, unknown> = {
+    knights: main.canAfford(rules.buildings.unitCost("knight", 10)),
+    too_many: main.canAfford(rules.buildings.unitCost("knight", 40)),
+    marksmen: main.canAfford(rules.buildings.unitCost("marksman", 1)),
+    study_cost: rules.buildings.studyCost("tempered_blades", 2),
+  };
+  main.pay(rules.buildings.unitCost("knight", 10));
+  spend.left = { ...main.goods };
+  same(spend, run.spend, "spending iron");
+  same(main.toDict(), run.main, "main castle");
+  const listed = k.camps(id);
+  same(listed.map((c) => ({ id: c.id, name: c.name, position: c.position, level: c.level, kingdom: c.kingdom })), run.camps, "camps");
+  const camp = listed[0];
+  same(rules.barons.travelTime(camp, [10, 20]), run.travel, "travel");
+  const result = attackCamp(camp, rules.barons, rules.buildings, { swordsman: 600, archer: 200 }, 4242, run.steps.at(-1).t);
+  assert.equal(result.winner, run.winner);
+  same(result.loot, run.loot, "loot");
+  same(result.survivors, run.survivors, "survivors");
+  same(rules.barons.forCamp(camp).garrison(camp.level), run.garrison, "garrison after the win");
+  same({ id: camp.id, name: camp.name, position: camp.position, level: camp.level, defeats: camp.defeats, rebuilt_at: camp.rebuilt_at,
+    kingdom: camp.kingdom }, run.camp, "camp after");
 });
 
 test("outposts", () => {

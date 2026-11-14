@@ -316,7 +316,7 @@ func _cost_text(castle: CastleState, cost: Dictionary) -> String:
 	var parts: PackedStringArray = []
 	for r: String in cost:
 		var part := "%d %s" % [int(cost[r]), r]
-		if castle.resources.get(r, 0.0) + 0.0001 < cost[r]:
+		if castle.stock(r) + 0.0001 < cost[r]:
 			part = "[color=#ff8a6a]%s[/color]" % part
 		parts.append(part)
 	return ", ".join(parts)

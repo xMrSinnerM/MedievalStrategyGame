@@ -178,6 +178,8 @@ export interface CastleData {
   armoury: Armoury;
   boost: Dict;
   limits: Limits | null;
+  goods?: Dict;
+  yields?: Record<string, Yield> | null;
   research: Dict;
   studying: Study | null;
 }
@@ -186,6 +188,12 @@ export interface CastleData {
 export interface Limits {
   types: string[];
   keep: number;
+}
+
+/** What a kingdom castle's keep yields of a good: `rate` per hour and keep level, holding up to `store` per keep level. */
+export interface Yield {
+  rate: number;
+  store: number;
 }
 
 export class CastleState {
@@ -229,6 +237,10 @@ export class CastleState {
   boost: Dict = {};
   /** An outpost's building limits; null for a normal castle. */
   limits: Limits | null = null;
+  /** Goods from the other kingdoms (data/kingdoms.json): no storage cap, can't be looted, pay for costs that name them. */
+  goods: Dict = {};
+  /** What a kingdom castle's keep yields; it gathers in `goods` until a ship takes it home. */
+  yields: Record<string, Yield> = {};
   /** Studies researched in the academy (study -> level) and the one under way. */
   research: Dict = {};
   studying: Study | null = null;
@@ -388,15 +400,20 @@ export class CastleState {
   }
 
   canAfford(cost: Dict): boolean {
-    for (const r of Object.keys(cost)) if (get(this.resources, r) + 0.0001 < cost[r]) return false;
+    for (const r of Object.keys(cost)) if (this.stock(r) + 0.0001 < cost[r]) return false;
     return true;
+  }
+
+  /** How much of a resource, or of a good from the other kingdoms, the castle has. */
+  stock(r: string): number {
+    return this.rules.resources.includes(r) ? get(this.resources, r) : get(this.goods, r);
   }
 
   checkBuild(type: string): string {
     const r = this.rules;
     if (!r.hasType(type)) return "Unknown building";
     if (r.isPerimeter(type)) return "This is built around the castle, not placed";
-    if (this.limits && !this.limits.types.includes(type)) return "An outpost can't have one of these";
+    if (this.limits && !this.limits.types.includes(type)) return "This castle can't have one of these";
     if (this.count(type) >= r.maxCount(type, this.keepLevel())) {
       return r.isUnique(type) ? "The castle already has one" : "Upgrade the keep to build more of these";
     }
@@ -415,7 +432,7 @@ export class CastleState {
     const b = this.getBuilding(id);
     if (b === undefined) return "No such building";
     if (b.target > 0) return "Already under construction";
-    if (this.limits && b.type === "keep" && b.level >= this.limits.keep) return "An outpost's keep can't go higher";
+    if (this.limits && b.type === "keep" && b.level >= this.limits.keep) return "This castle's keep can't go higher";
     if (b.level >= this.rules.maxLevel(b.type, this.keepLevel())) {
       if (b.type !== "keep" && b.level < Number(this.rules.types[b.type].max_level ?? 10)) return "Upgrade the keep first";
       return "Fully upgraded";
@@ -737,6 +754,11 @@ export class CastleState {
       }
     }
     if (get(this.resources, "food") > 0) this.hunger = 0;
+    const keep = this.keepLevel();
+    for (const g of Object.keys(this.yields)) {
+      const held = get(this.goods, g);
+      this.goods[g] = Math.max(held, Math.min(held + this.yields[g].rate * keep * seconds / 3600, this.yields[g].store * keep));
+    }
     this.desert();
   }
 
@@ -799,6 +821,8 @@ export class CastleState {
       armoury: structuredClone(this.armoury),
       boost: { ...this.boost },
       limits: this.limits ? { types: [...this.limits.types], keep: this.limits.keep } : null,
+      goods: { ...this.goods },
+      yields: Object.keys(this.yields).length > 0 ? structuredClone(this.yields) : null,
       research: { ...this.research },
       studying: this.studying ? { ...this.studying } : null,
     };
@@ -913,6 +937,10 @@ export class CastleState {
       if (rules.resources.includes(r)) castle.boost[r] = Number(data.boost[r]);
     }
     if (data.limits) castle.limits = { types: (data.limits.types ?? []).map(String), keep: Number(data.limits.keep ?? 1) };
+    for (const g of Object.keys(data.goods ?? {})) castle.goods[g] = Number(data.goods![g]);
+    for (const g of Object.keys(data.yields ?? {})) {
+      castle.yields[g] = { rate: Number(data.yields![g].rate ?? 0), store: Number(data.yields![g].store ?? 0) };
+    }
     // Castles saved before the academy have researched nothing.
     for (const study of Object.keys(data.research ?? {})) {
       const n = Math.trunc(Number(data.research[study]));
@@ -936,6 +964,10 @@ export class CastleState {
   /** Takes what this costs (also what something outside the castle costs, such as a capital's town building). */
   pay(cost: Dict): void {
     for (const r of Object.keys(cost)) {
+      if (!this.rules.resources.includes(r)) {
+        this.goods[r] = get(this.goods, r) - cost[r];
+        continue;
+      }
       this.resources[r] = get(this.resources, r) - cost[r];
       this.stats.spent += cost[r];
     }
@@ -944,6 +976,10 @@ export class CastleState {
   private refund(cost: Dict): void {
     const cap = this.storageCapacity();
     for (const r of Object.keys(cost)) {
+      if (!this.rules.resources.includes(r)) {
+        this.goods[r] = get(this.goods, r) + cost[r] * CANCEL_REFUND;
+        continue;
+      }
       const have = get(this.resources, r);
       this.resources[r] = Math.max(have, Math.min(have + cost[r] * CANCEL_REFUND, cap));
       this.stats.spent -= cost[r] * CANCEL_REFUND;

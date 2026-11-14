@@ -51,6 +51,8 @@ signal tournament_changed
 signal admin_changed(error: String)
 ## your outpost was founded, or carts left or arrived
 signal outpost_changed
+## A castle was founded in another kingdom, or a ship set sail or landed.
+signal kingdoms_changed
 ## Who holds the resource villages changed (or, online, the server sent them again).
 signal villages_changed
 ## Achievement tiers your castle has just earned, as a line for the news.
@@ -111,6 +113,10 @@ var _known_tiers: Variant = null
 ## Commanders and gear (data/gear.json).
 var gear_rules: GearRules
 var outpost_rules: OutpostRules
+var kingdom_rules: KingdomRules
+## Your castles in the other kingdoms (data/kingdoms.json): kingdom id ->
+## {"ships", "next_ship"}. The castle itself is in `castles` (KingdomRules.castle_id()).
+var kingdoms := {}
 var village_rules: VillageRules
 ## Capitals: the towns, held and attacked like villages (CapitalRules); their
 ## states are in village_states too.
@@ -292,6 +298,7 @@ func ensure_loaded() -> void:
 	achievements = Achievements.load_default()
 	gear_rules = GearRules.load_default()
 	outpost_rules = OutpostRules.load_default()
+	kingdom_rules = KingdomRules.load_default()
 	_load_villages()
 	if not load_game():
 		new_game()
@@ -367,6 +374,7 @@ func begin_new(n := 1) -> void:
 	achievements = Achievements.load_default()
 	gear_rules = GearRules.load_default()
 	outpost_rules = OutpostRules.load_default()
+	kingdom_rules = KingdomRules.load_default()
 	_load_villages()
 	slot = n
 	_loaded = true
@@ -388,6 +396,7 @@ func begin_load(n := 1) -> void:
 	achievements = Achievements.load_default()
 	gear_rules = GearRules.load_default()
 	outpost_rules = OutpostRules.load_default()
+	kingdom_rules = KingdomRules.load_default()
 	_load_villages()
 	slot = n
 	_loaded = true
@@ -553,8 +562,10 @@ func sync_barons(camps: Array) -> void:
 	var added := false
 	for c: Dictionary in camps:
 		if get_baron(c.id) == null:
-			barons.append(BaronCamp.create(c.id, c.get("name", c.id),
-					Vector2(c.position[0], c.position[1]), int(c.get("level", 1))))
+			var camp := BaronCamp.create(c.id, c.get("name", c.id),
+					Vector2(c.position[0], c.position[1]), int(c.get("level", 1)))
+			camp.kingdom = String(c.get("kingdom", ""))
+			barons.append(camp)
 			added = true
 	if added:
 		save_game()
@@ -566,7 +577,7 @@ func home_position() -> Vector2:
 
 
 func march_time_to(camp: BaronCamp) -> float:
-	return baron_rules.march_time(home_position().distance_to(camp.position)) * player_castle.march_factor()
+	return baron_rules.travel_time(camp, home_position()) * player_castle.march_factor()
 
 
 func check_attack(camp_id: String, army: Dictionary, waves: Array = [], tools := {}, commander := 0) -> String:
@@ -726,6 +737,10 @@ func _come_home(m: Dictionary) -> void:
 		player_castle.troops[unit] = int(player_castle.troops.get(unit, 0)) + int(m.survivors[unit])
 	var cap := player_castle.storage_capacity()
 	for r: String in m.loot:
+		if not rules.resources.has(r):
+			# A good from another kingdom: no storage cap.
+			player_castle.goods[r] = float(player_castle.goods.get(r, 0.0)) + float(m.loot[r])
+			continue
 		var have := float(player_castle.resources.get(r, 0.0))
 		player_castle.resources[r] = maxf(have, minf(cap, have + float(m.loot[r])))
 		player_castle.stats.looted = float(player_castle.stats.looted) + float(m.loot[r])
@@ -837,6 +852,7 @@ func new_game() -> void:
 	player_castle = CastleState.create_new(rules, MAIN_CASTLE, "Your Castle", "player", now())
 	castles.append(player_castle)
 	outpost = {}
+	kingdoms = {}
 	village_states = {}
 	diplomacy = Diplomacy.from_data_files(now())
 	barons.clear()
@@ -869,6 +885,7 @@ func load_game() -> bool:
 	marches = data.get("marches", [])
 	_next_march = int(data.get("next_march", 1))
 	outpost = data.get("outpost", {})
+	kingdoms = data.get("kingdoms", {})
 	village_states = data.get("villages", {})
 	player_castle = find_main_castle()
 	if player_castle == null:
@@ -876,6 +893,7 @@ func load_game() -> bool:
 	# Catch up on everything that happened while the game was closed.
 	var t := now()
 	_deliver_carts(t)
+	_deliver_ships(t)
 	for c in castles:
 		if c.is_npc():
 			NpcBrain.catch_up(c, t)
@@ -902,7 +920,8 @@ func save_game() -> void:
 			"homes": homes, "exiled": exiled.keys(),
 			"diplomacy": diplomacy.to_dict() if diplomacy != null else {},
 			"barons": barons.map(func(b: BaronCamp) -> Dictionary: return b.to_dict()),
-			"marches": marches, "next_march": _next_march, "outpost": outpost, "villages": village_states}, "\t", true, true))
+			"marches": marches, "next_march": _next_march, "outpost": outpost, "kingdoms": kingdoms,
+			"villages": village_states}, "\t", true, true))
 	f.close()
 
 
@@ -917,6 +936,7 @@ func _process(delta: float) -> void:
 		_tick_timer = 0.0
 		var t := now()
 		_deliver_carts(t)
+		_deliver_ships(t)
 		for c in castles:
 			c.advance_to(t)
 			if c.is_npc():
@@ -962,6 +982,7 @@ func begin_online(answer: Dictionary) -> void:
 	_known_tiers = null
 	gear_rules = GearRules.load_default()
 	outpost_rules = OutpostRules.load_default()
+	kingdom_rules = KingdomRules.load_default()
 	_load_villages()
 	online = true
 	_loaded = true
@@ -974,6 +995,7 @@ func begin_online(answer: Dictionary) -> void:
 	player_castle = CastleState.create_new(rules, MAIN_CASTLE, "Your Castle", "player", now())
 	castles.append(player_castle)
 	outpost = {}
+	kingdoms = {}
 	village_states = {}
 	barons.clear()
 	marches = []
@@ -1048,6 +1070,7 @@ func apply_server(answer: Dictionary) -> void:
 	player_castle.copy_from(CastleState.from_dict(rules, p.get("castle", {})))
 	castle_positions[MAIN_CASTLE] = Vector2(float(p.get("home_x", 0.0)), float(p.get("home_y", 0.0)))
 	_take_outpost(p.get("outpost"))
+	_take_kingdoms(p.get("kingdoms"))
 	var listed := {}
 	var camps_moved := false
 	for c: Dictionary in p.get("camps", []):
@@ -1920,6 +1943,108 @@ func _take_outpost(given: Variant) -> void:
 			"y": float(given.get("y", 0.0)), "carts": given.get("carts", []), "next_cart": int(given.get("next_cart", 1))}
 	if founded or outpost.carts.size() != carts_before:
 		outpost_changed.emit()
+
+
+# --- The other kingdoms -----------------------------------------------------------
+
+func kingdom_castle(kingdom: String) -> CastleState:
+	## Your castle in a kingdom, or null before you found one.
+	return get_castle(KingdomRules.castle_id(kingdom)) if kingdoms.has(kingdom) else null
+
+
+func check_found_kingdom(kingdom: String) -> String:
+	return kingdom_rules.check_found(player_castle, kingdoms, kingdom)
+
+
+func found_kingdom(kingdom: String) -> String:
+	## Founds your castle in a kingdom (data/kingdoms.json), paid from your
+	## main castle; the kingdom's robber barons join your camps. Online the
+	## server founds it; its answer brings the castle.
+	var why := check_found_kingdom(kingdom)
+	if why != "":
+		return why
+	if online:
+		get_node("/root/Online").order({"action": "found_kingdom", "kingdom": kingdom})
+		return ""
+	castles.append(kingdom_rules.found(player_castle, kingdom, now()))
+	kingdoms[kingdom] = {"ships": [], "next_ship": 1}
+	sync_barons(kingdom_rules.camps(kingdom))
+	save_game()
+	kingdoms_changed.emit()
+	barons_changed.emit()
+	changed.emit()
+	return ""
+
+
+func kingdom_camps(kingdom: String) -> Array[BaronCamp]:
+	var out: Array[BaronCamp] = []
+	for b in barons:
+		if b.kingdom == kingdom:
+			out.append(b)
+	return out
+
+
+func kingdom_ships(kingdom: String) -> Array:
+	return kingdoms.get(kingdom, {}).get("ships", [])
+
+
+func check_ship(kingdom: String) -> String:
+	return kingdom_rules.check_ship(kingdom_castle(kingdom), kingdom)
+
+
+func ship_goods(kingdom: String) -> String:
+	## Sends the good waiting at your castle in a kingdom home by ship.
+	var why := check_ship(kingdom)
+	if why != "":
+		return why
+	kingdom_rules.ship(kingdom_castle(kingdom), kingdoms[kingdom], kingdom, now())
+	if online:
+		get_node("/root/Online").order({"action": "ship_goods", "kingdom": kingdom})
+	else:
+		save_game()
+	kingdoms_changed.emit()
+	changed.emit()
+	return ""
+
+
+func goods_shown() -> Array:
+	## The goods to show beside your resources: those of the kingdoms you have reached, and any you hold.
+	var out: Array = []
+	for id: String in kingdom_rules.ids():
+		var good := String(kingdom_rules.kingdoms[id].good)
+		if kingdoms.has(id) or float(player_castle.goods.get(good, 0.0)) >= 1.0:
+			out.append(good)
+	return out
+
+
+func _deliver_ships(t: float) -> void:
+	var landed := 0
+	for id: String in kingdoms:
+		landed += KingdomRules.deliver(player_castle, kingdoms[id], t)
+	if landed > 0:
+		kingdoms_changed.emit()
+
+
+func _take_kingdoms(given: Variant) -> void:
+	## Online: your castles in the other kingdoms as the server has them.
+	if not given is Dictionary:
+		given = {}
+	var moved := false
+	for id: String in given:
+		var land: Dictionary = given[id]
+		var fresh := CastleState.from_dict(rules, land.get("castle", {}))
+		var castle := get_castle(KingdomRules.castle_id(id))
+		if castle == null:
+			castles.append(fresh)
+			moved = true
+		else:
+			castle.copy_from(fresh)
+		var ships: Array = land.get("ships", [])
+		if not kingdoms.has(id) or kingdom_ships(id).size() != ships.size():
+			moved = true
+		kingdoms[id] = {"ships": ships, "next_ship": int(land.get("next_ship", 1))}
+	if moved:
+		kingdoms_changed.emit()
 
 
 # --- Resource villages ------------------------------------------------------------

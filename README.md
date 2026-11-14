@@ -869,6 +869,46 @@ numbers live in `data/outposts.json`; `OutpostRules`
 `server/rules/outposts.ts` follow the same rules (checked by the server
 fixtures).
 
+## The other kingdoms
+
+Press **R** (or **Lands > Kingdoms** on the map). Across the sea lie two
+kingdoms, each with its own painted map, its own robber barons and a good
+found nowhere else:
+
+| Kingdom | Opens at | Good | Costs to found |
+| --- | --- | --- | --- |
+| **Frostmark**, the frozen north | keep level 3 | iron | 6,000 wood, 6,000 stone, 3,000 food, 3,000 gold |
+| **Sunreach**, the desert south | keep level 4 | glass | 12,000 wood, 12,000 stone, 6,000 food, 6,000 gold |
+
+Founding a castle there (Frosthold, Sunspire) works like an outpost: it has
+its own storage, builders and production, builds farms, woodcutters,
+quarries, houses, storehouses and decorations, a wall and a keep up to level
+4, and can't be attacked. Its keep gathers the kingdom's good: 6 an hour for
+each keep level, holding up to 120 for each keep level until you **ship it
+home** (4 minutes from Frostmark, 6 from Sunreach).
+
+Each kingdom has six baron camps, from Rimegate (level 3) to the Iron Jarl's
+Hall (level 13) in Frostmark and from Dustwell (level 6) to the Glass Emir's
+Tents (level 18) in Sunreach. Click a camp on the kingdom's map and
+**Prepare attack**: the army sails from your main castle (the voyage, then
+the march from your castle there), fights under the usual siege rules, and
+brings home the camp's loot, which includes the good.
+
+Goods show beside your resources. They need no storage and can't be looted,
+traded or bought; they pay for:
+
+- **Knights** (iron): elite riders, attack 34, defence 24, from barracks
+  level 5.
+- **Marksmen** (glass): elite crossbowmen, attack 28, strong against spearmen
+  and swordsmen, from barracks level 5.
+- **Master studies** at academy level 8: Steel Tools and Tempered Blades
+  (iron), Glasshouses and Lookout Lenses (glass), three levels each.
+
+The numbers are in `data/kingdoms.json`; the rules are
+`scripts/economy/kingdom_rules.gd` and, online, `server/rules/kingdoms.ts`
+(orders `found_kingdom` and `ship_goods`; the castles live in
+`players.kingdoms`).
+
 ## Resource villages
 
 58 villages lie across the map, each working one resource: wood, stone, food

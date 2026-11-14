@@ -29,6 +29,11 @@ export class BaronRules {
   fortress?: BaronRules;
   /** The numbers for the Ember Horde's camps (data/horde.json), camps with `horde` set; none without them. */
   horde?: BaronRules;
+  /** The numbers for camps in the other kingdoms (data/kingdoms.json): kingdom id -> these rules with its `barons` changes. */
+  kingdoms: Record<string, BaronRules> = {};
+  /** Kingdom camps only: seconds the army sails before it marches, and where in the kingdom it marches from. */
+  voyage = 0;
+  origin?: [number, number];
 
   constructor(data: Json) {
     this.maxLevel = Number(data.max_level ?? this.maxLevel);
@@ -48,9 +53,30 @@ export class BaronRules {
   }
 
   /** The rules for this camp: the fortress rules for a fortress, the horde's for a horde camp, else these. */
-  forCamp(camp: { fortress?: boolean; horde?: number }): BaronRules {
+  forCamp(camp: { fortress?: boolean; horde?: number; kingdom?: string }): BaronRules {
     if (camp.horde !== undefined && this.horde) return this.horde;
+    if (camp.kingdom && this.kingdoms[camp.kingdom]) return this.kingdoms[camp.kingdom];
     return camp.fortress && this.fortress ? this.fortress : this;
+  }
+
+  /** Makes the rules for each kingdom's camps: `base` (data/barons.json) with the kingdom's `barons` on top. */
+  loadKingdoms(base: Json, lands: Json): void {
+    for (const [id, land] of Object.entries((lands?.kingdoms ?? {}) as Record<string, Json>)) {
+      const k = new BaronRules({ ...base, ...(land.barons ?? {}) });
+      k.voyage = Number(land.voyage ?? 0);
+      k.origin = [Number(land.castle?.[0] ?? 0), Number(land.castle?.[1] ?? 0)];
+      this.kingdoms[id] = k;
+    }
+  }
+
+  /**
+   * Seconds an army takes to reach this camp (one way): the march from
+   * `home`, or for a kingdom's camp the voyage and the march from your castle there.
+   */
+  travelTime(camp: { position: [number, number]; fortress?: boolean; horde?: number; kingdom?: string }, home: [number, number]): number {
+    const r = this.forCamp(camp);
+    const from = r.origin ?? home;
+    return (r.origin ? r.voyage : 0) + this.marchTime(Math.sqrt((camp.position[0] - from[0]) ** 2 + (camp.position[1] - from[1]) ** 2));
   }
 
   garrison(level: number): Dict {

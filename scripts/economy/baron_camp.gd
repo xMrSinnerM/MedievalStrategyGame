@@ -26,6 +26,10 @@ var trophies := 0
 ## Online only: a fortress, one of the old kingdoms' castles, with the
 ## fortress rules (BaronRules.for_camp()).
 var fortress := false
+## A camp in one of the other kingdoms (data/kingdoms.json) has the kingdom's
+## id here: it stands on that kingdom's map and uses its rules
+## (BaronRules.for_camp()).
+var kingdom := ""
 ## Until when saboteurs have weakened the palisade, and by how much (SabotageRules).
 var weak_until := 0.0
 var weak_cut := 0.0
@@ -114,6 +118,8 @@ func to_dict() -> Dictionary:
 		out["trophies"] = trophies
 	if fortress:
 		out["fortress"] = true
+	if kingdom != "":
+		out["kingdom"] = kingdom
 	if weak_until > 0.0:
 		out["weak_until"] = weak_until
 		out["weak_cut"] = weak_cut
@@ -130,6 +136,7 @@ static func from_dict(data: Dictionary) -> BaronCamp:
 	camp.horde = float(data.get("horde", 0.0))
 	camp.trophies = int(data.get("trophies", 0))
 	camp.fortress = bool(data.get("fortress", false))
+	camp.kingdom = String(data.get("kingdom", ""))
 	camp.weak_until = float(data.get("weak_until", 0.0))
 	camp.weak_cut = float(data.get("weak_cut", 0.0))
 	return camp

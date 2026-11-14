@@ -58,6 +58,9 @@
 // POST { "action": "view_castle", "target": "name", "outpost": false }   another player's buildings, to look around inside
 // POST { "action": "found_outpost", "region": "wood" | "stone" | "food" | "gold" }   a second castle (data/outposts.json)
 //   on the free spot nearest your home; "place", "upgrade", "cancel" and "move" then take "castle": "outpost"
+// POST { "action": "found_kingdom", "kingdom": "frostmark" | "sunreach" }   a castle in another kingdom (data/kingdoms.json);
+//   "place", "upgrade", "cancel" and "move" then take "castle": "kingdom_<id>", and its camps join yours
+// POST { "action": "ship_goods", "kingdom": "frostmark" }   sends the good waiting at your castle there home by ship
 // POST { "action": "send_carts", "from": "home" | "outpost", "resources": { wood: n } }   between your castles
 // POST { "action": "attack_village", "village": id, "army" | "waves", "tools", "commander" }   take a resource village (data/villages.json)
 //   or a capital, by its town id (data/capitals.json)
@@ -141,6 +144,7 @@ import sabotageData from "../../../data/sabotage.json" with { type: "json" };
 import roadsData from "../../../data/roads.json" with { type: "json" };
 import gearData from "../../../data/gear.json" with { type: "json" };
 import outpostsData from "../../../data/outposts.json" with { type: "json" };
+import kingdomsData from "../../../data/kingdoms.json" with { type: "json" };
 import villagesData from "../../../data/villages.json" with { type: "json" };
 import capitalsData from "../../../data/capitals.json" with { type: "json" };
 import fortressesData from "../../../data/fortresses.json" with { type: "json" };
@@ -188,7 +192,7 @@ import {
   adminEvents, checkGift, giftReport, giveCastle, NOT_ADMIN, OVERRIDES_KEPT, startEvent, stopEvent, type Gift,
 } from "./admin.ts";
 
-const rules = makeRules(buildings, units, barons, gearData, outpostsData, villagesData, capitalsData, fortressesData, hordeData);
+const rules = makeRules(buildings, units, barons, gearData, outpostsData, villagesData, capitalsData, fortressesData, hordeData, kingdomsData);
 const CAPITALS: VillageInfo[] = (world as World).capitals ?? [];
 const VILLAGES: VillageInfo[] = [...((world as World).villages ?? []), ...CAPITALS];
 const CAPITAL_IDS = CAPITALS.map((c) => c.id);
@@ -229,7 +233,7 @@ const ALLIANCE_ORDERS = new Set([
   "alliance", "join_alliance", "accept_invite", "decline_invite", "cancel_request", "leave_alliance", "disband_alliance",
   "invite", "cancel_invite", "kick", "answer_request", "set_role", "alliance_settings",
 ]);
-const COLUMNS = "name, home_x, home_y, castle, camps, marches, next_march, protected_until, barons_beaten, event_key, event_points, event_claimed, horde_key, horde_points, horde, outpost, version";
+const COLUMNS = "name, home_x, home_y, castle, camps, marches, next_march, protected_until, barons_beaten, event_key, event_points, event_claimed, horde_key, horde_points, horde, outpost, kingdoms, version";
 const REPORTS_SHOWN = 20;
 const RETRIES = 4;
 const PLAYERS_SHOWN = 500;

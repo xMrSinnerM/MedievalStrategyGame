@@ -24,6 +24,7 @@ import { takeEncounter, type EncounterRules } from "../../../server/rules/encoun
 import { claimPrize as claimSeasonPrize, claimTrack, rollSeason, type SeasonRules } from "../../../server/rules/seasons.ts";
 import type { GearRules, Item, Lead } from "../../../server/rules/gear.ts";
 import { deliverCarts, OUTPOST_ID, unload, type Cart, type OutpostData } from "../../../server/rules/outposts.ts";
+import { deliverShips, kingdomOf, type KingdomData, type Ship } from "../../../server/rules/kingdoms.ts";
 import { rulesFor, type VillageInfo, type VillageState } from "../../../server/rules/villages.ts";
 import { checkVillageAttack, type VillageTarget } from "./villages.ts";
 import { rollTourney, type TourneyRules } from "./tournaments.ts";
@@ -53,6 +54,8 @@ export interface PlayerState {
   horde?: HordeState;
   /** Your second castle (data/outposts.json), or null before you found one. */
   outpost?: OutpostData | null;
+  /** Your castles in the other kingdoms (data/kingdoms.json) by kingdom id, with the ships carrying their goods home. */
+  kingdoms?: Record<string, KingdomData> | null;
 }
 
 /** The numbers for fights between players, from data/pvp.json. */
@@ -334,6 +337,7 @@ export function newPlayer(rules: Rules, world: World, name: string, now: number,
     horde_points: 0,
     horde: emptyHorde(),
     outpost: null,
+    kingdoms: {},
   };
 }
 
@@ -374,6 +378,18 @@ export function act(rules: Rules, given: PlayerState, req: Request, now: number,
     carts = deliverCarts(castle, outpost, carts, now);
     outpost.advanceTo(now);
   }
+  // Your castles in the other kingdoms, and the ships bringing their goods home.
+  const lands: Record<string, { castle: CastleState; ships: Ship[]; nextShip: number }> = {};
+  for (const [id, land] of Object.entries(stored.kingdoms ?? {})) {
+    if (!rules.kingdoms.has(id)) continue;
+    const there = CastleState.fromDict(rules.buildings, land.castle);
+    there.advanceTo(now);
+    lands[id] = { castle: there, ships: deliverShips(castle, structuredClone(land.ships ?? []), now), nextShip: land.next_ship ?? 1 };
+  }
+  /** The castle an order is for: yours, your outpost or one in another kingdom (null if you have none there). */
+  const castleFor = (id: unknown): CastleState | null =>
+    id === OUTPOST_ID ? outpost : kingdomOf(id) !== "" ? lands[kingdomOf(id)]?.castle ?? null : castle;
+  const noCastle = (id: unknown): string => id === OUTPOST_ID ? "You have no outpost." : "You have no castle there.";
   castle.advanceTo(now);
   if (ctx.villageIncome) unload(castle, ctx.villageIncome);
   const marketReports: MarketReport[] = [];
@@ -399,26 +415,26 @@ export function act(rules: Rules, given: PlayerState, req: Request, now: number,
     case "state":
       break;
     case "place": {
-      const where = req.castle === OUTPOST_ID ? outpost : castle;
-      if (where === null) error = "You have no outpost.";
+      const where = castleFor(req.castle);
+      if (where === null) error = noCastle(req.castle);
       else if (!isCell(req.cell)) error = "Bad cell.";
       else error = where.checkPlace(String(req.type), req.cell);
       if (error === "") result = where!.place(String(req.type), req.cell, now);
       break;
     }
     case "upgrade": {
-      const where = req.castle === OUTPOST_ID ? outpost : castle;
-      error = where === null ? "You have no outpost." : where.checkUpgrade(Number(req.id));
+      const where = castleFor(req.castle);
+      error = where === null ? noCastle(req.castle) : where.checkUpgrade(Number(req.id));
       if (error === "") where!.upgrade(Number(req.id), now);
       break;
     }
     case "cancel": {
-      const where = req.castle === OUTPOST_ID ? outpost : castle;
+      const where = castleFor(req.castle);
       if (where === null || !where.cancel(Number(req.id), now)) error = "Nothing is being built there.";
       break;
     }
     case "move": {
-      const where = req.castle === OUTPOST_ID ? outpost : castle;
+      const where = castleFor(req.castle);
       if (where === null || !isCell(req.cell) || !where.move(Number(req.id), req.cell)) error = "There's no room there";
       break;
     }
@@ -430,6 +446,24 @@ export function act(rules: Rules, given: PlayerState, req: Request, now: number,
         outpostRegion = String(req.region);
       }
       break;
+    case "found_kingdom":
+      error = rules.kingdoms.checkFound(castle, lands, req.kingdom);
+      if (error === "") {
+        const id = String(req.kingdom);
+        lands[id] = { castle: rules.kingdoms.found(castle, id, now), ships: [], nextShip: 1 };
+        const have = new Set(army.camps.map((c) => c.id));
+        army.camps.push(...rules.kingdoms.camps(id).filter((c) => !have.has(c.id)));
+      }
+      break;
+    case "ship_goods": {
+      const land = rules.kingdoms.has(req.kingdom) ? lands[req.kingdom] : undefined;
+      error = rules.kingdoms.checkShip(land?.castle, req.kingdom);
+      if (error === "") {
+        result = rules.kingdoms.ship(land!.castle, land!.ships, land!.nextShip, String(req.kingdom), now);
+        land!.nextShip += 1;
+      }
+      break;
+    }
     case "send_carts": {
       const from = req.from === OUTPOST_ID ? outpost : castle;
       if (outpost === null || from === null || outpostSpot === null) {
@@ -815,6 +849,8 @@ export function act(rules: Rules, given: PlayerState, req: Request, now: number,
       event_claimed: claimed,
       outpost: outpost && outpostSpot ? { name: outpost.castleName, region: outpostRegion, x: outpostSpot[0], y: outpostSpot[1],
         castle: outpost.toDict(), carts, next_cart: nextCart } : null,
+      kingdoms: Object.fromEntries(Object.entries(lands).map(([id, land]) =>
+        [id, { castle: land.castle.toDict(), ships: land.ships, next_ship: land.nextShip }])),
       ...score,
       horde,
     },

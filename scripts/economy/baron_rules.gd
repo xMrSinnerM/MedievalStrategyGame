@@ -12,6 +12,7 @@ extends RefCounted
 const PATH := "res://data/barons.json"
 const FORTRESS_PATH := "res://data/fortresses.json"
 const HORDE_PATH := "res://data/horde.json"
+const KINGDOMS_PATH := "res://data/kingdoms.json"
 
 var max_level := 40
 var garrison_base := 14.0
@@ -35,6 +36,13 @@ var fortress: BaronRules
 ## The numbers for the Ember Horde's camps (data/horde.json): online, a timed
 ## event's camps with "horde" set (BaronCamp.horde).
 var horde: BaronRules
+## The numbers for camps in the other kingdoms (data/kingdoms.json): kingdom
+## id -> these rules with the kingdom's `barons` changes (BaronCamp.kingdom).
+var kingdoms := {}
+## Kingdom camps only: seconds the army sails before it marches, and where
+## in the kingdom it marches from (your castle there).
+var voyage := 0.0
+var origin: Variant = null
 
 
 static func load_default() -> BaronRules:
@@ -52,13 +60,32 @@ static func load_default() -> BaronRules:
 	if horde_data is Dictionary:
 		rules.horde = BaronRules.new()
 		rules.horde.load_from(horde_data)
+	var lands = JSON.parse_string(FileAccess.get_file_as_string(KINGDOMS_PATH))
+	if lands is Dictionary:
+		rules.load_kingdoms(data, lands)
 	return rules
+
+
+func load_kingdoms(base: Dictionary, lands: Dictionary) -> void:
+	## Makes the rules for each kingdom's camps: `base` (data/barons.json) with the kingdom's `barons` on top.
+	var all: Dictionary = lands.get("kingdoms", {})
+	for id: String in all:
+		var merged := base.duplicate()
+		merged.merge(all[id].get("barons", {}), true)
+		var k := BaronRules.new()
+		k.load_from(merged)
+		k.voyage = float(all[id].get("voyage", 0.0))
+		var spot: Array = all[id].get("castle", [0.0, 0.0])
+		k.origin = Vector2(float(spot[0]), float(spot[1]))
+		kingdoms[id] = k
 
 
 func for_camp(camp: BaronCamp) -> BaronRules:
 	## The rules for this camp: the fortress rules for a fortress, the horde's for a horde camp, else these.
 	if camp.is_horde() and horde != null:
 		return horde
+	if camp.kingdom != "" and kingdoms.has(camp.kingdom):
+		return kingdoms[camp.kingdom]
 	return fortress if camp.fortress and fortress != null else self
 
 
@@ -130,6 +157,16 @@ func rebuild_time(level: int) -> float:
 func march_time(distance: float) -> float:
 	## Seconds an army takes to march this far (one way).
 	return maxf(10.0, distance / march_speed)
+
+
+func travel_time(camp: BaronCamp, home: Vector2) -> float:
+	## Seconds an army takes to reach this camp (one way): the march from
+	## `home`, or for a kingdom's camp the voyage and the march from your
+	## castle there.
+	var r := for_camp(camp)
+	if r.origin == null:
+		return march_time(home.distance_to(camp.position))
+	return r.voyage + march_time((r.origin as Vector2).distance_to(camp.position))
 
 
 func carry(army: Dictionary) -> float:

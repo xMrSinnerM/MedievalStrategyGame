@@ -73,6 +73,14 @@ var boost := {}
 ## An outpost's building limits ({"types": [allowed types], "keep": highest
 ## keep level}); empty for a normal castle (OutpostRules).
 var limits := {}
+## Goods from the other kingdoms (data/kingdoms.json): good -> amount. They
+## have no storage cap, can't be looted, and pay for costs that name them
+## (elite soldiers, master studies).
+var goods := {}
+## What a kingdom castle's keep yields: good -> {"rate": per hour and keep
+## level, "store": the most it holds per keep level}. It gathers in `goods`
+## until a ship takes it home.
+var yields := {}
 ## Studies researched in the academy (study -> level) and the one under way
 ## ({study, target, finish}, or empty), see "research" in buildings.json.
 var research := {}
@@ -290,7 +298,7 @@ func affordable(unit: String) -> int:
 	var n := rules.max_batch
 	for r: String in cost:
 		if cost[r] > 0.0:
-			n = mini(n, int(floor((resources.get(r, 0.0) + 0.0001) / cost[r])))
+			n = mini(n, int(floor((stock(r) + 0.0001) / cost[r])))
 	return maxi(n, 0)
 
 
@@ -363,9 +371,14 @@ func defense() -> float:
 
 func can_afford(cost: Dictionary) -> bool:
 	for r: String in cost:
-		if resources.get(r, 0.0) + 0.0001 < cost[r]:
+		if stock(r) + 0.0001 < cost[r]:
 			return false
 	return true
+
+
+func stock(r: String) -> float:
+	## How much of a resource, or of a good from the other kingdoms, the castle has.
+	return float(resources.get(r, 0.0)) if rules.resources.has(r) else float(goods.get(r, 0.0))
 
 
 func check_build(type: String) -> String:
@@ -375,7 +388,7 @@ func check_build(type: String) -> String:
 	if rules.is_perimeter(type):
 		return "This is built around the castle, not placed"
 	if not limits.is_empty() and not limits.types.has(type):
-		return "An outpost can't have one of these"
+		return "This castle can't have one of these"
 	if count(type) >= rules.max_count(type, keep_level()):
 		return "The castle already has one" if rules.is_unique(type) else "Upgrade the keep to build more of these"
 	if keep_level() < rules.required_keep(type):
@@ -401,7 +414,7 @@ func check_upgrade(building_id: int) -> String:
 	if b.target > 0:
 		return "Already under construction"
 	if not limits.is_empty() and b.type == "keep" and b.level >= int(limits.keep):
-		return "An outpost's keep can't go higher"
+		return "This castle's keep can't go higher"
 	if b.level >= rules.max_level(b.type, keep_level()):
 		if b.type != "keep" and b.level < int(rules.types[b.type].get("max_level", 10)):
 			return "Upgrade the keep first"
@@ -794,6 +807,10 @@ func _produce(seconds: float) -> void:
 			hunger += -after
 	if resources.get("food", 0.0) > 0.0:
 		hunger = 0.0
+	var keep := keep_level()
+	for g: String in yields:
+		var held := float(goods.get(g, 0.0))
+		goods[g] = maxf(held, minf(held + float(yields[g].rate) * keep * seconds / 3600.0, float(yields[g].store) * keep))
 	_desert()
 
 
@@ -853,6 +870,8 @@ func copy_from(other: CastleState) -> void:
 	armoury = other.armoury
 	boost = other.boost
 	limits = other.limits
+	goods = other.goods
+	yields = other.yields
 	research = other.research
 	studying = other.studying
 	_next_id = other._next_id
@@ -880,6 +899,7 @@ func to_dict() -> Dictionary:
 		"tools": tools.duplicate(), "crafting": crafting.duplicate(true), "defence_tools": defence_tools.duplicate(true),
 		"armoury": armoury.duplicate(true),
 		"boost": boost.duplicate(), "limits": limits.duplicate(true) if not limits.is_empty() else null,
+		"goods": goods.duplicate(), "yields": yields.duplicate(true) if not yields.is_empty() else null,
 		"research": research.duplicate(), "studying": studying.duplicate() if not studying.is_empty() else null,
 	}
 
@@ -1024,6 +1044,14 @@ static func from_dict(p_rules: BuildingRules, data: Dictionary) -> CastleState:
 		for t in lim.get("types", []):
 			types.append(String(t))
 		castle.limits = {"types": types, "keep": int(lim.get("keep", 1))}
+	var held: Variant = data.get("goods", {})
+	if held is Dictionary:
+		for g: String in held:
+			castle.goods[g] = float(held[g])
+	var gives: Variant = data.get("yields")
+	if gives is Dictionary:
+		for g: String in gives:
+			castle.yields[g] = {"rate": float(gives[g].get("rate", 0.0)), "store": float(gives[g].get("store", 0.0))}
 	# Castles saved before the academy have researched nothing.
 	var known: Variant = data.get("research", {})
 	if known is Dictionary:
@@ -1059,6 +1087,9 @@ func pay(cost: Dictionary) -> void:
 
 func _pay(cost: Dictionary) -> void:
 	for r: String in cost:
+		if not rules.resources.has(r):
+			goods[r] = float(goods.get(r, 0.0)) - cost[r]
+			continue
 		resources[r] = resources.get(r, 0.0) - cost[r]
 		stats.spent += cost[r]
 
@@ -1067,6 +1098,9 @@ func _refund(cost: Dictionary) -> void:
 	## Gives back part of a cost (CANCEL_REFUND), up to the storage cap.
 	var cap := storage_capacity()
 	for r: String in cost:
+		if not rules.resources.has(r):
+			goods[r] = float(goods.get(r, 0.0)) + cost[r] * CANCEL_REFUND
+			continue
 		resources[r] = maxf(resources.get(r, 0.0), minf(resources.get(r, 0.0) + cost[r] * CANCEL_REFUND, cap))
 		stats.spent -= cost[r] * CANCEL_REFUND
 

@@ -269,6 +269,20 @@
 				"cost": { "wood": 4500, "stone": 4500, "gold": 1800 }, "time": 7200,
 				"effects": { "storage": 0.05 }
 			},
+			"steel_tools": {
+				"branch": "economy", "name": "Steel Tools",
+				"description": "Master study. Axes, picks and ploughs of Frostmark steel: more wood, stone and food.",
+				"max_level": 3, "academy_level": 8, "requires": { "granaries": 2 },
+				"cost": { "wood": 5000, "stone": 5000, "gold": 2500, "iron": 60 }, "time": 10800,
+				"effects": { "wood": 0.03, "stone": 0.03, "food": 0.03 }
+			},
+			"glasshouses": {
+				"branch": "economy", "name": "Glasshouses",
+				"description": "Master study. Sunreach glass keeps the gardens green all winter: more food and gold.",
+				"max_level": 3, "academy_level": 8, "requires": { "granaries": 2 },
+				"cost": { "wood": 5000, "stone": 5000, "gold": 2500, "glass": 60 }, "time": 10800,
+				"effects": { "food": 0.03, "gold": 0.03 }
+			},
 			"drill_yards": {
 				"branch": "military", "name": "Drill Yards",
 				"description": "Sergeants turn recruits into soldiers sooner.",
@@ -304,6 +318,13 @@
 				"cost": { "wood": 3000, "stone": 3000, "food": 4000, "gold": 1800 }, "time": 7200,
 				"effects": { "march_time": -0.04 }
 			},
+			"tempered_blades": {
+				"branch": "military", "name": "Tempered Blades",
+				"description": "Master study. Blades forged from Frostmark iron: your soldiers strike harder on walls and in the courtyard.",
+				"max_level": 3, "academy_level": 8, "requires": { "forced_march": 2 },
+				"cost": { "wood": 4000, "food": 5000, "gold": 2500, "iron": 80 }, "time": 10800,
+				"effects": { "wall_attack": 0.03, "yard_attack": 0.03 }
+			},
 			"masonry": {
 				"branch": "defence", "name": "Masonry",
 				"description": "Thicker mortar and deeper footings make your walls stronger.",
@@ -338,6 +359,13 @@
 				"max_level": 3, "academy_level": 7, "requires": { "infirmary": 2 },
 				"cost": { "wood": 4000, "stone": 6000, "gold": 2000 }, "time": 7200,
 				"effects": { "defence_slots": 1 }
+			},
+			"lookout_lenses": {
+				"branch": "defence", "name": "Lookout Lenses",
+				"description": "Master study. Sunreach spyglasses on every tower: your defenders are ready long before the enemy climbs.",
+				"max_level": 3, "academy_level": 8, "requires": { "murder_holes": 1 },
+				"cost": { "wood": 4000, "stone": 6000, "gold": 2500, "glass": 80 }, "time": 10800,
+				"effects": { "wall_defence": 0.03, "yard_defence": 0.03 }
 			}
 		}
 	}

@@ -13,6 +13,7 @@ var baron_rules: BaronRules
 var quest_book: QuestBook
 var gear: GearRules
 var outposts: OutpostRules
+var kingdoms: KingdomRules
 var villages: VillageRules
 var capitals: CapitalRules
 var rng := RandomNumberGenerator.new()
@@ -24,6 +25,7 @@ func _initialize() -> void:
 	quest_book = QuestBook.load_default()
 	gear = GearRules.load_default()
 	outposts = OutpostRules.load_default()
+	kingdoms = KingdomRules.load_default()
 	villages = VillageRules.load_default()
 	capitals = CapitalRules.load_capital_rules()
 	rng.seed = 20261011
@@ -37,6 +39,7 @@ func _initialize() -> void:
 		"drops": [],
 		"armoury": {},
 		"outpost": {},
+		"kingdom": {},
 		"villages": {},
 		"capitals": {},
 		"fortresses": [],
@@ -65,6 +68,7 @@ func _initialize() -> void:
 		data.drops.append({"level": level, "seed": seed_value, "item": gear.roll_drop(level, seed_value)})
 	data.armoury = armoury_run()
 	data.outpost = outpost_run()
+	data.kingdom = kingdom_run()
 	data.villages = village_run(villages, VillageRules.load_villages(), 25)
 	data.capitals = village_run(capitals, CapitalRules.load_capitals(), 300)
 	data.capitals["bonus"] = capital_bonus_run()
@@ -488,6 +492,70 @@ func gems_run() -> Dictionary:
 				op["result"] = gear.forge(castle, ids)
 		ops.append(op)
 	return {"drops": drops, "bag": given, "ops": ops, "castle": castle.to_dict()}
+
+
+func kingdom_run() -> Dictionary:
+	## A main castle founding a castle in Frostmark, its keep gathering iron
+	## as it grows, ships carrying it home, iron paying for knights and a
+	## master study, and an army beating one of the kingdom's camps.
+	var id := "frostmark"
+	var def: Dictionary = kingdoms.kingdoms[id]
+	var main := CastleState.create_new(rules, "c", "Main Castle", "player", T0)
+	var t := T0
+	var checks := {"none": kingdoms.check_found(main, {}, "atlantis"), "too_low": kingdoms.check_found(main, {}, id)}
+	for b in main.buildings:
+		if b.type == "keep":
+			b.level = int(def.keep_needed)
+	checks["poor"] = kingdoms.check_found(main, {}, id)
+	for r: String in main.resources:
+		main.resources[r] = 90000.0
+	checks["has"] = kingdoms.check_found(main, {id: {}}, id)
+	checks["ok"] = kingdoms.check_found(main, {}, id)
+	var castle := kingdoms.found(main, id, t)
+	var state := {"ships": [], "next_ship": 1}
+	checks["empty"] = kingdoms.check_ship(castle, id)
+	checks["barracks"] = castle.check_build("barracks")
+	var keep_id := 0
+	for b in castle.buildings:
+		if b.type == "keep":
+			keep_id = b.id
+	var steps: Array = []
+	for i in 14:
+		var step := {}
+		t += float(rng.randi_range(1800, 30000))
+		castle.advance_to(t)
+		main.advance_to(t)
+		var landed := KingdomRules.deliver(main, state, t)
+		step = {"t": t, "landed": landed, "waiting": kingdoms.waiting(castle, id)}
+		if i % 4 == 1:
+			for r: String in castle.resources:
+				castle.resources[r] = 60000.0
+			step["upgrade"] = castle.upgrade(keep_id, t)
+		if i % 3 == 2:
+			step["ship_check"] = kingdoms.check_ship(castle, id)
+			if step.ship_check == "":
+				step["boat"] = kingdoms.ship(castle, state, id, t).duplicate()
+		step["castle"] = castle.to_dict()
+		step["goods"] = main.goods.duplicate()
+		steps.append(step)
+	# Iron pays for knights and a master study; what is lacking is refused.
+	main.goods["iron"] = 100.0
+	var spend := {
+		"knights": main.can_afford(rules.unit_cost("knight", 10)),
+		"too_many": main.can_afford(rules.unit_cost("knight", 40)),
+		"marksmen": main.can_afford(rules.unit_cost("marksman", 1)),
+		"study_cost": rules.study_cost("tempered_blades", 2),
+	}
+	main.pay(rules.unit_cost("knight", 10))
+	spend["left"] = main.goods.duplicate()
+	# The first camp, beaten by a big army: it drops iron, and the way there is a voyage and a march.
+	var listed: Array = kingdoms.camps(id)
+	var camp := BaronCamp.create(listed[0].id, listed[0].name, Vector2(listed[0].position[0], listed[0].position[1]), int(listed[0].level))
+	camp.kingdom = id
+	var result := camp.attack(baron_rules, rules, {"swordsman": 600, "archer": 200}, 4242, t)
+	return {"t0": T0, "kingdom": id, "checks": checks, "steps": steps, "state": state, "spend": spend, "main": main.to_dict(),
+			"camps": listed, "travel": baron_rules.travel_time(camp, Vector2(10.0, 20.0)), "garrison": camp.garrison(baron_rules),
+			"winner": result.winner, "loot": result.loot, "survivors": result.survivors, "camp": camp.to_dict()}
 
 
 func outpost_run() -> Dictionary:

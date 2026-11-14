@@ -1,0 +1,168 @@
+{
+	"_comment": "The other kingdoms: lands across the sea, each with its own map, robber barons and a good found nowhere else. Once your keep reaches keep_needed you found a castle there (cost taken from your main castle); it may build only `types`, its keep up to keep_cap. Its keep yields the kingdom's good: yield.rate per hour and keep level, holding up to yield.store per keep level until a ship takes it home (voyage seconds). Your armies sail from home against the kingdom's camps: voyage seconds, then the march from your castle there (positions are on the kingdom's own map, 0..size). `barons` overrides data/barons.json for those camps, whose loot includes the good. Goods have no storage cap, can't be looted or traded, and pay for elite soldiers (data/units.json) and master studies (data/buildings.json).",
+	"goods": {
+		"iron": {
+			"name": "Iron",
+			"description": "Frostmark iron, for elite soldiers and master studies."
+		},
+		"glass": {
+			"name": "Glass",
+			"description": "Sunreach glass, for elite soldiers and master studies."
+		}
+	},
+	"types": [
+		"keep",
+		"wall",
+		"woodcutter",
+		"quarry",
+		"farm",
+		"house",
+		"storehouse",
+		"banner",
+		"garden",
+		"well"
+	],
+	"keep_cap": 4,
+	"kingdoms": {
+		"frostmark": {
+			"name": "Frostmark",
+			"good": "iron",
+			"keep_needed": 3,
+			"castle_name": "Frosthold",
+			"description": "A frozen land of fjords and black pines far to the north. Its mountains are full of iron, and its barons fight over every vein.",
+			"cost": {
+				"wood": 6000,
+				"stone": 6000,
+				"food": 3000,
+				"gold": 3000
+			},
+			"biome": "snow",
+			"seed": 7711,
+			"size": 600,
+			"castle": [300, 345],
+			"voyage": 240,
+			"yield": {
+				"rate": 6,
+				"store": 120
+			},
+			"camps": [
+				{
+					"id": "frostmark_1",
+					"name": "Rimegate",
+					"position": [372, 300],
+					"level": 3
+				},
+				{
+					"id": "frostmark_2",
+					"name": "Wolfsfjord",
+					"position": [215, 322],
+					"level": 4
+				},
+				{
+					"id": "frostmark_3",
+					"name": "Black Pine Hold",
+					"position": [305, 235],
+					"level": 6
+				},
+				{
+					"id": "frostmark_4",
+					"name": "Icewatch",
+					"position": [428, 398],
+					"level": 8
+				},
+				{
+					"id": "frostmark_5",
+					"name": "Frostfang Den",
+					"position": [172, 208],
+					"level": 10
+				},
+				{
+					"id": "frostmark_6",
+					"name": "The Iron Jarl's Hall",
+					"position": [395, 172],
+					"level": 13
+				}
+			],
+			"barons": {
+				"garrison_base": 18,
+				"loot_base": {
+					"wood": 420,
+					"stone": 270,
+					"food": 300,
+					"gold": 210,
+					"iron": 10
+				}
+			}
+		},
+		"sunreach": {
+			"name": "Sunreach",
+			"good": "glass",
+			"keep_needed": 4,
+			"castle_name": "Sunspire",
+			"description": "Golden dunes and oasis towns far to the south. Its glassmakers have no equal, and its raiders strike from the deep desert.",
+			"cost": {
+				"wood": 12000,
+				"stone": 12000,
+				"food": 6000,
+				"gold": 6000
+			},
+			"biome": "desert",
+			"seed": 9324,
+			"size": 600,
+			"castle": [290, 300],
+			"voyage": 360,
+			"yield": {
+				"rate": 6,
+				"store": 120
+			},
+			"camps": [
+				{
+					"id": "sunreach_1",
+					"name": "Dustwell",
+					"position": [362, 342],
+					"level": 6
+				},
+				{
+					"id": "sunreach_2",
+					"name": "Scorpion Rock",
+					"position": [212, 262],
+					"level": 8
+				},
+				{
+					"id": "sunreach_3",
+					"name": "Red Dune Camp",
+					"position": [318, 212],
+					"level": 10
+				},
+				{
+					"id": "sunreach_4",
+					"name": "Jackal's Oasis",
+					"position": [205, 392],
+					"level": 12
+				},
+				{
+					"id": "sunreach_5",
+					"name": "Saltwind Hold",
+					"position": [432, 252],
+					"level": 15
+				},
+				{
+					"id": "sunreach_6",
+					"name": "The Glass Emir's Tents",
+					"position": [412, 425],
+					"level": 18
+				}
+			],
+			"barons": {
+				"garrison_base": 18,
+				"loot_base": {
+					"wood": 300,
+					"stone": 270,
+					"food": 420,
+					"gold": 260,
+					"glass": 10
+				}
+			}
+		}
+	}
+}
