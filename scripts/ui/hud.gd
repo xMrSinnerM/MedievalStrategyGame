@@ -28,6 +28,10 @@ var _sieges := {}                ## castle id -> {"besieger", "until"} for siege
 var _windows: Array[GameWindow] = []
 var _gift: Control               ## the Royal Gift page, opened by itself once when today's is waiting
 var _gift_wait := 2.0            ## seconds after the map opens before it may show (-1: done)
+var _dock: Control               ## the window buttons bottom right
+var _minimap: Control
+var _card_scroll: ScrollContainer  ## holds the card of what you clicked, kept clear of the dock
+var _card_list: VBoxContainer
 
 
 func _ready() -> void:
@@ -111,6 +115,18 @@ func _ready() -> void:
 	minimap.size_flags_horizontal = Control.SIZE_SHRINK_END
 	right.add_child(minimap)
 	_controls.minimap = minimap
+	_minimap = minimap
+	# The cards sit in a scroll box that _fit_cards() keeps above the dock, so
+	# on short screens (phones) the dock never covers a card's buttons.
+	_card_scroll = ScrollContainer.new()
+	_card_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_card_scroll.size_flags_horizontal = Control.SIZE_SHRINK_END
+	_card_scroll.mouse_filter = Control.MOUSE_FILTER_PASS
+	right.add_child(_card_scroll)
+	_card_list = VBoxContainer.new()
+	_card_list.add_theme_constant_override("separation", 8)
+	_card_list.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_card_scroll.add_child(_card_list)
 	var cards: Array[Control] = [preload("res://scripts/ui/castle_info_panel.gd").new(),
 			preload("res://scripts/ui/baron_panel.gd").new(), preload("res://scripts/ui/village_panel.gd").new()]
 	if Economy.online:
@@ -119,7 +135,7 @@ func _ready() -> void:
 	cards.append(preload("res://scripts/ui/encounter_panel.gd").new())
 	for card in cards:
 		card.size_flags_horizontal = Control.SIZE_SHRINK_END
-		right.add_child(card)
+		_card_list.add_child(card)
 
 	var report := preload("res://scripts/ui/battle_report.gd").new()
 	report.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
@@ -181,6 +197,7 @@ func _ready() -> void:
 	dock.offset_right = -12
 	dock.offset_bottom = -12
 	add_child(dock)
+	_dock = dock
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 6)
 	dock.add_child(row)
@@ -302,6 +319,30 @@ func _on_diplomacy(news: Array) -> void:
 	_news_left = NEWS_TIME * 1.5
 
 
+func _fit_cards() -> void:
+	## Keeps the card of what you clicked between the top bar and the dock: if the
+	## card and the minimap don't both fit above the dock, the minimap steps aside
+	## while the card is open; if the card still doesn't fit, it scrolls.
+	var card_height := 0.0
+	var shown := 0
+	for card: Control in _card_list.get_children():
+		if card.visible:
+			card_height += card.get_combined_minimum_size().y
+			shown += 1
+	var wanted := _controls.minimap_wanted()
+	if shown == 0:
+		_card_scroll.visible = false
+		_minimap.visible = wanted
+		return
+	card_height += 8.0 * (shown - 1)
+	var room := _dock.get_rect().position.y - 8.0 - TOP
+	var with_map := room - _minimap.get_combined_minimum_size().y - 8.0
+	_minimap.visible = wanted and card_height <= with_map
+	var space := with_map if _minimap.visible else room
+	_card_scroll.visible = true
+	_card_scroll.custom_minimum_size.y = clampf(card_height, 0.0, maxf(space, 120.0))
+
+
 func _process(delta: float) -> void:
 	_news_left = maxf(_news_left - delta, 0.0)
 	_news.modulate.a = clampf(_news_left, 0.0, 1.0)
@@ -316,6 +357,7 @@ func _process(delta: float) -> void:
 				alerts.append("%s's army reaches your castle in %s" % [r.attacker_name,
 						_clock(float(r.arrive) - Economy.now())])
 	_alert.text = "\n".join(alerts)
+	_fit_cards()
 	if _event != null:
 		_show_event()
 	if not visible:

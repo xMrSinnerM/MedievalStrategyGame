@@ -104,3 +104,9 @@ func _tool(text: String, icon: String, tip: String, action: Callable) -> Button:
 		b.add_theme_stylebox_override(state, s)
 	b.pressed.connect(action)
 	return b
+
+
+func minimap_wanted() -> bool:
+	## Whether the minimap is switched on (N): the HUD may still hide it for a while
+	## to make room for a card on short screens.
+	return _minimap_button.button_pressed
