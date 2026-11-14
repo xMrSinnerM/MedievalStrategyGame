@@ -223,6 +223,34 @@ const SVG := {
 		<path d="M20 58 L22 38 C16 34 12 26 18 20 L28 10 L30 4 L36 10 C46 12 54 22 52 34 L50 58 Z" fill="#9a6232" stroke="%s" stroke-width="3" stroke-linejoin="round"/>
 		<path d="M30 8 C38 12 42 20 42 30" fill="none" stroke="#3a2412" stroke-width="5"/>
 		<circle cx="26" cy="22" r="2.5" fill="#1c140c"/>""",
+	# A plumed great helm, for knights.
+	"knight": """
+		<path d="M16 54 L16 28 C16 12 48 12 48 28 L48 54 Z" fill="#b9bec8" stroke="%s" stroke-width="3" stroke-linejoin="round"/>
+		<rect x="20" y="30" width="24" height="5" rx="1.5" fill="#20242c"/>
+		<path d="M32 30 L32 52" stroke="#7d828c" stroke-width="3"/>
+		<path d="M32 16 C30 6 40 2 50 6 C44 8 40 12 38 18 Z" fill="#b5281e" stroke="%s" stroke-width="2.5" stroke-linejoin="round"/>
+		<path d="M22 22 C26 18 30 17 34 18" stroke="#ffffff" stroke-width="2.5" fill="none" opacity="0.6" stroke-linecap="round"/>""",
+	# A crossbow, for marksmen.
+	"marksman": """
+		<rect x="29" y="10" width="6" height="46" rx="2" fill="#8a5a2e" stroke="%s" stroke-width="2.5"/>
+		<path d="M8 28 C18 10 46 10 56 28" fill="none" stroke="%s" stroke-width="7" stroke-linecap="round"/>
+		<path d="M8 28 C18 10 46 10 56 28" fill="none" stroke="#a9adb5" stroke-width="3.5" stroke-linecap="round"/>
+		<path d="M8 28 L32 36 L56 28" fill="none" stroke="#e8dcc0" stroke-width="2"/>
+		<path d="M32 6 L36 14 L28 14 Z" fill="#d8dce2" stroke="%s" stroke-width="2" stroke-linejoin="round"/>
+		<circle cx="32" cy="44" r="4" fill="#9fd8e8" stroke="%s" stroke-width="2"/>""",
+	# Three iron ingots, for Frostmark iron.
+	"iron": """
+		<path d="M6 52 L12 38 L30 38 L36 52 Z" fill="#6f7884" stroke="%s" stroke-width="3" stroke-linejoin="round"/>
+		<path d="M28 52 L34 38 L52 38 L58 52 Z" fill="#59626e" stroke="%s" stroke-width="3" stroke-linejoin="round"/>
+		<path d="M17 38 L23 24 L41 24 L47 38 Z" fill="#8b95a2" stroke="%s" stroke-width="3" stroke-linejoin="round"/>
+		<path d="M25 28 L39 28" stroke="#dfe6ee" stroke-width="2.5" opacity="0.8" stroke-linecap="round"/>
+		<path d="M13 42 L27 42 M35 42 L49 42" stroke="#c4ccd6" stroke-width="2" opacity="0.6" stroke-linecap="round"/>""",
+	# A blown glass flask, for Sunreach glass.
+	"glass": """
+		<path d="M26 6 L38 6 L38 22 C50 28 54 38 50 48 C46 58 18 58 14 48 C10 38 14 28 26 22 Z" fill="#8fd6e2" stroke="%s" stroke-width="3" stroke-linejoin="round"/>
+		<path d="M17 42 C20 52 44 52 47 42 C40 46 24 46 17 42 Z" fill="#e8a23c"/>
+		<rect x="23" y="4" width="18" height="5" rx="2" fill="#c9eef4" stroke="%s" stroke-width="2.5"/>
+		<path d="M22 30 C19 34 18 38 19 42" stroke="#ffffff" stroke-width="3" fill="none" opacity="0.75" stroke-linecap="round"/>""",
 	# Crossed swords, for battles.
 	"battle": """
 		<path d="M10 10 L46 46 M54 10 L18 46" stroke="#d8dce2" stroke-width="6" stroke-linecap="round"/>

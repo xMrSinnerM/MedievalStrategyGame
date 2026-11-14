@@ -28,6 +28,8 @@ export interface CampData {
   until?: number;
   /** A fortress (one of the old kingdoms' castles), with the fortress rules (BaronRules.forCamp()). */
   fortress?: boolean;
+  /** A camp in one of the other kingdoms (data/kingdoms.json): the kingdom's id. It stands on that kingdom's map. */
+  kingdom?: string;
   /** Until when saboteurs have weakened the palisade (sabotage.ts), and by how much. */
   weak_until?: number;
   weak_cut?: number;

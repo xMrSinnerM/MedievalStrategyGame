@@ -44,6 +44,7 @@ func _initialize() -> void:
 	test_gear()
 	test_gems_and_forge()
 	test_outpost()
+	test_kingdoms()
 	test_villages()
 	test_capitals()
 	test_fortresses()
@@ -1164,7 +1165,7 @@ func test_outpost() -> void:
 	var post := o.found(main, "wood", T0)
 	near(main.resources.wood, 9000.0 - float(o.cost.wood), "paid from the main castle")
 	check(post.id == OutpostRules.OUTPOST_ID and post.castle_name == "Timberland", "named after its region")
-	check(post.check_build("barracks") == "An outpost can't have one of these", "no barracks")
+	check(post.check_build("barracks") == "This castle can't have one of these", "no barracks")
 	check(post.check_build("woodcutter") == "", "woodcutters allowed")
 	# The region's bonus: the same woodcutter makes half as much again.
 	var plain := fresh()
@@ -1176,7 +1177,7 @@ func test_outpost() -> void:
 	for b in post.buildings:
 		if b.type == "keep":
 			b.level = o.keep_cap
-			check(post.check_upgrade(b.id) == "An outpost's keep can't go higher", "keep capped")
+			check(post.check_upgrade(b.id) == "This castle's keep can't go higher", "keep capped")
 	var saved := CastleState.from_dict(rules, JSON.parse_string(JSON.stringify(post.to_dict())))
 	check(saved.boost == post.boost and saved.limits.keep == o.keep_cap, "boost and limits are saved")
 	# Carts.
@@ -1215,6 +1216,90 @@ func test_outpost() -> void:
 	check(eco.outpost.carts.is_empty() and eco.outpost_castle().resources.food >= food + 299.0, "economy: carts unload at the outpost")
 	eco.delete_slot(1)
 	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://test_saves"))
+	eco.free()
+
+
+func test_kingdoms() -> void:
+	var k := KingdomRules.load_default()
+	var main := fresh()
+	check(k.ids() == ["frostmark", "sunreach"], "two kingdoms")
+	check(k.check_found(main, {}, "atlantis") == "No such kingdom.", "no such kingdom")
+	check(k.check_found(main, {}, "frostmark") == "Your keep must reach level 3 first.", "kingdom: keep too low")
+	for b in main.buildings:
+		if b.type == "keep":
+			b.level = 3
+	check(k.check_found(main, {}, "frostmark") == "Not enough resources to found a castle in Frostmark.", "kingdom: too poor")
+	check(k.check_found(main, {}, "sunreach") == "Your keep must reach level 4 first.", "Sunreach needs a higher keep")
+	for r: String in main.resources:
+		main.resources[r] = 9000.0
+	check(k.check_found(main, {"frostmark": {}}, "frostmark") == "You already have a castle in Frostmark.", "one castle per kingdom")
+	var castle := k.found(main, "frostmark", T0)
+	near(main.resources.wood, 9000.0 - float(k.kingdoms.frostmark.cost.wood), "kingdom: paid from the main castle")
+	check(castle.id == "kingdom_frostmark" and KingdomRules.kingdom_of(castle.id) == "frostmark" and KingdomRules.kingdom_of("outpost") == "",
+			"the castle's id names its kingdom")
+	check(castle.check_build("barracks") == "This castle can't have one of these" and castle.check_build("farm") == "", "kingdom: limited buildings")
+	# The keep gathers iron, up to its store, and more at a higher keep.
+	check(k.check_ship(castle, "frostmark") == "There is no iron to ship yet.", "nothing to ship at first")
+	castle.advance_to(T0 + 3600.0)
+	near(castle.goods.iron, float(k.kingdoms.frostmark.yield.rate), "an hour's iron at keep 1")
+	castle.advance_to(T0 + 400.0 * 3600.0)
+	near(castle.goods.iron, float(k.kingdoms.frostmark.yield.store), "iron stops at the store")
+	var saved := CastleState.from_dict(rules, JSON.parse_string(JSON.stringify(castle.to_dict())))
+	check(saved.yields == castle.yields and saved.goods == castle.goods, "goods and yields are saved")
+	# A ship takes it all home; it lands after the voyage.
+	var state := {"ships": [], "next_ship": 1}
+	var t := T0 + 400.0 * 3600.0
+	var boat := k.ship(castle, state, "frostmark", t)
+	check(int(boat.amount) == int(k.kingdoms.frostmark.yield.store) and castle.goods.iron < 1.0, "the ship takes everything waiting")
+	check(KingdomRules.deliver(main, state, t + k.voyage("frostmark") - 1.0) == 0 and not main.goods.has("iron"), "still at sea")
+	check(KingdomRules.deliver(main, state, t + k.voyage("frostmark")) == 1 and state.ships.is_empty(), "the ship lands")
+	near(main.goods.iron, float(boat.amount), "the iron is home")
+	# Iron pays for knights, and only iron does.
+	var cost := rules.unit_cost("knight", 5)
+	check(cost.has("iron") and main.can_afford(cost), "knights cost iron")
+	check(not fresh().can_afford(rules.unit_cost("knight", 1)), "no iron, no knights")
+	main.pay(cost)
+	near(main.goods.iron, float(boat.amount) - float(cost.iron), "iron spent")
+	check(not main.can_afford(rules.unit_cost("marksman", 1)), "marksmen need glass")
+	# The kingdom's camps: their own rules, iron in the loot, a voyage before the march.
+	var b := BaronRules.load_default()
+	var listed := k.camps("frostmark")
+	check(listed.size() == 6 and listed[0].kingdom == "frostmark", "six camps in Frostmark")
+	var camp := BaronCamp.create(listed[0].id, listed[0].name, Vector2(listed[0].position[0], listed[0].position[1]), int(listed[0].level))
+	camp.kingdom = "frostmark"
+	check(b.for_camp(camp) != b and b.for_camp(camp).loot(1).has("iron") and not b.loot(1).has("iron"), "kingdom camps hold iron")
+	var origin := Vector2(float(k.kingdoms.frostmark.castle[0]), float(k.kingdoms.frostmark.castle[1]))
+	near(b.travel_time(camp, Vector2(5.0, 5.0)), k.voyage("frostmark") + b.march_time(origin.distance_to(camp.position)),
+			"the voyage, then the march from your castle there")
+	check(BaronCamp.from_dict(camp.to_dict()).kingdom == "frostmark", "a camp's kingdom is saved")
+	# The whole thing through the economy, offline, saved and loaded.
+	var eco = load("res://scripts/core/economy.gd").new()
+	eco.save_dir = "user://test_saves"
+	eco.begin_new(1)
+	eco.castle_positions[eco.MAIN_CASTLE] = Vector2(900.0, 900.0)
+	check(eco.check_found_kingdom("frostmark") == "Your keep must reach level 3 first." and eco.goods_shown().is_empty(), "economy: keep too low")
+	for c in eco.player_castle.buildings:
+		if c.type == "keep":
+			c.level = 3
+	for r: String in eco.player_castle.resources:
+		eco.player_castle.resources[r] = 9000.0
+	check(eco.found_kingdom("frostmark") == "", "economy: founded")
+	check(eco.kingdom_castle("frostmark") != null and eco.kingdom_camps("frostmark").size() == 6 and eco.goods_shown() == ["iron"],
+			"economy: the castle and its camps")
+	eco.kingdom_castle("frostmark").goods["iron"] = 30.0
+	check(eco.ship_goods("frostmark") == "" and eco.kingdom_ships("frostmark").size() == 1, "economy: a ship sails")
+	eco.player_castle.troops = {"swordsman": 300}
+	var target: BaronCamp = eco.kingdom_camps("frostmark")[0]
+	check(eco.send_attack(target.id, {"swordsman": 300}) == "" and eco.marches.size() == 1, "economy: an army sails for the camp")
+	near(float(eco.marches[0].arrive) - float(eco.marches[0].depart), eco.march_time_to(target), "economy: voyage and march")
+	eco.save_game()
+	eco.begin_load(1)
+	check(eco.kingdom_castle("frostmark") != null and eco.kingdom_castle("frostmark").yields.has("iron")
+			and eco.kingdom_ships("frostmark").size() == 1 and eco.kingdom_camps("frostmark").size() == 6, "economy: kingdoms are saved")
+	eco._deliver_ships(float(eco.kingdom_ships("frostmark")[0].arrive) + 1.0)
+	near(float(eco.player_castle.goods.get("iron", 0.0)), 30.0, "economy: the ship unloads at home")
+	eco.advance_marches(float(eco.marches[0].back) + 1.0)
+	check(eco.marches.is_empty() and float(eco.player_castle.goods.iron) > 30.0, "economy: the army brings iron home")
 	eco.free()
 
 

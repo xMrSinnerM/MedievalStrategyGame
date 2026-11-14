@@ -49,7 +49,7 @@ test("an outpost builds only what it may, and its region makes more", () => {
   const spot = nearestSpot(world.spots, [p.home_x, p.home_y], [])!;
   let s = act(rules, p, { action: "found_outpost", region: "wood" }, T0, { outpostSpot: spot }).state;
   assert.equal(act(rules, s, { action: "place", castle: "outpost", type: "barracks", cell: [2, 2] }, T0).error,
-    "An outpost can't have one of these");
+    "This castle can't have one of these");
   assert.equal(act(rules, { ...s, outpost: null }, { action: "place", castle: "outpost", type: "woodcutter", cell: [2, 2] }, T0).error,
     "You have no outpost.");
   const before = s.castle.buildings.length;
@@ -67,7 +67,7 @@ test("an outpost builds only what it may, and its region makes more", () => {
   const keep = s.outpost!.castle.buildings.find((b) => b.type === "keep")!;
   keep.level = o.keepCap;
   assert.equal(act(rules, s, { action: "upgrade", castle: "outpost", id: keep.id }, T0 + 86_400).error,
-    "An outpost's keep can't go higher");
+    "This castle's keep can't go higher");
 });
 
 test("carts carry resources between your castles", () => {

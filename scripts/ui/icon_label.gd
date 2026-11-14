@@ -6,15 +6,16 @@ extends RichTextLabel
 
 const WORDS := {
 	"wood": "wood", "stone": "stone", "food": "food", "gold": "gold",
-	"marks": "marks", "gem": "gem", "gems": "gem",
+	"marks": "marks", "gem": "gem", "gems": "gem", "iron": "iron", "glass": "glass",
 	"soldiers": "soldiers", "spearmen": "spearman", "spearman": "spearman",
 	"archers": "archer", "archer": "archer", "swordsmen": "swordsman", "swordsman": "swordsman",
-	"horsemen": "horseman", "horseman": "horseman",
+	"horsemen": "horseman", "horseman": "horseman", "knights": "knight", "knight": "knight",
+	"marksmen": "marksman", "marksman": "marksman",
 }
 
 static var _amount := RegEx.create_from_string("(\\d[\\d,]*)\\s+([A-Za-z]+)")
 ## "60 wood, 30 stone": the comma between two amounts goes, the icons part them.
-static var _list_comma := RegEx.create_from_string("(\\d\\s+(?:wood|stone|food|gold|marks|gems?)),\\s+(?=\\d)")
+static var _list_comma := RegEx.create_from_string("(\\d\\s+(?:wood|stone|food|gold|marks|gems?|iron|glass)),\\s+(?=\\d)")
 
 var font_size := 15
 var colour := MenuStyle.TEXT

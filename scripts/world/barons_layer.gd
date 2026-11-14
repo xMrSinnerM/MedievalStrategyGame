@@ -51,6 +51,8 @@ func camp_at(map_pos: Vector2) -> String:
 	var best := ""
 	var best_d := PICK_RADIUS
 	for camp in Economy.barons:
+		if camp.kingdom != "":
+			continue   # it stands on its kingdom's own map
 		var d := camp.position.distance_to(map_pos)
 		if d < best_d:
 			best_d = d
@@ -76,7 +78,7 @@ func _sync_camps() -> void:
 
 
 func _add_camp(camp: BaronCamp) -> void:
-	if camp.fortress:
+	if camp.fortress or camp.kingdom != "":
 		return
 	var root := Node3D.new()
 	root.name = camp.id
@@ -159,6 +161,8 @@ func _refresh_labels() -> void:
 func _sync_armies() -> void:
 	var live := {}
 	for m: Dictionary in Economy.marches:
+		if _overseas(m):
+			continue   # shown on the kingdom's map
 		live[int(m.id)] = true
 		if not _armies.has(int(m.id)):
 			_armies[int(m.id)] = _make_army()
@@ -167,6 +171,12 @@ func _sync_armies() -> void:
 			_armies[id].node.queue_free()
 			_armies.erase(id)
 	_refresh_labels()
+
+
+static func _overseas(m: Dictionary) -> bool:
+	## Whether a march is against a camp in another kingdom.
+	var camp := Economy.get_baron(String(m.get("camp", "")))
+	return camp != null and camp.kingdom != ""
 
 
 func _make_army() -> Dictionary:

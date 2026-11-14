@@ -79,6 +79,11 @@ func open(p_castle: CastleState, p_glimpse := false) -> void:
 	camera_rig.bounds = Rect2(-12, -12, size + 24, size + 24)
 	camera_rig.reset(Vector3(size * 0.5, 0, size * 0.5 + 4.0))
 	_ground_material.set_shader_parameter("grid_cells", float(castle.rules.grid_size))
+	# A castle in another kingdom stands on that kingdom's ground: snow or sand.
+	var land := KingdomRules.kingdom_of(castle.id)
+	var biome := String(Economy.kingdom_rules.kingdoms.get(land, {}).get("biome", "")) if land != "" else ""
+	_ground_material.set_shader_parameter("snow", 1.0 if biome == "snow" else 0.0)
+	_ground_material.set_shader_parameter("sand", 1.0 if biome == "desert" else 0.0)
 	_set_mode(Mode.SELECT)
 	select(-1)
 	_signature = ""
@@ -307,8 +312,8 @@ func _tell_server(order: Dictionary) -> void:
 	## carries it out under the same rules and has the final word. Orders in
 	## your outpost say so.
 	if Economy.online:
-		if castle.id == OutpostRules.OUTPOST_ID:
-			order["castle"] = OutpostRules.OUTPOST_ID
+		if castle.id == OutpostRules.OUTPOST_ID or KingdomRules.kingdom_of(castle.id) != "":
+			order["castle"] = castle.id
 		Online.order(order)
 
 

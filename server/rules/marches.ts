@@ -83,9 +83,7 @@ export interface Army {
 
 /** How long a march to the camp takes, setting off at `now`. */
 export function marchTimeTo(world: Army, rules: BaronRules, camp: CampData, now?: number): number {
-  const dx = camp.position[0] - world.home[0];
-  const dy = camp.position[1] - world.home[1];
-  return rules.marchTime(Math.sqrt(dx * dx + dy * dy)) * world.castle.marchFactor();
+  return rules.travelTime(camp, world.home) * world.castle.marchFactor();
 }
 
 export function checkAttack(world: Army, campId: string, army: Dict, now: number): string {
@@ -227,6 +225,11 @@ function comeHome(world: Army, m: March, at: number): void {
   for (const unit of Object.keys(m.survivors)) castle.troops[unit] = (castle.troops[unit] ?? 0) + m.survivors[unit];
   const cap = castle.storageCapacity();
   for (const r of Object.keys(m.loot)) {
+    if (!castle.rules.resources.includes(r)) {
+      // A good from another kingdom: no storage cap.
+      castle.goods[r] = (castle.goods[r] ?? 0) + m.loot[r];
+      continue;
+    }
     const have = castle.resources[r] ?? 0;
     castle.resources[r] = Math.max(have, Math.min(cap, have + m.loot[r]));
     castle.stats.looted += m.loot[r];

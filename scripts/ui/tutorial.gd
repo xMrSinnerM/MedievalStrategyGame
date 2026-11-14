@@ -392,7 +392,7 @@ func _pick_camp() -> String:
 	var home := Economy.home_position()
 	var best: BaronCamp = null
 	for camp in Economy.barons:
-		if camp.fortress or camp.is_invader() or camp.is_horde():
+		if camp.fortress or camp.is_invader() or camp.is_horde() or camp.kingdom != "":
 			continue
 		if best == null or camp.level < best.level or (camp.level == best.level \
 				and camp.position.distance_to(home) < best.position.distance_to(home)):

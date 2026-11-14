@@ -61,7 +61,7 @@ const root = new URL("../../", import.meta.url);
 const json = (path: string) => JSON.parse(readFileSync(new URL(path, root), "utf8"));
 const rules = makeRules(json("data/buildings.json"), json("data/units.json"), json("data/barons.json"), json("data/gear.json"),
   json("data/outposts.json"), json("data/villages.json"), json("data/capitals.json"), json("data/fortresses.json"),
-  json("data/horde.json"));
+  json("data/horde.json"), json("data/kingdoms.json"));
 const world: World = json("server/world/world.json");
 // The resource villages and the capitals (the towns), kept the same way.
 const PLACES: VillageInfo[] = [...(world.villages ?? []), ...(world.capitals ?? [])];

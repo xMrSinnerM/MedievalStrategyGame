@@ -16,6 +16,7 @@ var _rates := {}               ## resource -> Label
 var _fills := {}               ## resource -> ProgressBar
 var _stats := {}               ## builders/defence/soldiers -> Label
 var _chips := {}               ## name -> the chip's Control, for tooltips
+var _goods := {}               ## good from another kingdom -> its amount Label (made when first shown)
 
 
 func _init() -> void:
@@ -71,6 +72,7 @@ func show_castle(castle: CastleState, away := 0) -> void:
 		fill.modulate = FULL if have >= cap else Color.WHITE
 		_chips[r].tooltip_text = "%s: %d of %d the storehouses hold, %+d an hour%s" % [r.capitalize(), have, int(cap),
 				rate, " (full: build storehouses to keep more)" if have >= cap else ""]
+	_show_goods(castle)
 	var rules := castle.rules
 	_chips.builders.visible = show_builders
 	_chips.defence.visible = show_builders
@@ -81,6 +83,38 @@ func show_castle(castle: CastleState, away := 0) -> void:
 	_stats.soldiers.text = str(castle.troop_count()) if away <= 0 else "%d  (+%d away)" % [castle.troop_count(), away]
 	_chips.soldiers.tooltip_text = "Soldiers at home%s; they eat %d food an hour" % [
 			"" if away <= 0 else ", and %d marching" % away, int(castle.upkeep_per_hour())]
+
+
+func _show_goods(castle: CastleState) -> void:
+	## Goods from the other kingdoms: at home those of the kingdoms you have
+	## reached, in a kingdom's castle what waits there for a ship.
+	var shown: Array = Economy.goods_shown() if castle == Economy.player_castle else castle.yields.keys()
+	for g: String in castle.goods:
+		if float(castle.goods[g]) >= 1.0 and not shown.has(g):
+			shown.append(g)
+	for g: String in shown:
+		if not _goods.has(g):
+			var chip := _chip(g)
+			move_child(chip, RESOURCES.size() + _goods.size())
+			var value := _label(16, GameTheme.TEXT)
+			value.add_theme_font_override("font", GameTheme.BOLD_FONT)
+			chip.get_child(0).add_child(value)
+			_goods[g] = value
+	for g: String in _goods:
+		_chips[g].visible = shown.has(g)
+		if not shown.has(g):
+			continue
+		var have := floori(float(castle.goods.get(g, 0.0)) + 0.0001)
+		var good := Economy.kingdom_rules.good_name(g)
+		if castle.yields.has(g):
+			var keep := castle.keep_level()
+			var store := int(float(castle.yields[g].store) * keep)
+			_goods[g].text = "%d / %d" % [have, store]
+			_chips[g].tooltip_text = "%s: %d of %d waiting here, +%d an hour. Ship it home from the Kingdoms page." % [
+					good, have, store, int(float(castle.yields[g].rate) * keep)]
+		else:
+			_goods[g].text = str(have)
+			_chips[g].tooltip_text = "%s from across the sea, for elite soldiers and master studies. It needs no storage." % good
 
 
 func _chip(icon: String) -> PanelContainer:

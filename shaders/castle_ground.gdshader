@@ -8,6 +8,8 @@ uniform float wall_margin = 2.0;
 uniform float grid_amount = 0.0;          // 0 hidden .. 1 fully shown
 uniform vec4 highlight_rect = vec4(0.0);  // footprint under the mouse: x, z, width, depth (world)
 uniform vec3 highlight_color : source_color = vec3(0.3, 0.9, 0.35);
+uniform float snow = 0.0;                  // 1 in a frozen kingdom: snow instead of grass
+uniform float sand = 0.0;                  // 1 in a desert kingdom: sand instead of grass
 uniform sampler2D noise : filter_linear_mipmap, repeat_enable;
 
 varying vec3 v_world;
@@ -29,6 +31,12 @@ void fragment() {
 	// Mown stripes on the yard lawn.
 	yard *= 0.96 + 0.05 * step(0.5, fract(p.x / 4.0));
 
+	// The other kingdoms: snowfields in the north, sand in the south.
+	grass = mix(grass, mix(vec3(0.5, 0.56, 0.64), vec3(0.68, 0.72, 0.78), n), snow);
+	yard = mix(yard, mix(vec3(0.46, 0.51, 0.58), vec3(0.58, 0.62, 0.68), n2) * (0.97 + 0.03 * step(0.5, fract(p.x / 4.0))), snow);
+	grass = mix(grass, mix(vec3(0.56, 0.42, 0.22), vec3(0.7, 0.55, 0.3), n), sand);
+	yard = mix(yard, mix(vec3(0.54, 0.42, 0.24), vec3(0.63, 0.5, 0.29), n2), sand);
+
 	// Cobbles: staggered rows of stones with darker joints.
 	vec2 cp = p / vec2(0.9, 0.7);
 	cp.x += 0.5 * floor(cp.y);
@@ -42,7 +50,7 @@ void fragment() {
 	float inner = min(min(p.x, p.y), min(size - p.x, size - p.y)) + wall_margin;
 	vec3 col = mix(grass, yard, smoothstep(-1.5, 1.0, inner));
 	// Wild flowers in the meadow outside.
-	float flower = step(0.83, n3) * step(0.55, n) * (1.0 - smoothstep(-1.5, 1.0, inner));
+	float flower = step(0.83, n3) * step(0.55, n) * (1.0 - smoothstep(-1.5, 1.0, inner)) * (1.0 - snow) * (1.0 - sand);
 	col = mix(col, mix(vec3(0.95, 0.9, 0.55), vec3(0.95, 0.95, 0.92), step(0.5, n2)), flower * 0.8);
 
 	// Path from the south gate to the middle.
