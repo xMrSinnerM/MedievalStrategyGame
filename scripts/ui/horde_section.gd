@@ -1,3 +1,4 @@
+class_name HordeSection
 extends VBoxContainer
 ## The Ember Horde on the event screen (online): how the horde stands, your
 ## horde points and war trophies, the Trophy Market, and the players with the

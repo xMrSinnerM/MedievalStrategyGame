@@ -1119,6 +1119,22 @@ the horde has gone, everyone with points claims one ranked prize: #1, #2 to
 prize last until the next horde arrives. War trophies come only from
 fighting; nothing can be bought.
 
+The Warlord's Stronghold is the alliance raid, from Friday 12:00 to Monday
+00:00 UTC. Warlord Garrak's stronghold (purple banner) stands near the castle
+of every player who was in their alliance when it rose; its level goes by
+your keep, and its soldiers are in `data/stronghold.json`. It never rises a
+level: after a win its garrison rallies for five minutes. Every defender your
+army slays there, win or lose, wears down the warlord's host, which the whole
+alliance shares: 600 soldiers plus 200 for each member, and 1.4 times as many
+after each fall. Each time the host is worn down the stronghold falls, up to
+five times, and every member who slew at least 50 defenders claims that
+fall's chest (resources, soldiers, siege tools and Marks). Your own six
+reward tiers go by the defenders you slew. The event screen's Warlord's
+Stronghold tab shows the host, the chests, your rewards and who in your
+alliance slew how many. Chests and rewards last until the next stronghold
+rises. The host is not stored: it is the sum of what the members slew, so
+members who join after it rose count from the next one. Nothing can be bought.
+
 ### Owner tools
 
 The game owner's account gets an Owner button (O) on the world map. Its panel
@@ -1222,6 +1238,7 @@ How the parts work:
 - [x] Helping allies: sending resources and soldiers
 - [x] Timed events: weekend loot bonus, baron invasions, event rewards and leaderboard
 - [x] Ember Horde: horde camps, war trophies, Trophy Market and ranked prizes
+- [x] Warlord's Stronghold: the alliance boss raid with a shared host, fall chests and your own rewards
 - [x] Owner tools: start and stop events, give players resources and soldiers
 - [x] Siege waves: battle rules (walls and courtyard)
 - [x] Siege waves: choose your waves on the attack screen

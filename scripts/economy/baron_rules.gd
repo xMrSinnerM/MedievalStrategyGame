@@ -12,6 +12,7 @@ extends RefCounted
 const PATH := "res://data/barons.json"
 const FORTRESS_PATH := "res://data/fortresses.json"
 const HORDE_PATH := "res://data/horde.json"
+const STRONGHOLD_PATH := "res://data/stronghold.json"
 const KINGDOMS_PATH := "res://data/kingdoms.json"
 
 var max_level := 40
@@ -36,6 +37,9 @@ var fortress: BaronRules
 ## The numbers for the Ember Horde's camps (data/horde.json): online, a timed
 ## event's camps with "horde" set (BaronCamp.horde).
 var horde: BaronRules
+## The numbers for the Warlord's Stronghold (data/stronghold.json): online, the
+## alliance event's camp with "boss" set (BaronCamp.boss).
+var boss: BaronRules
 ## The numbers for camps in the other kingdoms (data/kingdoms.json): kingdom
 ## id -> these rules with the kingdom's `barons` changes (BaronCamp.kingdom).
 var kingdoms := {}
@@ -60,6 +64,10 @@ static func load_default() -> BaronRules:
 	if horde_data is Dictionary:
 		rules.horde = BaronRules.new()
 		rules.horde.load_from(horde_data)
+	var stronghold = JSON.parse_string(FileAccess.get_file_as_string(STRONGHOLD_PATH))
+	if stronghold is Dictionary:
+		rules.boss = BaronRules.new()
+		rules.boss.load_from(stronghold)
 	var lands = JSON.parse_string(FileAccess.get_file_as_string(KINGDOMS_PATH))
 	if lands is Dictionary:
 		rules.load_kingdoms(data, lands)
@@ -82,6 +90,8 @@ func load_kingdoms(base: Dictionary, lands: Dictionary) -> void:
 
 func for_camp(camp: BaronCamp) -> BaronRules:
 	## The rules for this camp: the fortress rules for a fortress, the horde's for a horde camp, else these.
+	if camp.is_boss() and boss != null:
+		return boss
 	if camp.is_horde() and horde != null:
 		return horde
 	if camp.kingdom != "" and kingdoms.has(camp.kingdom):

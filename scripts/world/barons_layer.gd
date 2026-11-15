@@ -21,6 +21,9 @@ const INVADER_LABEL := Color(1.0, 0.42, 0.32)
 const HORDE_BANNER := {"id": "horde", "color": Color(0.93, 0.45, 0.1), "secondary_color": Color(0.12, 0.1, 0.09),
 		"banner": {"pattern": "per_pale", "charge": ""}}
 const HORDE_LABEL := Color(1.0, 0.68, 0.25)
+const BOSS_BANNER := {"id": "warlord", "color": Color(0.36, 0.1, 0.5), "secondary_color": Color(0.9, 0.75, 0.3),
+		"banner": {"pattern": "per_pale", "charge": ""}}
+const BOSS_LABEL := Color(0.86, 0.62, 1.0)
 
 var _camps := {}          ## camp id -> {"node", "label"}
 var settlements: Node3D   ## the settlements layer, for the fortresses' labels
@@ -96,7 +99,7 @@ func _add_camp(camp: BaronCamp) -> void:
 	var fire_model := MeshInstance3D.new()
 	fire_model.mesh = fire.commit()
 	root.add_child(fire_model)
-	var banner := Banners.make(HORDE_BANNER if camp.is_horde() else INVADER_BANNER if camp.is_invader() else BARON_BANNER, 8.0, 4.0)
+	var banner := Banners.make(BOSS_BANNER if camp.is_boss() else HORDE_BANNER if camp.is_horde() else INVADER_BANNER if camp.is_invader() else BARON_BANNER, 8.0, 4.0)
 	banner.position = Vector3(-1.5, 0, -0.5)
 	root.add_child(banner)
 	var label := Label3D.new()
@@ -151,10 +154,12 @@ func _refresh_labels() -> void:
 			text = "Invaders: " + text
 		elif camp.is_horde():
 			text = "Horde: " + text
+		elif camp.is_boss():
+			text = "Alliance raid: " + text
 		if not camp.is_ready(now):
-			text += "\nRebuilding %s" % _clock(camp.rebuilt_at - now)
+			text += "\n%s %s" % ["Rallying" if camp.is_boss() else "Rebuilding", _clock(camp.rebuilt_at - now)]
 		label.text = text
-		var color := INVADER_LABEL if camp.is_invader() else HORDE_LABEL if camp.is_horde() else Color(1.0, 0.62, 0.5)
+		var color := BOSS_LABEL if camp.is_boss() else INVADER_LABEL if camp.is_invader() else HORDE_LABEL if camp.is_horde() else Color(1.0, 0.62, 0.5)
 		label.modulate = color if camp.is_ready(now) else Color(0.7, 0.62, 0.58)
 
 

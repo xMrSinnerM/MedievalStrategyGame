@@ -69,6 +69,9 @@ export interface Report {
   /** Ember Horde camps: the horde's run it belongs to, and the war trophies this win earned (`points` are horde points). */
   horde?: number;
   trophies?: number;
+  /** The Warlord's Stronghold: the run it belongs to, and the defenders this army slew (win or lose). */
+  boss?: number;
+  slain?: number;
 }
 
 export interface Army {
@@ -214,6 +217,12 @@ function fightCamp(world: Army, rules: BaronRules, m: March): Report {
     out.horde = camp.horde;
     out.points = counts ? (camp.points ?? 0) * result.level : 0;
     out.trophies = counts ? (camp.trophies ?? 0) * result.level : 0;
+    out.needed = 1;
+  }
+  if (camp.boss !== undefined) {
+    // Only battles fought before the stronghold is abandoned wear down the host.
+    out.boss = camp.boss;
+    out.slain = m.arrive < (camp.until ?? Infinity) ? Object.values(result.b).reduce((n, u) => n + u.lost, 0) : 0;
     out.needed = 1;
   }
   return out;

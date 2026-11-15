@@ -15,6 +15,7 @@ import { checkBuy, checkItemBuy, checkItemOffer, checkOffer, isItemGood, MARKS, 
   type MarketReport, type MarketRules, type Offer } from "./market.ts";
 import { lastInvasion, type EventRules } from "../../../server/rules/events.ts";
 import { claimReward, eventPoints, invade, rewardTiers } from "./invasion.ts";
+import { bossRises, bossSlain, claimFall, claimTier, emptyBoss, playerBoss, type BossMember, type BossState } from "./boss.ts";
 import { buy, claimPrize, emptyHorde, hordeArrives, hordeScore, playerRun, type HordeState } from "./horde.ts";
 import { claimQuest, rollDay, type QuestRules } from "../../../server/rules/quests.ts";
 import { claimAchievement, note, setTitle, type AchievementRules } from "../../../server/rules/achievements.ts";
@@ -52,6 +53,10 @@ export interface PlayerState {
   horde_key?: number;
   horde_points?: number;
   horde?: HordeState;
+  /** The start of the last Warlord's Stronghold you stormed, the defenders you slew there, and the rewards and chests you took. */
+  boss_key?: number;
+  boss_damage?: number;
+  boss?: BossState;
   /** Your second castle (data/outposts.json), or null before you found one. */
   outpost?: OutpostData | null;
   /** Your castles in the other kingdoms (data/kingdoms.json) by kingdom id, with the ships carrying their goods home. */
@@ -192,6 +197,9 @@ export interface Context {
   capitalBoost?: Dict;
   /** For "claim_horde_prize": your rank among the players of your last Ember Horde (index.ts counts it). */
   hordeRank?: number;
+  /** The Warlord's Stronghold: your alliance and when you joined it (it rises only for members), and for
+   * "claim_boss_chest" how often your alliance has brought it down (index.ts counts it). */
+  boss?: { member?: BossMember; falls?: number };
   /** The market (data/market.json), with how many offers you have up and, for "buy_offer", the offer named. */
   market?: { rules: MarketRules; open?: number; offer?: Offer };
   /** Proceeds of your sales and goods back from your offers since the last request (market.ts). */
@@ -290,7 +298,7 @@ export function campsBeaten(reports: Report[]): number {
 
 /** The leaderboard counts after these battles: camps beaten, event points, and horde points and trophies. */
 export function scored(stored: PlayerState, reports: Report[]):
-  Pick<PlayerState, "barons_beaten" | "event_points" | "horde_points" | "horde"> {
+  Pick<PlayerState, "barons_beaten" | "event_points" | "horde_points" | "horde" | "boss_damage"> {
   const won = hordeScore(reports, stored.horde_key ?? 0);
   const horde = structuredClone(stored.horde ?? emptyHorde());
   horde.trophies += won.trophies;
@@ -298,6 +306,7 @@ export function scored(stored: PlayerState, reports: Report[]):
     barons_beaten: (stored.barons_beaten ?? 0) + campsBeaten(reports),
     event_points: (stored.event_points ?? 0) + eventPoints(reports, stored.event_key ?? 0),
     horde_points: (stored.horde_points ?? 0) + won.points,
+    boss_damage: (stored.boss_damage ?? 0) + bossSlain(reports, stored.boss_key ?? 0),
     horde,
   };
 }
@@ -336,6 +345,9 @@ export function newPlayer(rules: Rules, world: World, name: string, now: number,
     horde_key: 0,
     horde_points: 0,
     horde: emptyHorde(),
+    boss_key: 0,
+    boss_damage: 0,
+    boss: emptyBoss(),
     outpost: null,
     kingdoms: {},
   };
@@ -353,7 +365,8 @@ export function withFortresses(camps: CampData[], fortresses: World["fortresses"
 /** Brings the player's world up to `now`, then carries out the order (if any). */
 export function act(rules: Rules, given: PlayerState, req: Request, now: number, ctx: Context = {}): Outcome {
   const ev = ctx.events;
-  const stored = ev ? hordeArrives(invade(given, ev.rules, ev.world, now, ev.offset ?? 0), ev.rules, ev.world, now, ev.offset ?? 0) : given;
+  const stored = ev ? bossRises(hordeArrives(invade(given, ev.rules, ev.world, now, ev.offset ?? 0), ev.rules, ev.world, now, ev.offset ?? 0),
+    ev.rules, ev.world, now, ev.offset ?? 0, ctx.boss?.member) : given;
   const army: Army = {
     castle: CastleState.fromDict(rules.buildings, stored.castle),
     camps: withFortresses(structuredClone(stored.camps), ctx.fortresses),
@@ -366,6 +379,7 @@ export function act(rules: Rules, given: PlayerState, req: Request, now: number,
   const reports = advanceMarches(army, rules.barons, now);
   const score = scored(stored, reports);
   const horde = score.horde!;
+  const boss = structuredClone(stored.boss ?? emptyBoss());
   const castle = army.castle;
   for (const raid of [...(ctx.homecomings ?? [])].sort((x, y) => x.back - y.back)) comeHomeFromRaid(rules.gear, castle, raid);
   // Your outpost, and the carts between your castles.
@@ -707,6 +721,17 @@ export function act(rules: Rules, given: PlayerState, req: Request, now: number,
       error = buy(castle, rules.gear, horde, run, req.item);
       break;
     }
+    case "claim_boss_reward": {
+      // Your own tiers stay open during your stronghold's run and until the next one rises.
+      const run = ev ? playerBoss(ev.rules, stored.boss_key ?? 0, now, ev.offset ?? 0) : undefined;
+      error = claimTier(castle, boss, score.boss_damage ?? 0, run, req.tier);
+      break;
+    }
+    case "claim_boss_chest": {
+      const run = ev ? playerBoss(ev.rules, stored.boss_key ?? 0, now, ev.offset ?? 0) : undefined;
+      error = claimFall(castle, boss, score.boss_damage ?? 0, run, ctx.boss?.falls ?? 0);
+      break;
+    }
     case "claim_horde_prize": {
       const run = ev ? playerRun(ev.rules, stored.horde_key ?? 0, now, ev.offset ?? 0) : undefined;
       error = claimPrize(castle, horde, score.horde_points ?? 0, run, ctx.hordeRank ?? 0, now);
@@ -853,6 +878,7 @@ export function act(rules: Rules, given: PlayerState, req: Request, now: number,
         [id, { castle: land.castle.toDict(), ships: land.ships, next_ship: land.nextShip }])),
       ...score,
       horde,
+      boss,
     },
     reports,
     error,

@@ -26,6 +26,9 @@ export interface CampData {
   trophies?: number;
   /** Ember Horde camps only: the end of the horde's run; wins after it earn no points or trophies. */
   until?: number;
+  /** The Warlord's Stronghold only (online, for alliances): the start of its run, with the stronghold rules
+   * (BaronRules.forCamp()). It never rises a level; defenders slain there before `until` count for the alliance. */
+  boss?: number;
   /** A fortress (one of the old kingdoms' castles), with the fortress rules (BaronRules.forCamp()). */
   fortress?: boolean;
   /** A camp in one of the other kingdoms (data/kingdoms.json): the kingdom's id. It stands on that kingdom's map. */
@@ -64,6 +67,8 @@ export function attackCamp(camp: CampData, barons: BaronRules, units: BuildingRu
   for (const [r, n] of Object.entries(rules.loot(camp.level))) stock[r] = Math.floor(n * factor);
   out.loot = carried(stock, rules.carry(out.survivors) * (1 + (lead.loot ?? 0)));
   camp.rebuilt_at = now + (camp.rebuild ?? rules.rebuildTime(camp.level));
+  // The stronghold stays as it is: its garrison only rallies.
+  if (camp.boss !== undefined) return out;
   camp.defeats += 1;
   // An invader or horde camp rises a level with every win.
   const needed = camp.event === undefined && camp.horde === undefined ? rules.defeatsNeeded(camp.level) : 1;

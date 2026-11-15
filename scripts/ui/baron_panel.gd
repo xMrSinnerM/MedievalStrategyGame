@@ -104,7 +104,7 @@ func _refresh() -> void:
 	var now := Economy.now()
 	_title.text = camp.camp_name
 	_picture.show_place(InfoPicture.faction_place("castle", camp.id) if camp.fortress else "camp")
-	_level.text = ("Invader camp, level %d" if camp.is_invader() else "Ember Horde camp, level %d" if camp.is_horde()
+	_level.text = ("The warlord's stronghold, level %d" if camp.is_boss() else "Invader camp, level %d" if camp.is_invader() else "Ember Horde camp, level %d" if camp.is_horde()
 			else "Fortress, level %d" if camp.fortress else "Robber baron camp, level %d") % camp.level
 	var lines: PackedStringArray = []
 	if camp.is_invader():
@@ -112,6 +112,11 @@ func _refresh() -> void:
 		var inv := Economy.invasion()
 		if not inv.is_empty() and float(inv.start) == camp.event:
 			lines.append("Leaves in %s    Your points: %d" % [_long_clock(float(inv.end) - now), Economy.invasion_points()])
+	elif camp.is_boss():
+		lines.append("Every defender your army slays here, win or lose, wears down the warlord's host for your whole alliance")
+		var b := Economy.boss_event()
+		if not b.is_empty() and float(b.start) == camp.boss:
+			lines.append("Abandoned in %s    Slain by you: %d" % [_long_clock(float(b.end) - now), Economy.my_boss_slain()])
 	elif camp.is_horde():
 		lines.append("Ember Horde: a win gives %d horde points and %d war trophies, and raises it a level" % [
 				camp.points * camp.level, camp.trophies * camp.level])

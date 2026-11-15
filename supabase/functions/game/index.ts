@@ -12,6 +12,9 @@
 // POST { "action": "horde_board" }               the most horde points in the Ember Horde, your rank and your prize
 // POST { "action": "buy_horde", "item": id }      something from the Trophy Market, for war trophies (data/events.json)
 // POST { "action": "claim_horde_prize" }          your ranked prize, once the Ember Horde has gone
+// POST { "action": "boss_board" }                the Warlord's Stronghold: your alliance's host, who slew how many, and you
+// POST { "action": "claim_boss_reward", "tier": n }  your own reward tier n for the defenders you slew there, in order
+// POST { "action": "claim_boss_chest" }           the chest for the next fall of the stronghold you haven't claimed
 // POST { "action": "war_board" }                 the alliance war: this season's and the last season's standings, the capitals
 //   and who holds them, your alliance's place and the prize you can claim (data/wars.json)
 // POST { "action": "claim_war_prize" }           your prize for your alliance's place in the last war season
@@ -149,11 +152,12 @@ import villagesData from "../../../data/villages.json" with { type: "json" };
 import capitalsData from "../../../data/capitals.json" with { type: "json" };
 import fortressesData from "../../../data/fortresses.json" with { type: "json" };
 import hordeData from "../../../data/horde.json" with { type: "json" };
+import strongholdData from "../../../data/stronghold.json" with { type: "json" };
 import warsData from "../../../data/wars.json" with { type: "json" };
 import tournamentsData from "../../../data/tournaments.json" with { type: "json" };
 import world from "../../../server/world/world.json" with { type: "json" };
 import { makeRules } from "../../../server/rules/load.ts";
-import { effectAt, eventsView, lastHorde, lastInvasion, withOverrides, type EventOverride, type EventRules } from "../../../server/rules/events.ts";
+import { effectAt, eventsView, lastBoss, lastHorde, lastInvasion, withOverrides, type EventOverride, type EventRules } from "../../../server/rules/events.ts";
 import { CastleState } from "../../../server/rules/castle_state.ts";
 import type { Item } from "../../../server/rules/gear.ts";
 import { nearestSpot } from "../../../server/rules/outposts.ts";
@@ -173,6 +177,7 @@ import { deliver, recall, type Aid, type AidRules } from "./aid.ts";
 import { goingRates, isItemGood, MARKS, receiveItem, type MarketReport, type MarketRules, type Offer } from "./market.ts";
 import { invade } from "./invasion.ts";
 import { hordeArrives, prizeFor } from "./horde.ts";
+import { partyOf, takesPart, type BossRow } from "./boss.ts";
 import {
   captureEntry, checkClaim, defenceEntry, givePrize, holdDue, holdEntries, hourStart, lastSeason, ranked, seasonAt, warBoard,
   type CapitalHold, type Standing, type WarAlliance, type WarEntry, type WarRules,
@@ -192,7 +197,7 @@ import {
   adminEvents, checkGift, giftReport, giveCastle, NOT_ADMIN, OVERRIDES_KEPT, startEvent, stopEvent, type Gift,
 } from "./admin.ts";
 
-const rules = makeRules(buildings, units, barons, gearData, outpostsData, villagesData, capitalsData, fortressesData, hordeData, kingdomsData);
+const rules = makeRules(buildings, units, barons, gearData, outpostsData, villagesData, capitalsData, fortressesData, hordeData, kingdomsData, strongholdData);
 const CAPITALS: VillageInfo[] = (world as World).capitals ?? [];
 const VILLAGES: VillageInfo[] = [...((world as World).villages ?? []), ...CAPITALS];
 const CAPITAL_IDS = CAPITALS.map((c) => c.id);
@@ -233,7 +238,7 @@ const ALLIANCE_ORDERS = new Set([
   "alliance", "join_alliance", "accept_invite", "decline_invite", "cancel_request", "leave_alliance", "disband_alliance",
   "invite", "cancel_invite", "kick", "answer_request", "set_role", "alliance_settings",
 ]);
-const COLUMNS = "name, home_x, home_y, castle, camps, marches, next_march, protected_until, barons_beaten, event_key, event_points, event_claimed, horde_key, horde_points, horde, outpost, kingdoms, version";
+const COLUMNS = "name, home_x, home_y, castle, camps, marches, next_march, protected_until, barons_beaten, event_key, event_points, event_claimed, horde_key, horde_points, horde, boss_key, boss_damage, boss, outpost, kingdoms, version";
 const REPORTS_SHOWN = 20;
 const RETRIES = 4;
 const PLAYERS_SHOWN = 500;
@@ -797,6 +802,14 @@ async function speaker(userId: string): Promise<Speaker | null> {
   return { user: userId, name: me.name, tag: a?.tag ?? "", alliance_id: a === null ? null : me.alliance_id };
 }
 
+/** How this alliance stands at the Warlord's Stronghold that rose at `key` (partyOf() in boss.ts); null without a stronghold. */
+async function bossParty(allianceId: number, key: number) {
+  const run = lastBoss(calendar, now());
+  if (run?.boss === undefined || run.start !== key) return null;
+  const { data } = await admin.from("players").select("name, boss_key, boss_damage, alliance_joined").eq("alliance_id", allianceId);
+  return partyOf(run.boss, (data ?? []) as BossRow[], key);
+}
+
 /** A place in an Ember Horde's ranking: one more than the players of that run with more points (ties share it). */
 async function hordeRank(key: number, points: number): Promise<number> {
   const { count } = await admin.from("players").select("user_id", { count: "exact", head: true })
@@ -1312,6 +1325,21 @@ Deno.serve(async (req: Request) => {
         prize: me && run?.horde ? prizeFor(run.horde.prizes, rank) ?? null : null } });
   }
 
+  if (body.action === "boss_board") {
+    // The Warlord's Stronghold standing now (or the last one): your alliance's host, who slew how many, and you.
+    const run = lastBoss(calendar, now());
+    const key = run?.start ?? -1;
+    const { data: mine } = await admin.from("players").select("name, alliance_id, alliance_joined, boss_key, boss_damage")
+      .eq("user_id", userId).maybeSingle();
+    const member = mine ? { alliance_id: mine.alliance_id === null ? null : Number(mine.alliance_id), joined: Number(mine.alliance_joined) } : undefined;
+    const part = run !== undefined && takesPart(member, key);
+    const party = part ? await bossParty(member!.alliance_id!, key) : null;
+    const me = mine && Number(mine.boss_key) === key ? { name: mine.name, points: Number(mine.boss_damage) } : null;
+    return reply({ ok: true, now: now(), error: "",
+      result: { event: run ?? null, in_alliance: member !== undefined && member.alliance_id !== null, takes_part: part,
+        host: party?.host ?? null, players: party?.players ?? [], me } });
+  }
+
   if (body.action === "chat" || body.action === "chat_send") {
     const who = await speaker(userId);
     if (who === null) return reply({ ok: false, error: "No castle yet.", needs_join: true });
@@ -1438,15 +1466,22 @@ Deno.serve(async (req: Request) => {
   }
 
   for (let attempt = 0; attempt < RETRIES; attempt++) {
-    const { data: row, error } = await admin.from("players").select(COLUMNS).eq("user_id", userId).maybeSingle();
+    const { data: row, error } = await admin.from("players").select(`alliance_id, alliance_joined, ${COLUMNS}`).eq("user_id", userId).maybeSingle();
     if (error) return reply({ ok: false, error: "The server couldn't load your castle." }, 500);
     if (!row) {
       if (founded !== null) await store.remove(founded);
       if (bought !== null) await releaseOffer(userId, bought.offer.id);
       return reply({ ok: false, error: "No castle yet.", needs_join: true });
     }
-    const { version, ...stored } = row as PlayerState & { version: number };
+    const { version, alliance_id, alliance_joined, ...stored } = row as unknown as PlayerState & { version: number; alliance_id: number | null;
+      alliance_joined: number };
     const t = now();
+    // The Warlord's Stronghold rises only for alliance members; its chests go by how often your alliance brought it down.
+    const bossMember = { alliance_id: alliance_id === null ? null : Number(alliance_id), joined: Number(alliance_joined) };
+    let bossFalls = 0;
+    if (body.action === "claim_boss_chest" && bossMember.alliance_id !== null && takesPart(bossMember, Number(stored.boss_key ?? 0))) {
+      bossFalls = (await bossParty(bossMember.alliance_id, Number(stored.boss_key ?? 0)))?.host.falls ?? 0;
+    }
     // A ranked prize goes by your place among the players of that horde.
     let hordePlace = 0;
     if (body.action === "claim_horde_prize" && (stored.horde_points ?? 0) > 0) {
@@ -1470,6 +1505,7 @@ Deno.serve(async (req: Request) => {
       events: { rules: calendar, world: world as World }, quests: questRules, achievements: achievementRules, login: loginRules, seasons: seasonRules, tourney: tourneyRules, seasonPlace, chests: chestRules, encounters,
       sabotage: sabotageRules, targetCastle: target ? (target.row as PlayerState).castle : undefined, village: village?.target, villageIncome,
       capitalBoost: boost, fortresses: (world as World).fortresses, hordeRank: hordePlace,
+      boss: { member: bossMember, falls: bossFalls },
       market: { rules: marketRules, open: openOffers, offer: bought?.offer }, marketIncome: market.income, marketItems: market.items });
     // Save only if nobody else changed the row meanwhile; otherwise start over.
     const { data: saved, error: saveError } = await admin.from("players")

@@ -1,0 +1,21 @@
+{
+	"_comment": "Warlord Garrak's stronghold (a timed event online for alliances, see data/events.json): the same keys as data/barons.json. A big garrison of hardened soldiers behind a high wall. It never rises a level; after a win the garrison rallies for a while.",
+	"max_level": 60,
+	"garrison_base": 26,
+	"garrison_growth": 1.13,
+	"armies": [
+		{ "from_level": 1, "mix": { "spearman": 0.45, "archer": 0.35, "swordsman": 0.2 } },
+		{ "from_level": 8, "mix": { "swordsman": 0.4, "archer": 0.35, "horseman": 0.25 } },
+		{ "from_level": 15, "mix": { "swordsman": 0.45, "archer": 0.3, "horseman": 0.25 } }
+	],
+	"palisade_base": 30,
+	"palisade_per_level": 12,
+	"loot_base": { "wood": 250, "stone": 250, "food": 250, "gold": 200 },
+	"loot_growth": 1.14,
+	"carry_per_soldier": 12,
+	"defeats_per_level": [{ "from_level": 1, "defeats": 1 }],
+	"rebuild_base": 300,
+	"rebuild_per_level": 0,
+	"march_speed": 6,
+	"drop_level_bonus": 4
+}

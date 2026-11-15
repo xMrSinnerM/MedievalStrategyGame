@@ -23,6 +23,11 @@ var points := 0
 ## trophies per level for a win, with the horde rules (BaronRules.for_camp()).
 var horde := 0.0
 var trophies := 0
+## Online only: the Warlord's Stronghold (a timed event for alliances) has the
+## start of its run here, with the stronghold rules (BaronRules.for_camp()).
+## It never rises a level: every defender slain there wears down the host
+## your alliance shares.
+var boss := 0.0
 ## Online only: a fortress, one of the old kingdoms' castles, with the
 ## fortress rules (BaronRules.for_camp()).
 var fortress := false
@@ -50,6 +55,10 @@ func is_invader() -> bool:
 
 func is_horde() -> bool:
 	return horde > 0.0
+
+
+func is_boss() -> bool:
+	return boss > 0.0
 
 
 func is_ready(now: float) -> bool:
@@ -81,6 +90,8 @@ func attack(rules: BaronRules, units: BuildingRules, army: Dictionary, seed_valu
 		return result
 	result["loot"] = _carried(rules.loot(level), rules.carry(result.survivors) * (1.0 + float(lead.get("loot", 0.0))))
 	rebuilt_at = now + rules.rebuild_time(level)
+	if is_boss():
+		return result   # the stronghold stays as it is: its garrison only rallies
 	defeats += 1
 	if defeats >= rules.defeats_needed(level) and level < rules.max_level:
 		level += 1
@@ -116,6 +127,8 @@ func to_dict() -> Dictionary:
 		out["horde"] = horde
 		out["points"] = points
 		out["trophies"] = trophies
+	if is_boss():
+		out["boss"] = boss
 	if fortress:
 		out["fortress"] = true
 	if kingdom != "":
@@ -135,6 +148,7 @@ static func from_dict(data: Dictionary) -> BaronCamp:
 	camp.points = int(data.get("points", 0))
 	camp.horde = float(data.get("horde", 0.0))
 	camp.trophies = int(data.get("trophies", 0))
+	camp.boss = float(data.get("boss", 0.0))
 	camp.fortress = bool(data.get("fortress", false))
 	camp.kingdom = String(data.get("kingdom", ""))
 	camp.weak_until = float(data.get("weak_until", 0.0))
