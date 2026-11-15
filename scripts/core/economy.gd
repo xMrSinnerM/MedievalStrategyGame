@@ -41,6 +41,8 @@ signal barons_changed
 signal event_board_changed
 ## Online: the server sent the Ember Horde's ranking (see `horde_board`).
 signal horde_board_changed
+## Online: the server sent how your alliance stands at the Warlord's Stronghold (see `boss_board`).
+signal boss_board_changed
 ## Online: the server sent the season's ranking (see `season_board`).
 signal season_board_changed
 ## Online: the server sent the alliance war's standings (see `war_board`).
@@ -249,6 +251,16 @@ var horde_state := {}
 ## Online: the Ember Horde's ranking as the server last sent it: {"event",
 ## "players": [{"name", "points", "tag"}], "me", "rank", "total", "prize"}.
 var horde_board := {}
+## Online: the start of the last Warlord's Stronghold you stormed, the
+## defenders you slew there, and {"claimed", "falls"} (how many of your own
+## reward tiers and of the fall chests you took).
+var boss_key := 0.0
+var boss_damage := 0
+var boss_state := {}
+## Online: your alliance at the stronghold as the server last sent it: {"event",
+## "in_alliance", "takes_part", "host": {"slain", "members", "falls",
+## "max_falls", "size", "down"}, "players": [{"name", "points"}], "me"}.
+var boss_board := {}
 ## Online: the season's ranking as the server last sent it: {"key", "end",
 ## "players": [{"name", "points", "tag"}], "alliances": [{"tag", "name",
 ## "points"}], "me": {"points", "place"}, "last": {"key", "points", "place",
@@ -1027,6 +1039,10 @@ func begin_online(answer: Dictionary) -> void:
 	horde_points = 0
 	horde_state = {}
 	horde_board = {}
+	boss_key = 0.0
+	boss_damage = 0
+	boss_state = {}
+	boss_board = {}
 	war_board = {}
 	tournament = {}
 	is_admin = false
@@ -1098,6 +1114,9 @@ func apply_server(answer: Dictionary) -> void:
 	horde_key = float(p.get("horde_key", 0.0))
 	horde_points = int(p.get("horde_points", 0))
 	horde_state = p.get("horde", {}) if p.get("horde") is Dictionary else {}
+	boss_key = float(p.get("boss_key", 0.0))
+	boss_damage = int(p.get("boss_damage", 0))
+	boss_state = p.get("boss", {}) if p.get("boss") is Dictionary else {}
 	marches = p.get("marches", [])
 	_next_march = int(p.get("next_march", _next_march))
 	protected_until = float(p.get("protected_until", 0.0))
@@ -1182,6 +1201,7 @@ func _server_report(r: Dictionary) -> Dictionary:
 		"needed": int(r.get("needed", 1)), "home_in": maxf(0.0, back - now()),
 		"invader": r.has("event"), "points": int(r.get("points", 0)),
 		"horde": r.has("horde"), "trophies": int(r.get("trophies", 0)),
+		"boss": r.has("boss"), "slain": int(r.get("slain", 0)),
 		"walls": r.get("walls", {}), "courtyard": r.get("courtyard", {}), "tools": r.get("tools", {}),
 		"lead": r.get("lead", {}), "gear": r.get("gear", {}), "bag_full": r.get("bag_full", false), "gem": r.get("gem", ""), "marks": r.get("marks", 0),
 		"fortress": r.get("fortress", false),
@@ -1632,6 +1652,97 @@ func claim_reward(tier: int) -> String:
 	if why == "":
 		get_node("/root/Online").order({"action": "claim_reward", "tier": tier})
 	return why
+
+
+# --- Online: the Warlord's Stronghold ---------------------------------------------------
+
+func boss_event() -> Dictionary:
+	## The Warlord's Stronghold standing now ({} if none).
+	for e: Dictionary in events_on():
+		if e.has("boss"):
+			return e
+	return {}
+
+
+func last_boss() -> Dictionary:
+	## The Warlord's Stronghold standing now, or else the last one ({} if none is known).
+	var on := boss_event()
+	if not on.is_empty():
+		return on
+	for e: Dictionary in events.get("recent", []):
+		if e.has("boss") and float(e.end) <= now():
+			return e
+	for e: Dictionary in events.get("upcoming", []):
+		if e.has("boss"):
+			var last := e.duplicate()
+			last.start = float(e.start) - 7 * 86400.0
+			last.end = float(e.end) - 7 * 86400.0
+			return last
+	return {}
+
+
+func boss_rules() -> Dictionary:
+	## The stronghold's numbers (data/events.json): host, chests ("falls") and your own "rewards".
+	return last_boss().get("boss", {})
+
+
+func in_last_boss() -> bool:
+	## Whether you stormed the last stronghold: your count, rewards and chests are its.
+	var last := last_boss()
+	return not last.is_empty() and boss_key > 0.0 and float(last.start) == boss_key
+
+
+func my_boss_slain() -> int:
+	## The defenders you slew at the last stronghold (0 if you weren't there).
+	return boss_damage if in_last_boss() else 0
+
+
+func boss_claimed() -> int:
+	## How many of your own reward tiers you took.
+	return int(boss_state.get("claimed", 0)) if in_last_boss() else 0
+
+
+func boss_chests_taken() -> int:
+	## How many fall chests you took.
+	return int(boss_state.get("falls", 0)) if in_last_boss() else 0
+
+
+func boss_host() -> Dictionary:
+	## Your alliance's host as the server last sent it ({} before it answers or outside an alliance).
+	var host: Variant = boss_board.get("host")
+	return host if host is Dictionary else {}
+
+
+func check_boss_chest() -> String:
+	## Why the next fall chest can't be claimed now ("" if it can).
+	var rules_now := boss_rules()
+	if not in_last_boss():
+		return "Storm the Warlord's Stronghold with your alliance to earn chests."
+	if boss_chests_taken() >= rules_now.get("falls", []).size():
+		return "You have every chest."
+	if boss_chests_taken() >= int(boss_host().get("falls", 0)):
+		return "Your alliance hasn't brought the stronghold down again yet."
+	if my_boss_slain() < int(rules_now.get("min_damage", 0)):
+		return "Slay %d defenders yourself to share in the chests." % int(rules_now.get("min_damage", 0))
+	return ""
+
+
+func claim_boss_chest() -> String:
+	## Asks the server for the next fall chest.
+	var why := check_boss_chest()
+	if why == "":
+		get_node("/root/Online").order({"action": "claim_boss_chest"})
+	return why
+
+
+func claim_boss_reward(tier: int) -> void:
+	## Asks the server for one of your own reward tiers.
+	get_node("/root/Online").order({"action": "claim_boss_reward", "tier": tier})
+
+
+func ask_boss_board() -> void:
+	## Asks the server how your alliance stands at the stronghold; it arrives with boss_board_changed.
+	get_node("/root/Online").order({"action": "boss_board"})
 
 
 # --- Online: the Ember Horde ------------------------------------------------------------
@@ -3222,6 +3333,10 @@ func take_order_result(body: Dictionary, answer: Dictionary) -> void:
 	if body.get("action", "") == "horde_board" and answer.get("result") is Dictionary:
 		horde_board = answer.result
 		horde_board_changed.emit()
+		return
+	if body.get("action", "") == "boss_board" and answer.get("result") is Dictionary:
+		boss_board = answer.result
+		boss_board_changed.emit()
 		return
 	if body.get("action", "") == "tournament" and answer.get("result") is Dictionary and answer.result.get("tournament") is Dictionary:
 		tournament = answer.result.tournament

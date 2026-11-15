@@ -247,6 +247,9 @@ func show_baron_report(report: Dictionary) -> void:
 	var won: bool = report.winner == "a"
 	_place.text = "Your army attacked %s (level %d)" % [report.defender, report.level]
 	var lines: PackedStringArray = []
+	if report.get("boss", false):
+		lines.append("Warlord's Stronghold: your army slew %d defenders for your alliance." % int(report.get("slain", 0))
+				if int(report.get("slain", 0)) > 0 else "The stronghold was already abandoned: nothing counted for your alliance.")
 	if won:
 		lines.append("Your army is bringing home %s." % _spoils(report.spoils))
 		if report.get("horde", false):

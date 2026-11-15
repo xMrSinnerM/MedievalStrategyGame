@@ -415,8 +415,14 @@ func _show_event() -> void:
 	var on := Economy.events_on()
 	if not on.is_empty():
 		var e: Dictionary = on[0]
+		for other: Dictionary in on:
+			if other.has("boss") or other.has("horde") or other.has("invasion"):
+				e = other   # an event with camps comes before a plain bonus
+				break
 		var text := "%s  ·  ends in %s" % [e.name, _days(float(e.end) - Economy.now())]
-		if e.has("invasion"):
+		if e.has("boss"):
+			text += "  ·  slain by you: %d" % Economy.my_boss_slain()
+		elif e.has("invasion"):
 			text += "  ·  your points: %d" % Economy.invasion_points()
 		elif e.has("horde"):
 			text += "  ·  horde points: %d  ·  trophies: %d" % [Economy.my_horde_points(), Economy.war_trophies()]

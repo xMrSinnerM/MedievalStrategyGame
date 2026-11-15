@@ -1,5 +1,5 @@
 {
-	"_comment": "Timed events online, the same for everyone. Each weekly event starts on a day of the week (1 = Monday ... 7 = Sunday) at an hour in UTC and lasts `hours`. Effects: baron_loot multiplies what robber baron camps drop. An event with `invasion` puts invader camps near every castle while it runs: `camps` of them (named from `names`), the first at level 1 + `level_per_keep` per keep level above 1 and each next one a level higher. Every win raises an invader camp a level and gives `points_per_level` event points for each level it had; a beaten camp rebuilds for `rebuild` seconds. `rewards` are the invasion's reward tiers: reach a tier's points to claim its resources and soldiers, in order, until the next invasion starts (resources fill your storage; what doesn't fit is lost). An event with `horde` is the Ember Horde: while it runs, its `camps` stand near every castle (the first at level 1 + `level_per_keep` per keep level above 1, the others `level` higher; where there's room for fewer, the Warlord's camp comes first). Each win raises the camp a level and gives `points` horde points and `trophies` war trophies per level it had, as long as the battle is fought before the event ends. War trophies buy what the Trophy Market (`market`) sells, each item `stock` times per horde. When the horde has gone, every player with points claims one ranked prize: the first of `prizes` whose `up_to` their rank reaches (0: any rank). Trophies, purchases and prizes last until the next horde arrives. The horde's soldiers are in data/horde.json.",
+	"_comment": "Timed events online, the same for everyone. Each weekly event starts on a day of the week (1 = Monday ... 7 = Sunday) at an hour in UTC and lasts `hours`. Effects: baron_loot multiplies what robber baron camps drop. An event with `invasion` puts invader camps near every castle while it runs: `camps` of them (named from `names`), the first at level 1 + `level_per_keep` per keep level above 1 and each next one a level higher. Every win raises an invader camp a level and gives `points_per_level` event points for each level it had; a beaten camp rebuilds for `rebuild` seconds. `rewards` are the invasion's reward tiers: reach a tier's points to claim its resources and soldiers, in order, until the next invasion starts (resources fill your storage; what doesn't fit is lost). An event with `horde` is the Ember Horde: while it runs, its `camps` stand near every castle (the first at level 1 + `level_per_keep` per keep level above 1, the others `level` higher; where there's room for fewer, the Warlord's camp comes first). Each win raises the camp a level and gives `points` horde points and `trophies` war trophies per level it had, as long as the battle is fought before the event ends. War trophies buy what the Trophy Market (`market`) sells, each item `stock` times per horde. When the horde has gone, every player with points claims one ranked prize: the first of `prizes` whose `up_to` their rank reaches (0: any rank). Trophies, purchases and prizes last until the next horde arrives. The horde's soldiers are in data/horde.json. An event with `boss` is the Warlord's Stronghold, for alliances: while it runs, the stronghold stands near the castle of every member who was in their alliance when it began, at level `level` + `level_per_keep` per keep level above 1 (its soldiers are in data/stronghold.json). It never rises a level; after a win its garrison rallies for `rally` seconds. Every defender slain there, win or lose, wears down the warlord's host, which the whole alliance shares: `host_base` + `host_per_member` soldiers for each member, and `host_growth` times as many after each fall. Each time the host is worn down the stronghold falls, and every member who slew at least `min_damage` claims that fall's chest from `falls`, in order (it can fall once for each chest). `rewards` are your own tiers by defenders slain. Chests and rewards last until the next stronghold rises.",
 	"weekly": [
 		{
 			"id": "plunder_weekend",
@@ -275,6 +275,123 @@
 							"stone": 500
 						},
 						"trophies": 20
+					}
+				]
+			}
+		},
+		{
+			"id": "warlord_stronghold",
+			"name": "The Warlord's Stronghold",
+			"description": "Warlord Garrak has raised a stronghold. Storm it with your alliance: every defender slain wears down his host.",
+			"day": 5,
+			"hour": 12,
+			"hours": 60,
+			"effects": {},
+			"boss": {
+				"name": "Garrak's Stronghold",
+				"level": 3,
+				"level_per_keep": 4,
+				"rally": 300,
+				"host_base": 600,
+				"host_per_member": 200,
+				"host_growth": 1.4,
+				"min_damage": 50,
+				"falls": [
+					{
+						"resources": {
+							"wood": 800,
+							"stone": 800,
+							"food": 800
+						},
+						"marks": 10
+					},
+					{
+						"resources": {
+							"gold": 800
+						},
+						"troops": {
+							"spearman": 30
+						},
+						"marks": 15
+					},
+					{
+						"resources": {
+							"wood": 1500,
+							"stone": 1500
+						},
+						"troops": {
+							"archer": 30
+						},
+						"marks": 20
+					},
+					{
+						"resources": {
+							"gold": 1500
+						},
+						"troops": {
+							"swordsman": 30
+						},
+						"tools": {
+							"ladder": 8
+						},
+						"marks": 30
+					},
+					{
+						"resources": {
+							"gold": 2500
+						},
+						"troops": {
+							"horseman": 30
+						},
+						"tools": {
+							"ram": 4
+						},
+						"marks": 50
+					}
+				],
+				"rewards": [
+					{
+						"points": 50,
+						"resources": {
+							"wood": 300,
+							"stone": 300
+						}
+					},
+					{
+						"points": 150,
+						"resources": {
+							"food": 600,
+							"gold": 200
+						}
+					},
+					{
+						"points": 400,
+						"troops": {
+							"spearman": 20
+						}
+					},
+					{
+						"points": 800,
+						"resources": {
+							"wood": 900,
+							"stone": 900,
+							"gold": 300
+						}
+					},
+					{
+						"points": 1500,
+						"troops": {
+							"swordsman": 25
+						}
+					},
+					{
+						"points": 3000,
+						"resources": {
+							"gold": 1200
+						},
+						"troops": {
+							"horseman": 20
+						}
 					}
 				]
 			}

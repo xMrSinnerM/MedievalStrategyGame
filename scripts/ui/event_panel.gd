@@ -3,6 +3,7 @@ extends PanelContainer
 ## then a tab for each event with camps. Baron Invasion: its reward tiers with
 ## your points, and the players with the most points in it. Ember Horde: the
 ## Trophy Market, its ranking and your ranked prize (scripts/ui/horde_section.gd).
+## Warlord's Stronghold: the alliance raid (scripts/ui/boss_section.gd).
 ## Rewards are earned only by playing: beat invader camps for points, then
 ## claim each tier in order until the next invasion.
 
@@ -16,6 +17,7 @@ var _board: GridContainer
 var _rank: Label
 var _invasion: VBoxContainer
 var _horde: VBoxContainer
+var _boss: VBoxContainer
 var _tabs: Array[Button] = []
 var _timer := 0.0
 
@@ -46,9 +48,9 @@ func _ready() -> void:
 	var tab_row := HBoxContainer.new()
 	tab_row.add_theme_constant_override("separation", 8)
 	box.add_child(tab_row)
-	for i in 2:
+	for i in 3:
 		var tab := Button.new()
-		tab.text = ["Baron Invasion", "Ember Horde"][i]
+		tab.text = ["Baron Invasion", "Ember Horde", "Warlord's Stronghold"][i]
 		tab.toggle_mode = true
 		tab.focus_mode = Control.FOCUS_NONE
 		tab.custom_minimum_size = Vector2(180, 32)
@@ -62,6 +64,9 @@ func _ready() -> void:
 	_horde = preload("res://scripts/ui/horde_section.gd").new()
 	_horde.visible = false
 	box.add_child(_horde)
+	_boss = preload("res://scripts/ui/boss_section.gd").new()
+	_boss.visible = false
+	box.add_child(_boss)
 	var inv := _invasion
 	inv.add_child(MenuStyle.label("Baron Invasion rewards", 19, MenuStyle.GOLD))
 	_status = MenuStyle.label("", 15, MenuStyle.MUTED)
@@ -133,18 +138,21 @@ func open_panel() -> void:
 	# The horde's tab while it rides, or while its prizes wait and no invasion is on.
 	var horde := not Economy.horde_event().is_empty() or (Economy.invasion().is_empty() and Economy.my_horde_points() > 0
 			and not Economy.horde_prize_taken())
-	show_tab(1 if horde else 0)
+	show_tab(2 if not Economy.boss_event().is_empty() else 1 if horde else 0)
 	visible = true
 
 
 func show_tab(i: int) -> void:
-	## 0: the Baron Invasion, 1: the Ember Horde.
+	## 0: the Baron Invasion, 1: the Ember Horde, 2: the Warlord's Stronghold.
 	for k in _tabs.size():
 		_tabs[k].button_pressed = k == i
 	_invasion.visible = i == 0
 	_horde.visible = i == 1
+	_boss.visible = i == 2
 	if i == 1:
 		_horde.fill()
+	elif i == 2:
+		_boss.fill()
 	_recenter.call_deferred()
 
 
@@ -156,6 +164,7 @@ func _recenter() -> void:
 func _ask_boards() -> void:
 	Economy.ask_event_board()
 	Economy.ask_horde_board()
+	Economy.ask_boss_board()
 
 
 func close_panel() -> void:

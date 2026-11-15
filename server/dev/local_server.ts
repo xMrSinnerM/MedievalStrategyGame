@@ -19,7 +19,7 @@ import { readFileSync } from "node:fs";
 import { makeRules } from "../rules/load.ts";
 import { nearestSpot } from "../rules/outposts.ts";
 import { CapitalRules, rulesFor, settled, untouched, type VillageInfo, type VillageState } from "../rules/villages.ts";
-import { effectAt, eventsView, lastHorde, lastInvasion, withOverrides, type EventOverride, type EventRules } from "../rules/events.ts";
+import { effectAt, eventsView, lastBoss, lastHorde, lastInvasion, withOverrides, type EventOverride, type EventRules } from "../rules/events.ts";
 import { CastleState } from "../rules/castle_state.ts";
 import {
   act, castleLevel, checkName, fightRaid, isProtected, might, newPlayer, pickSpot, sabotagePlayer, spyReport,
@@ -37,6 +37,7 @@ import { goingRates, isItemGood, MARKS, type MarketReport, type MarketRules, typ
 import type { Item } from "../rules/gear.ts";
 import { invade } from "../../supabase/functions/game/invasion.ts";
 import { hordeArrives, prizeFor } from "../../supabase/functions/game/horde.ts";
+import { partyOf, takesPart, type BossMember } from "../../supabase/functions/game/boss.ts";
 import {
   captureEntry, checkClaim, defenceEntry, givePrize, holdDue, holdEntries, lastSeason, seasonAt, standings, warBoard,
   type WarAlliance, type WarEntry, type WarRules,
@@ -61,7 +62,7 @@ const root = new URL("../../", import.meta.url);
 const json = (path: string) => JSON.parse(readFileSync(new URL(path, root), "utf8"));
 const rules = makeRules(json("data/buildings.json"), json("data/units.json"), json("data/barons.json"), json("data/gear.json"),
   json("data/outposts.json"), json("data/villages.json"), json("data/capitals.json"), json("data/fortresses.json"),
-  json("data/horde.json"), json("data/kingdoms.json"));
+  json("data/horde.json"), json("data/kingdoms.json"), json("data/stronghold.json"));
 const world: World = json("server/world/world.json");
 // The resource villages and the capitals (the towns), kept the same way.
 const PLACES: VillageInfo[] = [...(world.villages ?? []), ...(world.capitals ?? [])];
@@ -458,6 +459,21 @@ function seasonPlaces(user: string, key: number, points: number) {
 }
 
 /** The event view with times moved back from the shifted calendar to the real clock. */
+/** This player's alliance, as far as the Warlord's Stronghold cares. */
+function bossMember(user: string): BossMember {
+  const m = store.membership.get(user);
+  return { alliance_id: m?.alliance_id ?? null, joined: m?.joined ?? 0 };
+}
+
+/** How this alliance stands at the Warlord's Stronghold that rose at `key` (on the real clock); null without one. */
+function bossParty(allianceId: number, key: number) {
+  const run = lastBoss(eventRules, now() + EVENTS_OFFSET);
+  if (run?.boss === undefined || run.start - EVENTS_OFFSET !== key) return null;
+  const rows = [...players.entries()].filter(([id]) => store.membership.get(id)?.alliance_id === allianceId)
+    .map(([id, p]) => ({ name: p.name, boss_key: p.boss_key ?? 0, boss_damage: p.boss_damage ?? 0, alliance_joined: store.membership.get(id)?.joined ?? 0 }));
+  return partyOf(run.boss, rows, key);
+}
+
 /** The players with horde points in the Ember Horde run starting at `key` (on the real clock), most first. */
 function hordeRanking(key: number) {
   return [...players.entries()].filter(([, p]) => p.horde_key === key && (p.horde_points ?? 0) > 0)
@@ -762,6 +778,18 @@ createServer(async (req, res) => {
         players: all.slice(0, 50).map(strip), me: mine ? strip(mine) : null, rank, total: all.length,
         prize: mine && run?.horde ? prizeFor(run.horde.prizes, rank) ?? null : null } });
     }
+    if (body.action === "boss_board") {
+      const run = lastBoss(eventRules, now() + EVENTS_OFFSET);
+      const key = run === undefined ? -1 : run.start - EVENTS_OFFSET;
+      const member = bossMember(user);
+      const part = run !== undefined && takesPart(member, key);
+      const party = part ? bossParty(member.alliance_id!, key) : null;
+      const mine = players.get(user);
+      return send(res, 200, { ok: true, now: now(), error: "", result: {
+        event: run === undefined ? null : shifted({ active: [run], upcoming: [], recent: [] }).active[0],
+        in_alliance: member.alliance_id !== null, takes_part: part, host: party?.host ?? null, players: party?.players ?? [],
+        me: mine && (mine.boss_key ?? 0) === key ? { name: mine.name, points: mine.boss_damage ?? 0 } : null } });
+    }
     if (body.action === "tournament") return send(res, 200, { ok: true, now: now(), error: "", result: { tournament: tournamentView(user) } });
     if (body.action === "war_board") return send(res, 200, { ok: true, now: now(), error: "", result: { war: warView(user) } });
     if (!players.has(user)) return send(res, 200, { ok: false, error: "No castle yet.", needs_join: true });
@@ -857,6 +885,11 @@ createServer(async (req, res) => {
     if (body.action === "claim_horde_prize" && (me.horde_points ?? 0) > 0) {
       hordePlace = hordeRanking(me.horde_key ?? 0).filter((r) => r.points > (me.horde_points ?? 0)).length + 1;
     }
+    const member = bossMember(user);
+    let bossFalls = 0;
+    if (body.action === "claim_boss_chest" && member.alliance_id !== null && takesPart(member, me.boss_key ?? 0)) {
+      bossFalls = bossParty(member.alliance_id, me.boss_key ?? 0)?.host.falls ?? 0;
+    }
     let seasonPlace: { player: number; alliance: number } | undefined;
     if (body.action === "claim_season_prize") {
       const prev = lastSeasonOf(me, t);
@@ -866,7 +899,7 @@ createServer(async (req, res) => {
       { pvp, outpostSpot, target: target?.target, homecomings, alliances: allianceRules, aid: aidRules,
         events: { rules: eventRules, world, offset: EVENTS_OFFSET }, quests: questRules, achievements: achievementRules, login: loginRules, seasons: seasonRules, tourney: tourneyRules, seasonPlace, chests: chestRules, encounters,
         sabotage: sabotageRules, targetCastle: target ? players.get(target.user)?.castle : undefined, village: village?.target, villageIncome,
-        capitalBoost: capitalBoost(rules, allianceCapitals(user).levels, allianceCapitals(user).guilds), fortresses: world.fortresses, hordeRank: hordePlace,
+        capitalBoost: capitalBoost(rules, allianceCapitals(user).levels, allianceCapitals(user).guilds), fortresses: world.fortresses, hordeRank: hordePlace, boss: { member, falls: bossFalls },
         market: { rules: marketRules, open: offers.filter((o) => o.seller === user && o.state === "open" && o.expires > t &&
           (o.want === MARKS) === (body.give === "gear" || body.want === MARKS || isItemGood(body.give, rules.gear))).length,
           offer: bought ? offerOf(bought) : undefined }, marketIncome: market.income, marketItems: market.items });

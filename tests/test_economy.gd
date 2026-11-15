@@ -673,6 +673,13 @@ func test_baron_camp() -> void:
 			"a horde camp keeps its run, points and trophies")
 	check(br.for_camp(horde_copy) == br.horde and br.horde != null and br.horde.garrison(3).has("horseman"),
 			"a horde camp has the horde's soldiers")
+	var hold := BaronCamp.from_dict(JSON.parse_string(JSON.stringify(BaronCamp.from_dict({"id": "boss_1", "name": "Garrak's Stronghold",
+			"position": [5, 6], "level": 3, "boss": 1792000000.0}).to_dict())))
+	check(hold.is_boss() and not hold.is_horde() and hold.boss == 1792000000.0, "the stronghold keeps its run")
+	check(br.for_camp(hold) == br.boss and br.boss != null, "the stronghold has its own soldiers")
+	var storm := hold.attack(br, rules, {"swordsman": 500}, 7, 1000.0)
+	check(storm.winner == "a" and not storm.leveled and hold.level == 3 and hold.defeats == 0 and hold.rebuilt_at > 1000.0,
+			"beating the stronghold never raises it: its garrison only rallies")
 	# Economy keeps each camp's level in the save slot.
 	var eco = load("res://scripts/core/economy.gd").new()
 	eco.save_dir = "user://test_saves"

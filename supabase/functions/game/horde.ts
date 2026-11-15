@@ -106,7 +106,7 @@ function checkRoom(castle: CastleState, resources: Dict): string {
 }
 
 /** Puts resources (up to the storage), soldiers and siege tools in the castle. */
-function give(castle: CastleState, what: { resources?: Dict; troops?: Dict; tools?: Dict; marks?: number }): void {
+export function give(castle: CastleState, what: { resources?: Dict; troops?: Dict; tools?: Dict; marks?: number }): void {
   if (what.marks) addMarks(castle, what.marks);
   const cap = castle.storageCapacity();
   for (const [r, n] of Object.entries(what.resources ?? {})) {

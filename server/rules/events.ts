@@ -15,6 +15,8 @@ export interface WeeklyEvent {
   invasion?: InvasionRules;
   /** The Ember Horde: its camps, the Trophy Market and the ranked prizes (see horde.ts). */
   horde?: HordeRules;
+  /** The Warlord's Stronghold, for alliances: its host, its chests and your own rewards (see boss.ts). */
+  boss?: BossRules;
 }
 
 /** How a Baron Invasion goes, from data/events.json. */
@@ -84,6 +86,35 @@ export interface HordeRules {
   prizes: HordePrize[];
 }
 
+/** A chest the alliance wins each time the stronghold falls. */
+export interface BossChest {
+  resources?: Record<string, number>;
+  troops?: Record<string, number>;
+  tools?: Record<string, number>;
+  /** Marks, the trade coin (gear.ts). */
+  marks?: number;
+}
+
+/** How the Warlord's Stronghold goes, from data/events.json (its soldiers are in data/stronghold.json). */
+export interface BossRules {
+  name: string;
+  /** The stronghold's level: this + level_per_keep per keep level above 1. */
+  level: number;
+  level_per_keep: number;
+  /** Seconds the garrison rallies after a win. */
+  rally: number;
+  /** The warlord's host, shared by the alliance: host_base + host_per_member per member, times host_growth after each fall. */
+  host_base: number;
+  host_per_member: number;
+  host_growth: number;
+  /** Defenders you must have slain to claim a fall's chest. */
+  min_damage: number;
+  /** One chest for each time the stronghold can fall, in order. */
+  falls: BossChest[];
+  /** Your own tiers, by defenders slain (`points`). */
+  rewards: RewardTier[];
+}
+
 export interface EventRules {
   weekly: WeeklyEvent[];
   /** Changes the game owner made to the calendar (see withOverrides). */
@@ -109,6 +140,7 @@ export interface EventTime {
   effects: Record<string, number>;
   invasion?: InvasionRules;
   horde?: HordeRules;
+  boss?: BossRules;
   start: number;
   end: number;
 }
@@ -130,6 +162,7 @@ function at(e: WeeklyEvent, start: number): EventTime {
   const out: EventTime = { id: e.id, name: e.name, description: e.description, effects: e.effects, start, end: start + e.hours * 3600 };
   if (e.invasion !== undefined) out.invasion = e.invasion;
   if (e.horde !== undefined) out.horde = e.horde;
+  if (e.boss !== undefined) out.boss = e.boss;
   return out;
 }
 
@@ -186,6 +219,11 @@ export function lastHorde(rules: EventRules, t: number): EventTime | undefined {
   return lastRun(rules, t, (e) => e.horde !== undefined);
 }
 
+/** The Warlord's Stronghold standing at `t`, or else the last one to have risen (undefined if there is none on the calendar). */
+export function lastBoss(rules: EventRules, t: number): EventTime | undefined {
+  return lastRun(rules, t, (e) => e.boss !== undefined);
+}
+
 /** The product of an effect over the events on at `t` (1 when none). */
 export function effectAt(rules: EventRules, t: number, effect: string): number {
   let factor = 1;
@@ -193,11 +231,11 @@ export function effectAt(rules: EventRules, t: number, effect: string): number {
   return factor;
 }
 
-/** What the game shows: the events on now, the next ones, and the last invasion and horde when they are over
+/** What the game shows: the events on now, the next ones, and the last invasion, horde and stronghold when they are over
  * (their rewards, market and prizes stay open until the next run, even after the owner moved the calendar). */
 export function eventsView(rules: EventRules, t: number) {
   const active = activeEvents(rules, t);
-  const recent = [lastInvasion(rules, t), lastHorde(rules, t)]
+  const recent = [lastInvasion(rules, t), lastHorde(rules, t), lastBoss(rules, t)]
     .filter((e): e is EventTime => e !== undefined && !active.some((a) => a.id === e.id && a.start === e.start));
   return { active, upcoming: upcomingEvents(rules, t), recent };
 }

@@ -29,6 +29,8 @@ export class BaronRules {
   fortress?: BaronRules;
   /** The numbers for the Ember Horde's camps (data/horde.json), camps with `horde` set; none without them. */
   horde?: BaronRules;
+  /** The numbers for the Warlord's Stronghold (data/stronghold.json), the camp with `boss` set; none without them. */
+  boss?: BaronRules;
   /** The numbers for camps in the other kingdoms (data/kingdoms.json): kingdom id -> these rules with its `barons` changes. */
   kingdoms: Record<string, BaronRules> = {};
   /** Kingdom camps only: seconds the army sails before it marches, and where in the kingdom it marches from. */
@@ -53,7 +55,8 @@ export class BaronRules {
   }
 
   /** The rules for this camp: the fortress rules for a fortress, the horde's for a horde camp, else these. */
-  forCamp(camp: { fortress?: boolean; horde?: number; kingdom?: string }): BaronRules {
+  forCamp(camp: { fortress?: boolean; horde?: number; kingdom?: string; boss?: number }): BaronRules {
+    if (camp.boss !== undefined && this.boss) return this.boss;
     if (camp.horde !== undefined && this.horde) return this.horde;
     if (camp.kingdom && this.kingdoms[camp.kingdom]) return this.kingdoms[camp.kingdom];
     return camp.fortress && this.fortress ? this.fortress : this;
@@ -73,7 +76,7 @@ export class BaronRules {
    * Seconds an army takes to reach this camp (one way): the march from
    * `home`, or for a kingdom's camp the voyage and the march from your castle there.
    */
-  travelTime(camp: { position: [number, number]; fortress?: boolean; horde?: number; kingdom?: string }, home: [number, number]): number {
+  travelTime(camp: { position: [number, number]; fortress?: boolean; horde?: number; kingdom?: string; boss?: number }, home: [number, number]): number {
     const r = this.forCamp(camp);
     const from = r.origin ?? home;
     return (r.origin ? r.voyage : 0) + this.marchTime(Math.sqrt((camp.position[0] - from[0]) ** 2 + (camp.position[1] - from[1]) ** 2));
