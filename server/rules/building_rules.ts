@@ -16,6 +16,8 @@ export class BuildingRules {
   queueSize = 5;
   maxBatch = 50;
   timePerBarracksLevel = 0.92;
+  /** The hospital's numbers (data/units.json "hospital"). */
+  hospital: Json = {};
   /** Siege tools (data/units.json "tools"), and how many fit on each wall by level. */
   tools: Record<string, Json> = {};
   toolSlotTable: number[] = [];
@@ -39,6 +41,7 @@ export class BuildingRules {
     this.queueSize = Number(units.queue_size ?? 5);
     this.maxBatch = Number(units.max_batch ?? 50);
     this.timePerBarracksLevel = Number(units.time_per_barracks_level ?? 0.92);
+    this.hospital = units.hospital ?? {};
     this.tools = units.tools ?? {};
     this.toolSlotTable = (units.tool_slots ?? [0]).map(Number);
     const research = buildings.research ?? {};
@@ -157,6 +160,31 @@ export class BuildingRules {
   unitTime(unit: string, barracksLevel: number): number {
     return round(Number(this.units[unit].time ?? 30) *
       Math.pow(this.timePerBarracksLevel, Math.max(barracksLevel - 1, 0)));
+  }
+
+  /** Wounded soldiers a hospital of this level holds (0 without one). */
+  hospitalBeds(level: number): number {
+    if (level <= 0) return 0;
+    return round(Number(this.hospital.beds ?? 0) * Math.pow(Number(this.hospital.beds_growth ?? 1), level - 1));
+  }
+
+  /** The share of soldiers lost in a battle who are only wounded. */
+  woundedShare(attacking: boolean): number {
+    return Number(this.hospital[attacking ? "attack_share" : "defence_share"] ?? 0);
+  }
+
+  /** Food to heal `count` wounded soldiers: a share of what they cost to train. */
+  healCost(unit: string, count = 1): Dict {
+    let price = 0;
+    const cost = this.units[unit].cost ?? {};
+    for (const r of Object.keys(cost)) if (this.resources.includes(r)) price += Number(cost[r]);
+    return { food: Math.ceil(price * Number(this.hospital.cost_share ?? 0.5)) * count };
+  }
+
+  /** Seconds to heal one wounded soldier; each hospital level above 1 heals faster. */
+  healTime(unit: string, hospitalLevel: number): number {
+    return Math.max(1, round(Number(this.units[unit].time ?? 30) * Number(this.hospital.time_share ?? 0.5) *
+      Math.pow(Number(this.hospital.time_per_level ?? 1), Math.max(hospitalLevel - 1, 0))));
   }
 
   unitUpkeep(unit: string): number {

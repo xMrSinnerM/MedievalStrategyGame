@@ -83,6 +83,13 @@ static func build(type: String, level: int, size: Vector2i, constructing: bool, 
 			_put(kit, "rock_single_C", Vector3(1.9, 0, 1.8), 1.8)
 			if level >= 3:
 				_put(kit, "tree_single_A", Vector3(2.0, 0, -1.9), 2.6)
+		"hospital":
+			_put(kit, "building_home_B_blue", Vector3(-0.6, 0, -0.9), 3.2 + 0.05 * level)
+			_put(kit, "tent", Vector3(1.9, 0, 1.6), 1.8)
+			_put(kit, "bucket_water", Vector3(-2.2, 0, 2.0), 1.8)
+			_put(kit, "crate_open", Vector3(-1.1, 0, 2.3), 1.3)
+			if level >= 4:
+				_put(kit, "tent", Vector3(2.0, 0, -1.6), 1.6, PI * 0.5)
 		"tavern":
 			_put(kit, "building_tavern_blue", Vector3(0, 0, -0.4), 3.4 + 0.06 * level)
 			_put(kit, "barrel", Vector3(-2.2, 0, 2.1), 1.4)

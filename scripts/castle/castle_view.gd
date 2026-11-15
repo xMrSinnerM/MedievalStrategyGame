@@ -180,6 +180,26 @@ func cancel_training(index: int) -> void:
 		Economy.changed.emit()
 
 
+func heal_wounded(unit: String, amount: int) -> void:
+	if not editable:
+		return
+	var reason := castle.check_heal(unit, amount)
+	if reason != "" or not castle.heal_wounded(unit, amount, Economy.now()):
+		message.emit(reason if reason != "" else "Can't heal them now")
+		Audio.play("denied")
+		return
+	Audio.play("recruit")
+	_tell_server({"action": "heal", "unit": unit, "amount": amount})
+	Economy.changed.emit()
+
+
+func cancel_healing(index: int) -> void:
+	if editable and castle.cancel_healing(index, Economy.now()):
+		_tell_server({"action": "cancel_healing", "index": index})
+		message.emit("Healing stopped, %d%% of the food refunded" % int(CastleState.CANCEL_REFUND * 100.0))
+		Economy.changed.emit()
+
+
 func craft(tool: String, amount: int) -> void:
 	if not editable:
 		return

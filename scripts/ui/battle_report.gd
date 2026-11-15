@@ -266,6 +266,8 @@ func show_baron_report(report: Dictionary) -> void:
 			lines.append("Wins %d of %d before %s reaches level %d." % [report.defeats, report.needed, report.defender, report.new_level + 1])
 	else:
 		lines.append("The %s held. Your surviving soldiers are marching home." % ("fortress" if report.get("fortress", false) else "camp"))
+	if _wounded(report) > 0:
+		lines.append("%d of your fallen were only wounded: they are in your hospital." % _wounded(report))
 	_footer.text = "\n".join(lines)
 	_add_siege_line(report, true)
 
@@ -291,6 +293,8 @@ func show_raid_report(report: Dictionary) -> void:
 		var helped: Array = report.get("helped_by", [])
 		if not helped.is_empty():
 			_footer.text = "Defenders from %s fought beside your garrison.\n" % ", ".join(PackedStringArray(helped)) + _footer.text
+	if _wounded(report) > 0:
+		_footer.text += "\n%d of your fallen were only wounded: they are in your hospital." % _wounded(report)
 	_add_siege_line(report, attacking)
 	_title.add_theme_color_override("font_color", MenuStyle.GOLD if won else LOSS)
 
@@ -338,6 +342,16 @@ func show_village_report(report: Dictionary) -> void:
 	_footer.text = "\n".join(lines)
 	_add_siege_line(report, attacking)
 	_title.add_theme_color_override("font_color", MenuStyle.GOLD if won else LOSS)
+
+
+static func _wounded(report: Dictionary) -> int:
+	## How many of your fallen the hospital took in after this battle.
+	var n := 0
+	var hurt: Variant = report.get("wounded", {})
+	if hurt is Dictionary:
+		for unit: String in hurt:
+			n += int(hurt[unit])
+	return n
 
 
 func _add_siege_line(report: Dictionary, attacking: bool) -> void:

@@ -69,6 +69,7 @@ func _initialize() -> void:
 	data.armoury = armoury_run()
 	data.outpost = outpost_run()
 	data.kingdom = kingdom_run()
+	data.hospital = hospital_run()
 	data.villages = village_run(villages, VillageRules.load_villages(), 25)
 	data.capitals = village_run(capitals, CapitalRules.load_capitals(), 300)
 	data.capitals["bonus"] = capital_bonus_run()
@@ -492,6 +493,53 @@ func gems_run() -> Dictionary:
 				op["result"] = gear.forge(castle, ids)
 		ops.append(op)
 	return {"drops": drops, "bag": given, "ops": ops, "castle": castle.to_dict()}
+
+
+func hospital_run() -> Dictionary:
+	## A castle with a hospital: the fallen of several battles carried in until
+	## the beds are full, healing paid in food, a batch cancelled, and the
+	## healed walking back to the garrison.
+	var castle := CastleState.create_new(rules, "h", "Hospital Castle", "player", T0)
+	castle._add_building("hospital", 3, Vector2i(2, 2))
+	for r: String in castle.resources:
+		castle.resources[r] = 900.0
+	var start := castle.to_dict()
+	var t := T0
+	var ops: Array = []
+	var numbers := {"beds": [], "cost": {}, "time": {}}
+	for level in range(0, 11):
+		numbers.beds.append(rules.hospital_beds(level))
+	for unit: String in rules.units:
+		numbers.cost[unit] = rules.heal_cost(unit, 3)
+		numbers.time[unit] = [rules.heal_time(unit, 1), rules.heal_time(unit, 6)]
+	for k in 14:
+		t += rng.randf_range(5.0, 400.0)
+		var op := {"t": t}
+		var roll := rng.randi_range(0, 5)
+		if roll <= 1:
+			op["kind"] = "wounded"
+			op["lost"] = random_army(40)
+			op["attacking"] = roll == 1
+			castle.advance_to(t)
+			op["result"] = castle.take_wounded(op.lost, op.attacking)
+		elif roll <= 3:
+			op["kind"] = "heal"
+			op["unit"] = ["spearman", "archer", "swordsman", "horseman"][rng.randi_range(0, 3)]
+			op["amount"] = rng.randi_range(1, 8)
+			op["check"] = castle.check_heal(op.unit, op.amount)
+			op["result"] = castle.heal_wounded(op.unit, op.amount, t)
+		elif roll == 4:
+			op["kind"] = "cancel"
+			op["index"] = rng.randi_range(0, 2)
+			op["result"] = castle.cancel_healing(op.index, t)
+		else:
+			op["kind"] = "wait"
+			castle.advance_to(t)
+		op["castle"] = castle.to_dict()
+		op["beds_taken"] = castle.wounded_count()
+		ops.append(op)
+	castle.advance_to(t + 100000.0)
+	return {"start": start, "numbers": numbers, "ops": ops, "end_t": t + 100000.0, "end": castle.to_dict()}
 
 
 func kingdom_run() -> Dictionary:

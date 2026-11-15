@@ -46,6 +46,14 @@ export interface Batch {
 }
 
 /** Siege tools being built in the workshop, one after another. */
+/** A batch of wounded soldiers being healed, one after another. */
+export interface Healing {
+  unit: string;
+  remaining: number;
+  unit_time: number;
+  next: number;
+}
+
 export interface Craft {
   tool: string;
   remaining: number;
@@ -175,6 +183,8 @@ export interface CastleData {
   tools: Dict;
   crafting: Craft[];
   defence_tools: Tools;
+  wounded?: Dict;
+  healing?: Healing[];
   armoury: Armoury;
   boost: Dict;
   limits: Limits | null;
@@ -231,6 +241,9 @@ export class CastleState {
   tools: Dict = {};
   crafting: Craft[] = [];
   defenceTools: Tools = {};
+  /** The hospital: wounded soldiers in its beds by unit, and the batches being healed (those still take a bed). */
+  wounded: Dict = {};
+  healing: Healing[] = [];
   /** Commanders, the castellan's gear and the bag of gear (gear.ts). */
   armoury: Armoury = newArmoury();
   /** Extra production by resource (0.5 for half as much again): an outpost's region. */
@@ -633,6 +646,99 @@ export class CastleState {
     return true;
   }
 
+  hospitalLevel(): number {
+    for (const b of this.buildings) if (b.type === "hospital") return b.level;
+    return 0;
+  }
+
+  beds(): number {
+    return this.rules.hospitalBeds(this.hospitalLevel());
+  }
+
+  /** Soldiers in the hospital's beds: the wounded and those being healed. */
+  woundedCount(): number {
+    let n = 0;
+    for (const unit of Object.keys(this.wounded)) n += this.wounded[unit];
+    for (const batch of this.healing) n += batch.remaining;
+    return n;
+  }
+
+  /**
+   * After a battle: a share of the soldiers lost (unit -> how many) are
+   * carried to the hospital, while there are free beds. Returns unit -> wounded.
+   */
+  takeWounded(lost: Dict, attacking: boolean): Dict {
+    const out: Dict = {};
+    let free = this.beds() - this.woundedCount();
+    const share = this.rules.woundedShare(attacking);
+    for (const unit of Object.keys(lost)) {
+      if (free <= 0) break;
+      if (!this.rules.hasUnit(unit)) continue;
+      const n = Math.min(Math.floor(Math.trunc(lost[unit]) * share + 0.000001), free);
+      if (n > 0) {
+        this.wounded[unit] = (this.wounded[unit] ?? 0) + n;
+        out[unit] = n;
+        free -= n;
+      }
+    }
+    return out;
+  }
+
+  healTime(unit: string): number {
+    return this.rules.healTime(unit, this.hospitalLevel());
+  }
+
+  /** Why `amount` wounded soldiers of this unit can't be healed now, or "" if they can. */
+  checkHeal(unit: string, amount: number): string {
+    const r = this.rules;
+    if (!r.hasUnit(unit)) return "Unknown unit";
+    if (this.hospitalLevel() <= 0) return "Build a hospital first";
+    if (!Number.isInteger(amount) || amount < 1 || amount > (this.wounded[unit] ?? 0)) return "The hospital doesn't have that many wounded";
+    if (this.healing.length >= r.queueSize) return "The healers are busy: the queue is full";
+    if (!this.canAfford(r.healCost(unit, amount))) return "Not enough food";
+    return "";
+  }
+
+  /** Pays for healing `amount` wounded soldiers; they go back to the garrison one after another. */
+  healWounded(unit: string, amount: number, now: number): boolean {
+    this.advanceTo(now);
+    if (this.checkHeal(unit, amount) !== "") return false;
+    this.pay(this.rules.healCost(unit, amount));
+    this.wounded[unit] -= amount;
+    if (this.wounded[unit] <= 0) delete this.wounded[unit];
+    const unitTime = this.healTime(unit);
+    this.healing.push({ unit, remaining: amount, unit_time: unitTime, next: this.healing.length === 0 ? now + unitTime : 0 });
+    return true;
+  }
+
+  /** Stops a batch: its soldiers stay wounded, and part of the food comes back. */
+  cancelHealing(index: number, now: number): boolean {
+    this.advanceTo(now);
+    if (!Number.isInteger(index) || index < 0 || index >= this.healing.length) return false;
+    const batch = this.healing[index];
+    this.refund(this.rules.healCost(batch.unit, batch.remaining));
+    this.wounded[batch.unit] = (this.wounded[batch.unit] ?? 0) + batch.remaining;
+    this.healing.splice(index, 1);
+    if (index === 0 && this.healing.length > 0) this.healing[0].next = now + this.healing[0].unit_time;
+    return true;
+  }
+
+  /** Healed soldiers walk back to the garrison as the healers catch up. */
+  private finishHeals(now: number): void {
+    while (this.healing.length > 0 && this.healing[0].next <= now) {
+      const batch = this.healing[0];
+      this.troops[batch.unit] = (this.troops[batch.unit] ?? 0) + 1;
+      batch.remaining -= 1;
+      const doneAt = batch.next;
+      if (batch.remaining > 0) {
+        batch.next = doneAt + batch.unit_time;
+        continue;
+      }
+      this.healing.shift();
+      if (this.healing.length > 0) this.healing[0].next = doneAt + this.healing[0].unit_time;
+    }
+  }
+
   setDefenceTools(tools: unknown): string {
     const checked = checkTools(this.rules, tools, "defence", this.defenceSlots(), this.tools);
     if (typeof checked === "string") return checked;
@@ -705,6 +811,7 @@ export class CastleState {
       }
     }
     this.finishCrafts(now);
+    this.finishHeals(now);
   }
 
   /** Tools don't eat or produce, so the workshop just catches up. */
@@ -818,6 +925,8 @@ export class CastleState {
       tools: { ...this.tools },
       crafting: this.crafting.map((c) => ({ ...c })),
       defence_tools: structuredClone(this.defenceTools),
+      wounded: { ...this.wounded },
+      healing: this.healing.map((h) => ({ ...h })),
       armoury: structuredClone(this.armoury),
       boost: { ...this.boost },
       limits: this.limits ? { types: [...this.limits.types], keep: this.limits.keep } : null,
@@ -923,6 +1032,18 @@ export class CastleState {
     }
     if (castle.crafting.length > 0 && castle.crafting[0].next <= 0) {
       castle.crafting[0].next = castle.lastUpdate + castle.crafting[0].unit_time;
+    }
+    for (const unit of Object.keys(data.wounded ?? {})) {
+      const n = Math.trunc(Number(data.wounded![unit]));
+      if (rules.hasUnit(unit) && n > 0) castle.wounded[unit] = n;
+    }
+    for (const h of data.healing ?? []) {
+      if (rules.hasUnit(h.unit ?? "")) {
+        castle.healing.push({ unit: String(h.unit), remaining: Number(h.remaining), unit_time: Number(h.unit_time), next: Number(h.next ?? 0) });
+      }
+    }
+    if (castle.healing.length > 0 && castle.healing[0].next <= 0) {
+      castle.healing[0].next = castle.lastUpdate + castle.healing[0].unit_time;
     }
     for (const w of WALLS) {
       const set: Dict = {};

@@ -45,6 +45,7 @@ func _initialize() -> void:
 	test_gems_and_forge()
 	test_outpost()
 	test_kingdoms()
+	test_hospital()
 	test_villages()
 	test_capitals()
 	test_fortresses()
@@ -1224,6 +1225,35 @@ func test_outpost() -> void:
 	eco.delete_slot(1)
 	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://test_saves"))
 	eco.free()
+
+
+func test_hospital() -> void:
+	var c := fresh()
+	check(c.check_build("hospital") == "Needs keep level 2", "a hospital needs keep level 2")
+	check(c.beds() == 0 and c.take_wounded({"spearman": 100}, false).is_empty(), "no hospital, no wounded")
+	check(c.check_heal("spearman", 1) == "Build a hospital first", "healing needs a hospital")
+	c._add_building("hospital", 1, Vector2i(2, 2))
+	check(c.beds() == 20 and rules.hospital_beds(2) == 29, "20 beds at level 1, more above")
+	check(c.take_wounded({"spearman": 40}, true) == {"spearman": 6}, "15% of an attack's fallen are wounded")
+	check(c.take_wounded({"archer": 40}, false) == {"archer": 12}, "30% of the fallen defenders")
+	check(c.take_wounded({"swordsman": 100}, false) == {"swordsman": 2} and c.wounded_count() == 20, "only while there are free beds")
+	check(c.take_wounded({"swordsman": 100}, false).is_empty(), "a full hospital takes nobody")
+	c.resources.food = 500.0
+	check(c.check_heal("spearman", 7) == "The hospital doesn't have that many wounded", "only the wounded can be healed")
+	check(rules.heal_cost("spearman", 6) == {"food": 66.0}, "healing costs half a soldier's price, in food")
+	near(rules.heal_time("spearman", 1), 10.0, "and half the training time")
+	check(c.heal_wounded("spearman", 6, 100.0) and c.healing.size() == 1 and not c.wounded.has("spearman"), "healing queues them")
+	near(c.resources.food, 434.0, "and takes the food", 0.5)
+	check(c.wounded_count() == 20, "those being healed keep their bed")
+	var had := int(c.troops.get("spearman", 0))
+	c.advance_to(100.0 + 35.0)
+	check(int(c.troops.get("spearman", 0)) == had + 3 and c.wounded_count() == 17, "they walk back one after another")
+	check(c.cancel_healing(0, 135.0) and c.wounded == {"archer": 12, "swordsman": 2, "spearman": 3} and c.healing.is_empty(),
+			"stopping leaves the rest wounded")
+	var copy := CastleState.from_dict(rules, JSON.parse_string(JSON.stringify(c.to_dict())))
+	check(copy.wounded == c.wounded and copy.beds() == 20, "the hospital saves and loads")
+	c.resources.food = 0.0
+	check(c.check_heal("archer", 1) == "Not enough food" and c.healable("archer") == 0, "no food, no healing")
 
 
 func test_kingdoms() -> void:

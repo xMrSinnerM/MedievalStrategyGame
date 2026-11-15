@@ -723,6 +723,8 @@ func _fight_camp(m: Dictionary) -> void:
 			m.get("tools", {}), lead.get("fx", {}))
 	m.survivors = result.survivors
 	m.loot = result.loot
+	# Some of the fallen are only wounded: they are carried to your hospital.
+	var hurt := player_castle.take_wounded(Battle.lost(result.a), true)
 	if result.winner == "a":
 		player_castle.stats.barons = int(player_castle.stats.barons) + 1
 	var led := {}
@@ -740,7 +742,7 @@ func _fight_camp(m: Dictionary) -> void:
 		"walls": result.walls, "courtyard": result.courtyard, "tools": result.get("tools", {}),
 		"level": result.level, "leveled": result.leveled, "new_level": camp.level,
 		"defeats": camp.defeats, "needed": baron_rules.for_camp(camp).defeats_needed(camp.level),
-		"home_in": maxf(0.0, float(m.back) - now()),
+		"home_in": maxf(0.0, float(m.back) - now()), "wounded": hurt,
 	})
 
 
@@ -1184,7 +1186,7 @@ func _server_report(r: Dictionary) -> Dictionary:
 				"winner": r.get("winner", "b"), "a": r.get("a", {}), "b": r.get("b", {}), "loot": 0,
 				"spoils": r.get("spoils", {}), "wall": float(r.get("wall", 1.0)), "helped_by": r.get("helped_by", []),
 				"walls": r.get("walls", {}), "courtyard": r.get("courtyard", {}), "tools": r.get("tools", {}),
-				"lead": r.get("lead", {})}
+				"lead": r.get("lead", {}), "wounded": r.get("wounded", {})}
 	if r.get("empty", false):
 		return {"player": "a", "baron": true, "empty": true, "defender": r.get("name", ""),
 				"winner": "a", "a": {}, "b": {}, "loot": 0, "place": ""}
@@ -1201,7 +1203,7 @@ func _server_report(r: Dictionary) -> Dictionary:
 		"needed": int(r.get("needed", 1)), "home_in": maxf(0.0, back - now()),
 		"invader": r.has("event"), "points": int(r.get("points", 0)),
 		"horde": r.has("horde"), "trophies": int(r.get("trophies", 0)),
-		"boss": r.has("boss"), "slain": int(r.get("slain", 0)),
+		"boss": r.has("boss"), "slain": int(r.get("slain", 0)), "wounded": r.get("wounded", {}),
 		"walls": r.get("walls", {}), "courtyard": r.get("courtyard", {}), "tools": r.get("tools", {}),
 		"lead": r.get("lead", {}), "gear": r.get("gear", {}), "bag_full": r.get("bag_full", false), "gem": r.get("gem", ""), "marks": r.get("marks", 0),
 		"fortress": r.get("fortress", false),

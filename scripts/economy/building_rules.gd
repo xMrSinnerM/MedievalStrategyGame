@@ -18,6 +18,7 @@ var units: Dictionary = {}       ## unit id -> definition
 var queue_size := 5              ## training batches a castle can queue
 var max_batch := 50              ## soldiers per batch
 var time_per_barracks_level := 0.92
+var hospital: Dictionary = {}    ## the hospital's numbers (data/units.json "hospital")
 var tools: Dictionary = {}       ## siege tool id -> definition (data/units.json "tools")
 var tool_slot_table: Array = []  ## tools per wall by level
 var studies: Dictionary = {}     ## study id -> definition (buildings.json "research")
@@ -69,6 +70,7 @@ func load_units(data: Dictionary) -> void:
 	queue_size = int(data.get("queue_size", 5))
 	max_batch = int(data.get("max_batch", 50))
 	time_per_barracks_level = float(data.get("time_per_barracks_level", 0.92))
+	hospital = data.get("hospital", {})
 	tools = data.get("tools", {})
 	tool_slot_table = data.get("tool_slots", [0])
 
@@ -206,6 +208,34 @@ func unit_cost(unit: String, count := 1) -> Dictionary:
 func unit_time(unit: String, barracks_level: int) -> float:
 	## Seconds to train one soldier; each barracks level above 1 trains faster.
 	return roundf(float(units[unit].get("time", 30)) * pow(time_per_barracks_level, maxi(barracks_level - 1, 0)))
+
+
+func hospital_beds(level: int) -> int:
+	## Wounded soldiers a hospital of this level holds (0 without one).
+	if level <= 0:
+		return 0
+	return int(roundf(float(hospital.get("beds", 0)) * pow(float(hospital.get("beds_growth", 1.0)), level - 1)))
+
+
+func wounded_share(attacking: bool) -> float:
+	## The share of soldiers lost in a battle who are only wounded.
+	return float(hospital.get("attack_share" if attacking else "defence_share", 0.0))
+
+
+func heal_cost(unit: String, count := 1) -> Dictionary:
+	## Food to heal `count` wounded soldiers: a share of what they cost to train.
+	var price := 0.0
+	var cost: Dictionary = units[unit].get("cost", {})
+	for r: String in cost:
+		if resources.has(r):
+			price += float(cost[r])
+	return {"food": ceilf(price * float(hospital.get("cost_share", 0.5))) * count}
+
+
+func heal_time(unit: String, hospital_level: int) -> float:
+	## Seconds to heal one wounded soldier; each hospital level above 1 heals faster.
+	return maxf(1.0, roundf(float(units[unit].get("time", 30)) * float(hospital.get("time_share", 0.5))
+			* pow(float(hospital.get("time_per_level", 1.0)), maxi(hospital_level - 1, 0))))
 
 
 func unit_upkeep(unit: String) -> float:
