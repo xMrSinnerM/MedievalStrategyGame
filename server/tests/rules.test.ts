@@ -284,6 +284,36 @@ test("gems, Marks and the forge", () => {
   same(castle.toDict(), run.castle, "castle");
 });
 
+test("the hospital", () => {
+  const run = fixtures.hospital;
+  const r = rules.buildings;
+  const numbers = { beds: [] as number[], cost: {} as Record<string, unknown>, time: {} as Record<string, unknown> };
+  for (let level = 0; level <= 10; level++) numbers.beds.push(r.hospitalBeds(level));
+  for (const unit of Object.keys(r.units)) {
+    numbers.cost[unit] = r.healCost(unit, 3);
+    numbers.time[unit] = [r.healTime(unit, 1), r.healTime(unit, 6)];
+  }
+  same(numbers, run.numbers, "numbers");
+  const castle = CastleState.fromDict(r, run.start);
+  same(castle.toDict(), run.start, "start");
+  run.ops.forEach((op: any, i: number) => {
+    const where = `hospital op ${i} (${op.kind})`;
+    if (op.kind === "wounded") {
+      castle.advanceTo(op.t);
+      same(castle.takeWounded(op.lost, op.attacking), op.result, where);
+    } else if (op.kind === "heal") {
+      assert.equal(castle.checkHeal(op.unit, op.amount), op.check, `${where} check`);
+      assert.equal(castle.healWounded(op.unit, op.amount, op.t), op.result, where);
+    } else if (op.kind === "cancel") {
+      assert.equal(castle.cancelHealing(op.index, op.t), op.result, where);
+    } else castle.advanceTo(op.t);
+    same(castle.toDict(), op.castle, `${where} castle`);
+    assert.equal(castle.woundedCount(), op.beds_taken, `${where} beds`);
+  });
+  castle.advanceTo(run.end_t);
+  same(castle.toDict(), run.end, "end");
+});
+
 test("the other kingdoms", () => {
   const run = fixtures.kingdom;
   const k = rules.kingdoms;

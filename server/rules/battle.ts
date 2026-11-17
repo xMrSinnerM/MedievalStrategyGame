@@ -337,6 +337,13 @@ export function odds(rules: BuildingRules, a: Dict, b: Dict, seed = 1, wall = 1.
   return wins / ODDS_SAMPLES;
 }
 
+/** The soldiers a side lost, by unit. */
+export function lost(side: Side): Dict {
+  const out: Dict = {};
+  for (const unit of Object.keys(side)) if (side[unit].lost > 0) out[unit] = side[unit].lost;
+  return out;
+}
+
 export function survivors(side: Side): Dict {
   const out: Dict = {};
   for (const unit of Object.keys(side)) {

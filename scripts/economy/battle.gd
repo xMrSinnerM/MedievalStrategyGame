@@ -162,6 +162,13 @@ static func assault(attacker: CastleState, castle: CastleState, seed_value: int,
 	var healed := castle.heal(before)
 	if not healed.is_empty():
 		result["healed"] = healed
+	# Some of the fallen are only wounded: the hospital takes them in.
+	var fallen := {}
+	for unit: String in before:
+		fallen[unit] = int(before[unit]) - int(castle.troops.get(unit, 0))
+	var hurt := castle.take_wounded(fallen, false)
+	if not hurt.is_empty():
+		result["wounded"] = hurt
 	var won: bool = result.winner == "a"
 	var winner := attacker if won else castle
 	result["loot"] = _plunder(winner, lost_count(result.b if won else result.a) * LOOT_PER_KILL)
@@ -469,6 +476,15 @@ static func survivors(side: Dictionary) -> Dictionary:
 		var n: int = side[unit].start - side[unit].lost
 		if n > 0:
 			out[unit] = n
+	return out
+
+
+static func lost(side: Dictionary) -> Dictionary:
+	## unit -> soldiers lost, from one side of a fight() result.
+	var out := {}
+	for unit: String in side:
+		if side[unit].lost > 0:
+			out[unit] = side[unit].lost
 	return out
 
 

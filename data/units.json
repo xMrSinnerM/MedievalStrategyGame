@@ -2,6 +2,16 @@
 	"queue_size": 5,
 	"max_batch": 50,
 	"time_per_barracks_level": 0.92,
+	"hospital": {
+		"_comment": "The hospital (a building, data/buildings.json): `beds` wounded at level 1, times `beds_growth` per level above. `defence_share` of the soldiers you lose defending your castle and `attack_share` of those you lose attacking are carried there, while there are free beds; the rest are dead. Healing one costs `cost_share` of the soldier's price, in food, and takes `time_share` of their training time, times `time_per_level` per hospital level above 1.",
+		"beds": 20,
+		"beds_growth": 1.45,
+		"defence_share": 0.3,
+		"attack_share": 0.15,
+		"cost_share": 0.5,
+		"time_share": 0.5,
+		"time_per_level": 0.94
+	},
 	"units": {
 		"spearman": {
 			"name": "Spearman",

@@ -673,6 +673,24 @@ workshop in `data/buildings.json`. The rules are `Battle.wall_mods()` and
 `Battle.check_tools()` (`scripts/economy/battle.gd`), the same as
 `server/rules/battle.ts` (checked by the server fixtures).
 
+## Hospital and wounded soldiers
+
+The Hospital (keep level 2) takes in soldiers who fall in battle instead of
+losing them. Of the soldiers you lose, 30% of those defending your castle and
+15% of those in your attacks (on camps, fortresses, villages and other
+players) are only wounded and are carried there, as long as there are free
+beds: 20 at level 1 and about 1.45 times as many per level, up to 567 at
+level 10. Everyone beyond that is dead.
+
+Select the hospital to heal them. Healing a soldier costs half their price,
+paid in food, and takes half their training time; each hospital level heals
+6% faster. Up to five batches queue, one soldier after another, and those
+being healed keep their bed until they are back in the garrison. Stopping a
+batch leaves its soldiers wounded and refunds half of the food. The battle
+report says how many of your fallen the hospital took in. The Infirmary study
+still sends some fallen defenders straight back to the walls first. The
+numbers are under `hospital` in `data/units.json`.
+
 ## Academy and research
 
 Once your keep reaches level 3 you can build an **Academy** (3x3, wood 300,
@@ -1239,6 +1257,7 @@ How the parts work:
 - [x] Timed events: weekend loot bonus, baron invasions, event rewards and leaderboard
 - [x] Ember Horde: horde camps, war trophies, Trophy Market and ranked prizes
 - [x] Warlord's Stronghold: the alliance boss raid with a shared host, fall chests and your own rewards
+- [x] Hospital: wounded soldiers after battles, healed for food
 - [x] Owner tools: start and stop events, give players resources and soldiers
 - [x] Siege waves: battle rules (walls and courtyard)
 - [x] Siege waves: choose your waves on the attack screen

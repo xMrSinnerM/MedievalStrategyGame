@@ -66,6 +66,11 @@ var tourney := {"key": 0.0, "base": 0.0, "last_key": 0.0, "last_points": 0}
 var tools := {}
 var crafting: Array[Dictionary] = []
 var defence_tools := {}
+## The hospital: unit -> wounded soldiers in its beds, and the batches being
+## healed {unit, remaining: int, unit_time: float, next: float}, one soldier
+## after another (those still take a bed).
+var wounded := {}
+var healing: Array[Dictionary] = []
 ## Commanders, the castellan's gear and the bag of gear not worn (GearRules).
 var armoury := GearRules.new_armoury()
 ## Extra production by resource (0.5 for half as much again): an outpost's region.
@@ -451,6 +456,128 @@ func tool_time(tool: String) -> float:
 	return _shorter(rules.tool_time(tool, workshop_level()), research_bonus("craft_time"))
 
 
+# --- The hospital ----------------------------------------------------------------
+
+func hospital_level() -> int:
+	for b in buildings:
+		if b.type == "hospital":
+			return b.level
+	return 0
+
+
+func beds() -> int:
+	return rules.hospital_beds(hospital_level())
+
+
+func wounded_count() -> int:
+	## Soldiers in the hospital's beds: the wounded and those being healed.
+	var n := 0
+	for unit: String in wounded:
+		n += int(wounded[unit])
+	for batch in healing:
+		n += int(batch.remaining)
+	return n
+
+
+func take_wounded(lost: Dictionary, attacking: bool) -> Dictionary:
+	## After a battle: a share of the soldiers lost (unit -> how many) are
+	## carried to the hospital, while there are free beds. Returns unit -> wounded.
+	var out := {}
+	var free := beds() - wounded_count()
+	var share := rules.wounded_share(attacking)
+	for unit: String in lost:
+		if free <= 0:
+			break
+		if not rules.has_unit(unit):
+			continue
+		var n := mini(int(floor(int(lost[unit]) * share + 0.000001)), free)
+		if n > 0:
+			wounded[unit] = int(wounded.get(unit, 0)) + n
+			out[unit] = n
+			free -= n
+	return out
+
+
+func heal_time(unit: String) -> float:
+	return rules.heal_time(unit, hospital_level())
+
+
+func check_heal(unit: String, amount: int) -> String:
+	## Why `amount` wounded soldiers of this unit can't be healed now, or "" if they can.
+	if not rules.has_unit(unit):
+		return "Unknown unit"
+	if hospital_level() <= 0:
+		return "Build a hospital first"
+	if amount < 1 or amount > int(wounded.get(unit, 0)):
+		return "The hospital doesn't have that many wounded"
+	if healing.size() >= rules.queue_size:
+		return "The healers are busy: the queue is full"
+	if not can_afford(rules.heal_cost(unit, amount)):
+		return "Not enough food"
+	return ""
+
+
+func healable(unit: String) -> int:
+	## How many wounded of this unit the castle could pay to heal right now.
+	var each: float = rules.heal_cost(unit).food
+	var n := int(wounded.get(unit, 0))
+	return mini(n, int(floor((stock("food") + 0.0001) / each))) if each > 0.0 else n
+
+
+func heal_wounded(unit: String, amount: int, now: float) -> bool:
+	## Pays for healing `amount` wounded soldiers; they go back to the garrison one after another.
+	advance_to(now)
+	if check_heal(unit, amount) != "":
+		return false
+	_pay(rules.heal_cost(unit, amount))
+	wounded[unit] = int(wounded[unit]) - amount
+	if int(wounded[unit]) <= 0:
+		wounded.erase(unit)
+	var each := heal_time(unit)
+	healing.append({"unit": unit, "remaining": amount, "unit_time": each,
+		"next": now + each if healing.is_empty() else 0.0})
+	return true
+
+
+func cancel_healing(index: int, now: float) -> bool:
+	## Stops a batch: its soldiers stay wounded, and part of the food comes back.
+	advance_to(now)
+	if index < 0 or index >= healing.size():
+		return false
+	var batch: Dictionary = healing[index]
+	_refund(rules.heal_cost(batch.unit, batch.remaining))
+	wounded[batch.unit] = int(wounded.get(batch.unit, 0)) + int(batch.remaining)
+	healing.remove_at(index)
+	if index == 0 and not healing.is_empty():
+		healing[0].next = now + healing[0].unit_time
+	return true
+
+
+func healing_left(now: float) -> float:
+	## Seconds until everyone in the queue is healed.
+	if healing.is_empty():
+		return 0.0
+	var total: float = maxf(healing[0].next - now, 0.0) + healing[0].unit_time * (healing[0].remaining - 1)
+	for i in range(1, healing.size()):
+		total += healing[i].unit_time * healing[i].remaining
+	return total
+
+
+func _finish_heals(now: float) -> void:
+	## Healed soldiers walk back to the garrison as the healers catch up.
+	while not healing.is_empty() and healing[0].next <= now:
+		var batch: Dictionary = healing[0]
+		troops[batch.unit] = int(troops.get(batch.unit, 0)) + 1
+		batch.remaining -= 1
+		var done_at: float = batch.next
+		if batch.remaining > 0:
+			batch.next = done_at + batch.unit_time
+			continue
+		healing.pop_front()
+		if not healing.is_empty():
+			healing[0].next = done_at + healing[0].unit_time
+
+
 # --- Research ------------------------------------------------------------------
 
 func academy_level() -> int:
@@ -757,6 +884,7 @@ func advance_to(now: float) -> void:
 		else:
 			break
 	_finish_crafts(now)
+	_finish_heals(now)
 
 
 func _finish_crafts(now: float) -> void:
@@ -867,6 +995,8 @@ func copy_from(other: CastleState) -> void:
 	tools = other.tools
 	crafting = other.crafting
 	defence_tools = other.defence_tools
+	wounded = other.wounded
+	healing = other.healing
 	armoury = other.armoury
 	boost = other.boost
 	limits = other.limits
@@ -898,6 +1028,7 @@ func to_dict() -> Dictionary:
 		"sabotage": sabotage.duplicate(true), "tourney": tourney.duplicate(),
 		"tools": tools.duplicate(), "crafting": crafting.duplicate(true), "defence_tools": defence_tools.duplicate(true),
 		"armoury": armoury.duplicate(true),
+		"wounded": wounded.duplicate(), "healing": healing.duplicate(true),
 		"boost": boost.duplicate(), "limits": limits.duplicate(true) if not limits.is_empty() else null,
 		"goods": goods.duplicate(), "yields": yields.duplicate(true) if not yields.is_empty() else null,
 		"research": research.duplicate(), "studying": studying.duplicate() if not studying.is_empty() else null,
@@ -1023,6 +1154,16 @@ static func from_dict(p_rules: BuildingRules, data: Dictionary) -> CastleState:
 				"unit_time": float(c.unit_time), "next": float(c.get("next", 0.0))})
 	if not castle.crafting.is_empty() and castle.crafting[0].next <= 0.0:
 		castle.crafting[0].next = castle.last_update + castle.crafting[0].unit_time
+	var beds_used: Dictionary = data.get("wounded", {}) if data.get("wounded") is Dictionary else {}
+	for unit: String in beds_used:
+		if p_rules.has_unit(unit) and int(beds_used[unit]) > 0:
+			castle.wounded[unit] = int(beds_used[unit])
+	for h in data.get("healing", []) if data.get("healing") is Array else []:
+		if p_rules.has_unit(h.get("unit", "")):
+			castle.healing.append({"unit": String(h.unit), "remaining": int(h.remaining),
+				"unit_time": float(h.unit_time), "next": float(h.get("next", 0.0))})
+	if not castle.healing.is_empty() and castle.healing[0].next <= 0.0:
+		castle.healing[0].next = castle.last_update + castle.healing[0].unit_time
 	var posted: Dictionary = data.get("defence_tools", {})
 	for w: String in Battle.WALLS:
 		var group := {}

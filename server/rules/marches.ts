@@ -5,7 +5,7 @@
 
 import { attackCamp, isReady, type CampData } from "./baron_camp.ts";
 import { BaronRules } from "./baron_rules.ts";
-import { checkTools, type Side, type SiegeResult, type Tools, type Wave } from "./battle.ts";
+import { checkTools, lost, type Side, type SiegeResult, type Tools, type Wave } from "./battle.ts";
 import { CastleState } from "./castle_state.ts";
 import type { GearRules, Item, Lead, LeadReport } from "./gear.ts";
 import { godotHash, type Dict } from "./util.ts";
@@ -72,6 +72,8 @@ export interface Report {
   /** The Warlord's Stronghold: the run it belongs to, and the defenders this army slew (win or lose). */
   boss?: number;
   slain?: number;
+  /** Soldiers of the army who fell but were carried to the hospital (unit -> how many). */
+  wounded?: Dict;
 }
 
 export interface Army {
@@ -183,6 +185,8 @@ function fightCamp(world: Army, rules: BaronRules, m: March): Report {
   const result = attackCamp(camp, rules, world.castle.rules, m.army, seed, m.arrive, m.waves, m.tools, m.lead?.fx);
   m.survivors = result.survivors;
   m.loot = result.loot;
+  // Some of the fallen are only wounded: they are carried to the hospital.
+  const hurt = world.castle.takeWounded(lost(result.a), true);
   if (result.winner === "a") world.castle.stats.barons += 1;
   const out: Report = { ...report, winner: result.winner, a: result.a, b: result.b, walls: result.walls, courtyard: result.courtyard, ...(result.tools ? { tools: result.tools } : {}), spoils: result.loot, level: result.level,
     leveled: result.leveled, new_level: camp.level, defeats: camp.defeats, needed: rules.forCamp(camp).defeatsNeeded(camp.level) };
@@ -205,6 +209,7 @@ function fightCamp(world: Army, rules: BaronRules, m: March): Report {
       if (spoils.marks > 0) out.marks = spoils.marks;
     }
   }
+  if (Object.keys(hurt).length > 0) out.wounded = hurt;
   if (camp.fortress) out.fortress = true;
   if (camp.event !== undefined) {
     out.event = camp.event;

@@ -17,6 +17,7 @@ var _defence_button: Button
 var _defence: PanelContainer
 var _recruit: VBoxContainer
 var _workshop: VBoxContainer
+var _hospital: VBoxContainer
 var _research: PanelContainer
 var _research_button: Button
 var _research_bar: ProgressBar
@@ -426,6 +427,10 @@ func _build_side_panel() -> void:
 	_workshop.hud = self
 	_workshop.visible = false
 	box.add_child(_workshop)
+	_hospital = preload("res://scripts/ui/hospital_panel.gd").new()
+	_hospital.hud = self
+	_hospital.visible = false
+	box.add_child(_hospital)
 	_research_button = GameTheme.primary(_button("Open the research tree"))
 	_research_button.icon = Icons.get_icon("research", 22)
 	_research_button.pressed.connect(open_research)
@@ -471,6 +476,8 @@ func _process(delta: float) -> void:
 		_recruit.update_progress(t)
 	if _workshop.visible:
 		_workshop.update_progress(t)
+	if _hospital.visible:
+		_hospital.update_progress(t)
 	if _research_bar != null and not castle.studying.is_empty():
 		var study := String(castle.studying.study)
 		var total := castle.rules.study_time(study, int(castle.studying.target), castle.academy_level())
@@ -633,6 +640,9 @@ func _refresh_side_panel() -> void:
 	_workshop.visible = type == "workshop" and b.level > 0 and not view.glimpse
 	if _workshop.visible:
 		_workshop.refresh()
+	_hospital.visible = type == "hospital" and b.level > 0 and not view.glimpse
+	if _hospital.visible:
+		_hospital.refresh()
 	_research_button.visible = type == "academy" and b.level > 0 and not view.glimpse
 	if _research.visible:
 		_research.refresh()
@@ -664,6 +674,9 @@ func _stats(type: String, level: int) -> String:
 	var def := rules.defense(type, level)
 	if def > 0.0:
 		parts.append("defence %d" % roundi(def))
+	if type == "hospital" and level > 0:
+		parts.append("%d beds, heals in %d%% of the training time" % [rules.hospital_beds(level),
+				roundi(100.0 * float(rules.hospital.get("time_share", 0.5)) * pow(float(rules.hospital.get("time_per_level", 1.0)), level - 1))])
 	var order := rules.order(type, level)
 	if order > 0.0:
 		parts.append("public order %+d" % roundi(order))

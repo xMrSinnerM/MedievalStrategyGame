@@ -33,6 +33,8 @@
 // POST { "action": "place", "type", "cell": [x, y] }
 // POST { "action": "upgrade" | "cancel", "id" }
 // POST { "action": "move", "id", "cell": [x, y] }
+// POST { "action": "heal", "unit", "amount" }      heal wounded soldiers in your hospital, for food
+// POST { "action": "cancel_healing", "index" }     stop a healing batch (they stay wounded)
 // POST { "action": "recruit", "unit", "amount" }
 // POST { "action": "cancel_training", "index" }
 // POST { "action": "craft", "tool", "amount" }    siege tools from the workshop (data/units.json "tools")

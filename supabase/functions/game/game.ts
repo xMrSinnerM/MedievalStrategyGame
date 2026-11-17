@@ -142,6 +142,8 @@ export interface RaidReport {
   helped_by?: string[];
   /** Defender's report: fallen defenders the infirmary sent back (unit -> soldiers). */
   healed?: Dict;
+  /** Defender's report: fallen defenders carried to the hospital (unit -> soldiers). */
+  wounded?: Dict;
 }
 
 /** Soldiers walking back into the castle, with what they carry. */
@@ -153,6 +155,9 @@ export interface Homecoming {
   lead?: Lead;
   /** The army won its battle against another player's castle. */
   won?: boolean;
+  /** The army as it set out against a player's castle or a village: some of those who fell come home wounded. */
+  army?: Dict;
+  mission?: string;
 }
 
 /** What act() needs besides the player: other players and armies coming home. */
@@ -501,6 +506,13 @@ export function act(rules: Rules, given: PlayerState, req: Request, now: number,
     case "recruit":
       error = castle.checkRecruit(String(req.unit), Number(req.amount));
       if (error === "") castle.recruit(String(req.unit), Number(req.amount), now);
+      break;
+    case "heal":
+      error = castle.checkHeal(String(req.unit), Number(req.amount));
+      if (error === "") castle.healWounded(String(req.unit), Number(req.amount), now);
+      break;
+    case "cancel_healing":
+      if (!castle.cancelHealing(Number(req.index), now)) error = "No such batch.";
       break;
     case "cancel_training":
       if (!castle.cancelTraining(Number(req.index), now)) error = "No such batch.";
@@ -911,6 +923,12 @@ function comeHomeFromRaid(gear: GearRules, castle: CastleState, raid: Homecoming
   castle.advanceTo(raid.back);
   if (raid.lead?.xp && raid.lead.id > 0) gear.addXp(castle, raid.lead.id, raid.lead.xp);
   if (raid.won) castle.stats.pvp_won += 1;
+  if (raid.army && (raid.mission === undefined || raid.mission === "attack")) {
+    // Some of the fallen are only wounded: they are carried home to the hospital.
+    const fallen: Dict = {};
+    for (const unit of Object.keys(raid.army)) fallen[unit] = raid.army[unit] - (raid.survivors[unit] ?? 0);
+    castle.takeWounded(fallen, true);
+  }
   for (const unit of Object.keys(raid.survivors)) {
     if (castle.rules.hasUnit(unit)) castle.troops[unit] = (castle.troops[unit] ?? 0) + raid.survivors[unit];
   }
@@ -968,6 +986,9 @@ export function fightRaid(rules: Rules, pvp: PvpRules, stored: PlayerState, raid
   const before = { ...castle.troops };
   for (const unit of Object.keys(result.b)) shareLosses(groups, unit, result.b[unit].lost);
   const healed = castle.heal(before);
+  const fallen: Dict = {};
+  for (const unit of Object.keys(before)) fallen[unit] = before[unit] - (castle.troops[unit] ?? 0);
+  const hurt = castle.takeWounded(fallen, false);
   const back = survivors(result.a);
   const loot: Dict = {};
   if (result.winner === "a") {
@@ -989,6 +1010,7 @@ export function fightRaid(rules: Rules, pvp: PvpRules, stored: PlayerState, raid
     kind: "raid", role, raid: raid.id, name, at: raid.arrive, winner: result.winner, a: result.a, b: result.b,
     walls: result.walls, courtyard: result.courtyard, ...(result.tools ? { tools: result.tools } : {}), spoils: loot, wall,
     ...(role === "defender" && Object.keys(healed).length > 0 ? { healed } : {}),
+    ...(role === "defender" && Object.keys(hurt).length > 0 ? { wounded: hurt } : {}),
     ...(role === "attacker" && lead ? { lead: { id: lead.id, name: lead.name, xp: lead.xp } } : {}),
   });
   return {
